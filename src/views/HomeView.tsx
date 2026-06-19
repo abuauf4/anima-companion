@@ -764,17 +764,17 @@ function BestSellerCarousel({ products }: { products: Product[] }) {
 
   return (
     <div className="relative">
-      {/* Arrow controls (visible on all sizes — useful on both mobile & desktop) */}
+      {/* Arrow controls — visible on all sizes (mobile + desktop) */}
       <button
         onClick={() => scrollBy(-1)}
-        className="absolute -left-2 top-1/2 z-10 hidden -translate-y-1/2 items-center justify-center rounded-full border border-border bg-card p-2 shadow-md transition-colors hover:bg-accent sm:flex"
+        className="absolute -left-2 top-1/2 z-20 flex -translate-y-1/2 size-10 items-center justify-center rounded-full border border-border bg-card shadow-md transition-all hover:bg-accent hover:scale-105 active:scale-95 sm:-left-3 sm:size-11"
         aria-label="Sebelumnya"
       >
         <ChevronLeft className="size-5" />
       </button>
       <button
         onClick={() => scrollBy(1)}
-        className="absolute -right-2 top-1/2 z-10 hidden -translate-y-1/2 items-center justify-center rounded-full border border-border bg-card p-2 shadow-md transition-colors hover:bg-accent sm:flex"
+        className="absolute -right-2 top-1/2 z-20 flex -translate-y-1/2 size-10 items-center justify-center rounded-full border border-border bg-card shadow-md transition-all hover:bg-accent hover:scale-105 active:scale-95 sm:-right-3 sm:size-11"
         aria-label="Berikutnya"
       >
         <ChevronRight className="size-5" />
