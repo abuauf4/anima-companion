@@ -348,7 +348,7 @@ export function HomeView() {
             Memuat produk best seller...
           </div>
         ) : (
-          <ProductScrollRow products={bestSellers} />
+          <BestSellerCarousel products={bestSellers} />
         )}
       </section>
 
@@ -565,6 +565,63 @@ export function HomeView() {
 }
 
 /* ============== Helpers ============== */
+
+/**
+ * Best Seller Carousel
+ * - Mobile: 1 card per view (full-width, snap)
+ * - Desktop (lg+): 3 cards per view (snap)
+ * Arrow buttons scroll exactly 1 card width.
+ */
+function BestSellerCarousel({ products }: { products: Product[] }) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  const scrollBy = (dir: 1 | -1) => {
+    if (!scrollRef.current) return
+    const container = scrollRef.current
+    const isDesktop = window.matchMedia('(min-width: 1024px)').matches
+    // On desktop: 3 cards + 2 gaps (gap-4 = 16px) → card width = (clientWidth - 32) / 3
+    // Scroll 1 card = cardWidth + gap
+    // On mobile: 1 card per view, scroll = clientWidth
+    const cardPlusGap = isDesktop
+      ? (container.clientWidth - 32) / 3 + 16
+      : container.clientWidth
+    container.scrollBy({ left: dir * cardPlusGap, behavior: 'smooth' })
+  }
+
+  return (
+    <div className="relative">
+      {/* Arrow controls (visible on all sizes — useful on both mobile & desktop) */}
+      <button
+        onClick={() => scrollBy(-1)}
+        className="absolute -left-2 top-1/2 z-10 hidden -translate-y-1/2 items-center justify-center rounded-full border border-border bg-card p-2 shadow-md transition-colors hover:bg-accent sm:flex"
+        aria-label="Sebelumnya"
+      >
+        <ChevronLeft className="size-5" />
+      </button>
+      <button
+        onClick={() => scrollBy(1)}
+        className="absolute -right-2 top-1/2 z-10 hidden -translate-y-1/2 items-center justify-center rounded-full border border-border bg-card p-2 shadow-md transition-colors hover:bg-accent sm:flex"
+        aria-label="Berikutnya"
+      >
+        <ChevronRight className="size-5" />
+      </button>
+
+      <div
+        ref={scrollRef}
+        className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory [scrollbar-width:thin] [scrollbar-color:var(--border)_transparent]"
+      >
+        {products.map((p) => (
+          <div
+            key={p.id}
+            className="shrink-0 snap-start w-full lg:w-[calc((100%-2rem)/3)]"
+          >
+            <ProductCard product={p} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 /** Horizontal scroll row of products with arrow controls (desktop) */
 function ProductScrollRow({ products }: { products: Product[] }) {
