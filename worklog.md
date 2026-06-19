@@ -269,3 +269,117 @@ Stage Summary:
   - [x] Lint passes (0 errors, 0 warnings)
   - [x] TypeScript: 0 errors
   - [x] dev.log shows no fatal errors after edits
+
+---
+Task ID: premium-motion-upgrade
+Agent: full-stack-developer
+Task: Premium motion + Ingredients Reveal section + font upgrade (Zesty Paws-like polish)
+
+Work Log:
+- Read context: worklog.md (prior 3 task records), HomeView.tsx (current homepage), SectionHeader.tsx, globals.css (first 100 lines + eyebrow def), layout.tsx (font setup), VetSection.tsx (existing premium reference), Reveal.tsx (existing scroll-reveal primitives), prisma/seed.ts (to confirm product slugs for ingredient → product mapping)
+- **Task 1: Plus Jakarta Sans font upgrade**
+  * src/app/layout.tsx: replaced `Geist` import with `Plus_Jakarta_Sans` from `next/font/google`, weights `["400","500","600","700","800"]`, `display: "swap"`, variable `--font-jakarta`
+  * Updated body className: `${jakarta.variable} font-sans antialiased ...` (added explicit `font-sans` utility so the new theme var actually applies)
+  * src/app/globals.css: changed `--font-sans: var(--font-geist-sans)` → `var(--font-jakarta), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, ...` (proper system-font fallback chain); changed `--font-mono` from `var(--font-geist-mono)` to a static `ui-monospace, SFMono-Regular, ...` stack (we no longer load a Google mono font)
+- **Task 3: SectionHeader redesign** (src/components/common/SectionHeader.tsx — full rewrite, API identical)
+  * Added editorial horizontal line BEFORE the eyebrow icon: `<span className="inline-block h-px w-4 bg-primary" />` (4px wide × 1px tall, primary color)
+  * Title: `font-bold` → `font-extrabold`, added `leading-[1.05]` (tighter line-height)
+  * Subtitle: kept `text-balance` (already there) + added `text-pretty` for better orphans/widows handling
+  * Action wrapper: added `group/action` + `transition-transform duration-300 hover:translate-x-1` (subtle translate-x on hover — works on any action node, no API change)
+  * Decorative gradient blob: absolute `-left-10 -top-10 -z-10 size-40 rounded-full bg-primary/5 blur-3xl` (faint, blurred, top-left corner of every section header)
+  * Spring transitions on both title (`stiffness: 100, damping: 20`) and action (`delay: 0.05`)
+  * Viewport margin bumped from `-80px` → `-100px` to match Task 6 spec
+- **Task 2: New "Bahan Aktif Pilihan" Ingredients Reveal section** (NEW component: src/components/home/IngredientsReveal.tsx, ~380 lines)
+  * 8 ingredients: Kolostrum, Prebiotik, Omega-3 (EPA & DHA), Alpha-Casozepine, L-Lysine, L-Carnitine, Biotin, Active Charcoal — each with name/subtitle/description/benefit/color/emoji/product (per task spec)
+  * Layout: 2-column asymmetric grid `md:grid-cols-[40%_60%]`
+    - LEFT (40%, `md:sticky md:top-24 md:h-[80vh] md:flex md:flex-col md:justify-center`): big index number (01–08, gradient-brand-text), active ingredient name, subtitle eyebrow, description, benefit+product pills, 8-dot progress indicator
+    - RIGHT (60%): vertical scroll list of 8 ingredient cards, each `h-[70vh] sm:h-[80vh]`, full-width
+  * Card design: gradient bg using `color` field, big emoji top-right (text-[180px] sm:text-[240px], opacity 0.15) with subtle parallax, white radial glow top-left, subtitle eyebrow pill (top), ingredient name (3xl-5xl extrabold), description (sm-base), bottom row with benefit badge + product name + "Lihat Produk" arrow + index number bottom-right
+  * Motion: per-card `useScroll({ target: ref, offset: ['start end', 'end start'] })` → `useTransform` for opacity (0.3→1→0.3), scale (0.95→1→0.95), y (50→0→-50). Active card centered at scrollYProgress ≈ 0.5
+  * Emoji parallax: separate `motion.span` with `y: emojiY` derived from same scrollYProgress (half magnitude — moves slower than card for depth)
+  * Sticky panel updates: each card uses `useInView(ref, { amount: 0.5 })`. When inView becomes true, calls `onActive(index)` → parent `setActiveIdx`. StickyPanel re-renders with `key={activeIdx}` so the content fades+slides in with a spring transition
+  * Card click: navigates to `/product/{slug}` via `PRODUCT_SLUG` map (Felcover+ → felcover-plus-immune-stimulant, Sioren Fish Oil → sioren-fish-oil, Forevet → forevet-stress-manajemen, Sioren Flu Support+ → sioren-flu-support-plus, Sioren Booster+ → sioren-booster-plus, Sioren Skin & Coat → sioren-skin-coat, Sioren Pet Odor X → sioren-pet-odor-x)
+  * Mobile: sticky panel hidden, compact version rendered above the cards (`md:hidden`); cards still scroll vertically with the same reveal animation
+  * Section uses `overflow-clip` (NOT `overflow-hidden`) so the sticky panel still works (overflow-hidden would create a scroll container that breaks sticky)
+  * Decorative blurred orbs: primary/5 left + secondary/5 right
+  * Inserted into HomeView between "Shop by Benefit" and "New Arrivals" via `<IngredientsReveal />`
+- **Task 4: Best Sellers carousel motion** (src/views/HomeView.tsx — refactored BestSellerCarousel + added CarouselCard component)
+  * Each card wrapped in a new `CarouselCard` component that uses `useMotionValue` for `scale` (0.92→1) and `opacity` (0.5→1) driven by the card's distance from the container's center
+  * Container scroll listener (passive, rAF-throttled) recomputes the centered ratio per card on every scroll event — no React re-renders (motion values bypass the render cycle)
+  * Initial compute on mount + `resize` listener so values stay correct on viewport changes
+  * Spring transition (`stiffness: 150, damping: 22`) on the motion.div so scale/opacity ease gently
+  * Snap behavior preserved (`snap-x snap-mandatory`, `snap-start` per card); arrow controls preserved (1-card-width scroll on click)
+- **Task 5: 3D tilt on Pet Type cards** (src/views/HomeView.tsx — extracted PET_CARDS config + new PetTypeTiltCard component, replaced inline Kucing/Anjing markup)
+  * `PET_CARDS` config array (2 entries) — Kucing (warm orange) + Anjing (cool violet) with gradient, badge, paw color, paw hover transform, emoji
+  * `PetTypeTiltCard` component: `useMotionValue(0)` for x/y, `useTransform` to derive `rotateX` (±8°) and `rotateY` (±8°) from mouse position
+  * `transformPerspective: 900` for natural depth
+  * `handleMouseMove`: computes xPct/yPct relative to card center, sets motion values
+  * `handleMouseLeave`: resets to 0,0 (springs back to flat via the spring transition on the motion.button)
+  * Paw print parallax: separate `motion.div` with `pawX/pawY` derived from same x/y (opposite direction, half magnitude — moves counter to the tilt for a layered feel)
+  * Title broken on `\n` so each line is its own block (preserves the existing "Felcover+, Sioren &\nForevet untuk Kucing" line break)
+  * Mobile behavior: touch devices don't fire mousemove, so the card stays flat (intentional — tilt is desktop hover-only)
+- **Task 6: Scroll-reveal upgrade** (src/components/common/Reveal.tsx — updated Stagger + StaggerItem; src/views/HomeView.tsx + src/components/home/VetSection.tsx — applied)
+  * Reveal.tsx Stagger: `staggerChildren: 0.08` → `0.05` (50ms between children, per spec); viewport margin `-80px` → `-100px`
+  * Reveal.tsx StaggerItem: transition `ease: [0.25, 0.1, 0.25, 1]` → `type: 'spring', stiffness: 100, damping: 20`
+  * Reveal.tsx Reveal (single): same spring upgrade + `-100px` margin
+  * New Arrivals posters: wrapped each poster (big + 2 small) in `<StaggerItem>` inside a `<Stagger>` container — was previously a plain div grid
+  * VetSection stats grid: replaced `<Reveal delay={i * 0.1}>` per-card pattern with `<Stagger><StaggerItem>` pattern (cleaner, uses the new spring stagger)
+  * Shop by Benefit + Testimonials: already used Stagger/StaggerItem — they automatically inherit the new spring + 50ms stagger via the Reveal.tsx upgrade (no per-section changes needed)
+  * Best Sellers: entrance stagger not applicable (cards in horizontal scroll all enter viewport together) — Task 4 motion takes priority; the section as a whole still fades in via the surrounding layout
+
+Verification:
+- `bun run lint` → exit code 0 (0 errors, 0 warnings) ✅
+- `bun x tsc --noEmit` → exit code 0 (0 type errors) ✅
+- `curl /` → 200 OK ✅
+- HTML scan: `class="plus_jakarta_sans_..._variable font-sans antialiased ..."` confirmed on body (Plus Jakarta Sans applied globally) ✅
+- HTML scan: all 8 ingredient names present (Kolostrum, Prebiotik, Omega-3, Alpha-Casozepine, L-Lysine, L-Carnitine, Biotin, Active Charcoal) ✅
+- HTML scan: section ordering correct — "Belanja Berdasarkan Manfaat" → "Diformulasikan dengan Sains" (Ingredients eyebrow) → "Produk Baru" (New Arrivals eyebrow) ✅
+- HTML scan: SectionHeader decorative elements present — `bg-primary/5 blur-3xl` (gradient blob) + `h-px w-4 bg-primary` (editorial line before eyebrow icon) ✅
+- HTML scan: SectionHeader title styling present — `font-extrabold leading-[1.05] tracking-tight` ✅
+- dev.log: latest entries show `✓ Compiled in Nms` + `GET / 200 in Nms` (no fatal errors after final edits) ✅
+
+Issues Encountered & Resolved:
+- **Issue 1**: ESLint `react-hooks/refs` rule flagged `useRef(...).current` pattern in IngredientsReveal (`const handleActive = useRef(...).current`) as "Cannot access refs during render".
+  - Resolution: Replaced with `useCallback((idx) => setActiveIdx(idx), [])` — same stable-callback semantics, no ref access during render. Lint passes.
+- **Issue 2**: `useScroll` imported but unused in HomeView.tsx (only `useMotionValue` + `useTransform` are actually used by the new tilt + carousel motion).
+  - Resolution: Removed `useScroll` from the import statement. (useScroll is used in IngredientsReveal.tsx, just not in HomeView.)
+- **Issue 3 (preemptive)**: `position: sticky` inside `overflow: hidden` ancestors is unreliable across browsers (overflow-hidden creates a scroll container that constrains sticky).
+  - Resolution: Changed the IngredientsReveal section from `overflow-hidden` → `overflow-clip`. `overflow: clip` produces the same visual clipping but does NOT create a scroll container, so the sticky LEFT panel sticks correctly relative to the viewport. (Supported in Chrome 90+, Firefox 81+, Safari 16+. Older browsers fall back to no clipping but sticky still works.)
+- **Issue 4**: During editing, dev.log showed transient 500s with "ReferenceError: PetTypeTiltCard is not defined" — this was a Fast Refresh race condition (file was partially saved mid-edit when the dev server tried to recompile). After the file was fully written, the dev server recompiled cleanly and all subsequent `GET /` requests returned 200.
+
+Stage Summary:
+- Premium motion + Ingredients Reveal section + Plus Jakarta Sans upgrade complete
+- Plus Jakarta Sans applied globally via `--font-jakarta` CSS variable + `font-sans` utility on body (weights 400–800 loaded, display: swap)
+- SectionHeader redesigned with editorial line (4px×1px primary), font-extrabold + leading-[1.05] titles, text-pretty subtitles, hover translate-x on action, decorative bg-primary/5 blur-3xl blob top-left
+- NEW IngredientsReveal component (~380 lines): 8 ingredient cards in 40/60 sticky-split layout with per-card scroll-driven opacity/scale/y, emoji parallax, sticky left panel that updates active index/name/description via useInView, click-to-navigate to product detail, mobile-responsive (sticky hidden, compact panel above cards)
+- BestSellerCarousel: per-card scroll-position-driven scale (0.92→1) + opacity (0.5→1) via useMotionValue + rAF-throttled scroll listener, spring transition, no re-renders
+- PetTypeTiltCard: 3D tilt (±8° rotateX/rotateY) driven by mouse position over card, paw print parallax (opposite direction), spring-back on mouse leave, desktop-only (touch devices don't fire mousemove)
+- Reveal/Stagger upgraded to spring transitions + 50ms stagger + -100px viewport margin; applied to New Arrivals posters + VetSection stats (Shop by Benefit + Testimonials inherited automatically)
+- Lint 0 errors / 0 warnings; tsc 0 errors; homepage returns 200 OK; all 8 ingredients + Plus Jakarta Sans + SectionHeader decorations confirmed in rendered HTML
+- Files modified (5 files):
+  * src/app/layout.tsx: font swap (Geist → Plus Jakarta Sans, weights 400-800, display swap, var --font-jakarta)
+  * src/app/globals.css: --font-sans → var(--font-jakarta) + system fallback chain; --font-mono → static system stack
+  * src/components/common/SectionHeader.tsx: full rewrite (editorial line + extrabold + text-pretty + hover translate-x + decorative blob + spring transitions)
+  * src/components/common/Reveal.tsx: spring transition + 50ms stagger + -100px viewport margin
+  * src/components/home/VetSection.tsx: stats grid switched from Reveal+delay to Stagger+StaggerItem
+  * src/views/HomeView.tsx: inserted <IngredientsReveal />, refactored BestSellerCarousel (per-card motion via new CarouselCard), extracted PetTypeTiltCard + PET_CARDS config (3D tilt), wrapped New Arrivals posters in Stagger/StaggerItem, removed unused useScroll import
+- New component created (1 file):
+  * src/components/home/IngredientsReveal.tsx (~380 lines)
+- Verification status: ✅ All checklist items satisfied
+  - [x] Plus Jakarta Sans font applied globally (body className has `plus_jakarta_sans_..._variable font-sans`)
+  - [x] Ingredients Reveal section appears between Shop by Benefit and New Arrivals (HTML scan confirms ordering)
+  - [x] Ingredients section has 8 ingredient cards with scroll-reveal animation (useScroll + useTransform per card)
+  - [x] SectionHeader has small line before eyebrow icon + decorative bg blob (HTML scan confirms `h-px w-4 bg-primary` + `bg-primary/5 blur-3xl`)
+  - [x] Best Sellers cards scale based on viewport position (CarouselCard with useMotionValue scale/opacity driven by container scroll)
+  - [x] Pet Type cards (Kucing/Anjing) have 3D tilt on hover (desktop) — PetTypeTiltCard with rotateX/rotateY + paw parallax
+  - [x] All major sections have staggered scroll-reveal entrance (Stagger upgraded to spring + 50ms; applied to New Arrivals + VetSection stats; Shop by Benefit + Testimonials inherit automatically)
+  - [x] Lint: 0 errors
+  - [x] TypeScript: 0 errors
+  - [x] dev.log shows no fatal compile errors after final edits
+
+Mobile vs Desktop behavior notes:
+- Ingredients Reveal: on mobile, sticky LEFT panel is hidden; a compact version (big number + name + description + pills + progress dots) renders above the cards. Cards are 70vh on mobile, 80vh on desktop. Click navigation works on both.
+- Best Sellers carousel: scale/opacity motion works on both mobile (1 card per view) and desktop (3 cards per view). Edge cards always dim/scale down regardless of viewport.
+- Pet Type cards: 3D tilt is desktop-only (mouse hover). On touch devices, cards stay flat — no degraded UX since touch users don't expect hover. Tap navigation works normally.
+- SectionHeader decorative blob: visible on all sizes (subtle, doesn't intrude on mobile).
+- New Arrivals posters: bento grid stacks vertically on mobile (1 big + 2 small), 1+2 layout on desktop. Stagger entrance applies on both.

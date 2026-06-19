@@ -11,16 +11,21 @@ interface RevealProps {
   once?: boolean
 }
 
+/**
+ * Scroll-triggered reveal — single element.
+ * Uses a spring transition for a more distinctive, premium entrance.
+ */
 export function Reveal({ children, delay = 0, y = 24, className = '', once = true }: RevealProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once, margin: '-60px' }}
+      viewport={{ once, margin: '-100px' }}
       transition={{
-        duration: 0.6,
+        type: 'spring',
+        stiffness: 100,
+        damping: 20,
         delay,
-        ease: [0.25, 0.1, 0.25, 1],
       }}
       className={className}
     >
@@ -34,17 +39,26 @@ interface StaggerProps {
   className?: string
 }
 
+/**
+ * Stagger container — wraps a list of <StaggerItem> children and reveals them
+ * one-by-one as the container scrolls into view.
+ *
+ * - 50ms delay between children (tighter than the previous 80ms)
+ * - Spring transition on each child for a more premium feel
+ * - Triggers when 100px into the viewport
+ * - Triggers only once (no re-running on scroll-back)
+ */
 export function Stagger({ children, className = '' }: StaggerProps) {
   return (
     <motion.div
       initial="hidden"
       whileInView="visible"
-      viewport={{ once: true, margin: '-80px' }}
+      viewport={{ once: true, margin: '-100px' }}
       variants={{
         hidden: {},
         visible: {
           transition: {
-            staggerChildren: 0.08,
+            staggerChildren: 0.05,
           },
         },
       }}
@@ -68,7 +82,7 @@ export function StaggerItem({ children, className = '' }: StaggerItemProps) {
         visible: {
           opacity: 1,
           y: 0,
-          transition: { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] },
+          transition: { type: 'spring', stiffness: 100, damping: 20 },
         },
       }}
       className={className}

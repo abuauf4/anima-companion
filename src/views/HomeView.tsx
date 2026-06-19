@@ -17,7 +17,8 @@ import {
   Product, Problem, Banner, Testimonial, PetType,
 } from '@/hooks/use-fetch'
 import { VetSection } from '@/components/home/VetSection'
-import { motion } from 'framer-motion'
+import { IngredientsReveal } from '@/components/home/IngredientsReveal'
+import { motion, useMotionValue, useTransform } from 'framer-motion'
 import { toast } from 'sonner'
 import { formatRupiah } from '@/lib/format'
 
@@ -220,103 +221,10 @@ export function HomeView() {
           className="mb-8"
         />
 
-        {/* Two unique asymmetric cards: Kucing & Anjing */}
+        {/* Two unique asymmetric cards: Kucing & Anjing — with 3D tilt on hover (desktop) */}
         <div className="grid gap-5 md:grid-cols-2">
-          {/* =============== CARD: KUCING =============== */}
-          <Reveal delay={0}>
-            <button
-              onClick={() => navigate('/shop?pet=kucing')}
-              className="group relative flex h-72 w-full flex-col justify-end overflow-hidden rounded-3xl bg-gradient-to-br from-orange-50 via-amber-50 to-rose-50 p-6 text-left transition-all duration-300 hover:shadow-xl hover:shadow-orange-200/50 sm:h-80 sm:p-8"
-            >
-              {/* Decorative paw print SVG (large, top-right, faded) */}
-              <svg
-                viewBox="0 0 100 100"
-                className="pointer-events-none absolute -right-8 -top-8 size-48 text-orange-200/60 transition-transform duration-500 group-hover:scale-110 group-hover:rotate-6 sm:size-64"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <ellipse cx="30" cy="32" rx="9" ry="12" />
-                <ellipse cx="48" cy="22" rx="9" ry="12" />
-                <ellipse cx="66" cy="22" rx="9" ry="12" />
-                <ellipse cx="78" cy="32" rx="9" ry="12" />
-                <path d="M54 44c-12 0-22 9-22 21 0 9 6 15 12 15 3.6 0 6-1.2 8-2.4 2-1.2 3.2-1.2 5.2 0 2 1.2 4.4 2.4 8 2.4 6 0 12-6 12-15 0-12-11-21-23-21z" />
-              </svg>
-
-              {/* Floating emoji badge */}
-              <span className="absolute right-5 top-5 flex size-14 items-center justify-center rounded-2xl bg-white/80 text-3xl shadow-lg backdrop-blur-sm transition-transform duration-300 group-hover:scale-110 sm:right-7 sm:top-7 sm:size-16 sm:text-4xl">
-                🐈
-              </span>
-
-              {/* Content (bottom-left) */}
-              <div className="relative z-10">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-orange-600">
-                  Untuk Kucing
-                </span>
-                <h3 className="mt-3 text-2xl font-extrabold text-foreground sm:text-3xl">
-                  Felcover+, Sioren &<br />Forevet untuk Kucing
-                </h3>
-                <p className="mt-2 max-w-[80%] text-sm text-muted-foreground">
-                  Imun booster, nafsu makan, fish oil, skin & coat, flu support, dan stress management.
-                </p>
-                <div className="mt-4 flex items-center gap-4">
-                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background transition-transform group-hover:translate-x-1">
-                    Jelajahi <ArrowRight className="size-4" />
-                  </span>
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {mainPetTypes.find(p => p.slug === 'kucing')?._count?.products || 0} produk tersedia
-                  </span>
-                </div>
-              </div>
-            </button>
-          </Reveal>
-
-          {/* =============== CARD: ANJING =============== */}
-          <Reveal delay={0.1}>
-            <button
-              onClick={() => navigate('/shop?pet=anjing')}
-              className="group relative flex h-72 w-full flex-col justify-end overflow-hidden rounded-3xl bg-gradient-to-br from-violet-50 via-purple-50 to-fuchsia-50 p-6 text-left transition-all duration-300 hover:shadow-xl hover:shadow-violet-200/50 sm:h-80 sm:p-8"
-            >
-              {/* Decorative paw print SVG (large, top-left, faded, mirrored) */}
-              <svg
-                viewBox="0 0 100 100"
-                className="pointer-events-none absolute -left-8 -top-8 size-48 rotate-12 text-violet-200/60 transition-transform duration-500 group-hover:-rotate-3 group-hover:scale-110 sm:size-64"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <ellipse cx="30" cy="32" rx="9" ry="12" />
-                <ellipse cx="48" cy="22" rx="9" ry="12" />
-                <ellipse cx="66" cy="22" rx="9" ry="12" />
-                <ellipse cx="78" cy="32" rx="9" ry="12" />
-                <path d="M54 44c-12 0-22 9-22 21 0 9 6 15 12 15 3.6 0 6-1.2 8-2.4 2-1.2 3.2-1.2 5.2 0 2 1.2 4.4 2.4 8 2.4 6 0 12-6 12-15 0-12-11-21-23-21z" />
-              </svg>
-
-              {/* Floating emoji badge (top-right, opposite side) */}
-              <span className="absolute right-5 top-5 flex size-14 items-center justify-center rounded-2xl bg-white/80 text-3xl shadow-lg backdrop-blur-sm transition-transform duration-300 group-hover:scale-110 sm:right-7 sm:top-7 sm:size-16 sm:text-4xl">
-                🐕
-              </span>
-
-              {/* Content (bottom-left, aligned with Kucing card) */}
-              <div className="relative z-10">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-violet-600">
-                  Untuk Anjing
-                </span>
-                <h3 className="mt-3 text-2xl font-extrabold text-foreground sm:text-3xl">
-                  Felcover+, Sioren &<br />Forevet untuk Anjing
-                </h3>
-                <p className="mt-2 max-w-[80%] text-sm text-muted-foreground">
-                  Imun booster, nafsu makan, fish oil, skin & coat, flu support, dan stress management.
-                </p>
-                <div className="mt-4 flex items-center gap-4">
-                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background transition-transform group-hover:translate-x-1">
-                    Jelajahi <ArrowRight className="size-4" />
-                  </span>
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {mainPetTypes.find(p => p.slug === 'anjing')?._count?.products || 0} produk tersedia
-                  </span>
-                </div>
-              </div>
-            </button>
-          </Reveal>
+          <PetTypeTiltCard config={PET_CARDS[0]} productCount={mainPetTypes.find(p => p.slug === 'kucing')?._count?.products || 0} delay={0} />
+          <PetTypeTiltCard config={PET_CARDS[1]} productCount={mainPetTypes.find(p => p.slug === 'anjing')?._count?.products || 0} delay={0.05} />
         </div>
       </section>
 
@@ -395,6 +303,9 @@ export function HomeView() {
         </div>
       </section>
 
+      {/* ==================== INGREDIENTS REVEAL — Bahan Aktif Pilihan ==================== */}
+      <IngredientsReveal />
+
       {/* ==================== NEW ARRIVALS — Bento Poster Grid ==================== */}
       <section className="py-10 md:py-14">
         <div className="container-page">
@@ -419,7 +330,9 @@ export function HomeView() {
             </div>
           </div>
         ) : (
-          <NewArrivalPosters products={newProducts} />
+          <div className="container-page">
+            <NewArrivalPosters products={newProducts} />
+          </div>
         )}
       </section>
 
@@ -506,6 +419,172 @@ export function HomeView() {
         </div>
       </section>
     </div>
+  )
+}
+
+/* ============== Pet Type Cards (3D tilt) ============== */
+
+interface PetCardConfig {
+  slug: 'kucing' | 'anjing'
+  emoji: string
+  badgeText: string
+  title: string
+  description: string
+  cardClass: string
+  badgeClass: string
+  pawColor: string
+  pawHoverClass: string
+  emojiBadgeClass: string
+}
+
+/**
+ * Visual config for the two main pet-type cards (Kucing & Anjing).
+ * The Kucing card uses warm orange tones; the Anjing card uses cool violet tones.
+ */
+const PET_CARDS: PetCardConfig[] = [
+  {
+    slug: 'kucing',
+    emoji: '🐈',
+    badgeText: 'Untuk Kucing',
+    title: 'Felcover+, Sioren &\nForevet untuk Kucing',
+    description:
+      'Imun booster, nafsu makan, fish oil, skin & coat, flu support, dan stress management.',
+    cardClass:
+      'bg-gradient-to-br from-orange-50 via-amber-50 to-rose-50 hover:shadow-orange-200/50',
+    badgeClass: 'bg-orange-500/10 text-orange-600',
+    pawColor: 'text-orange-200/60',
+    pawHoverClass: 'group-hover:scale-110 group-hover:rotate-6',
+    emojiBadgeClass: '',
+  },
+  {
+    slug: 'anjing',
+    emoji: '🐕',
+    badgeText: 'Untuk Anjing',
+    title: 'Felcover+, Sioren &\nForevet untuk Anjing',
+    description:
+      'Imun booster, nafsu makan, fish oil, skin & coat, flu support, dan stress management.',
+    cardClass:
+      'bg-gradient-to-br from-violet-50 via-purple-50 to-fuchsia-50 hover:shadow-violet-200/50',
+    badgeClass: 'bg-violet-500/10 text-violet-600',
+    pawColor: 'text-violet-200/60',
+    pawHoverClass: 'group-hover:-rotate-3 group-hover:scale-110',
+    emojiBadgeClass: '',
+  },
+]
+
+/**
+ * Pet Type card with a subtle 3D tilt on hover (desktop only — touch devices
+ * don't fire mousemove, so the card stays flat on mobile, which is fine).
+ *
+ * The card rotates around X and Y axes based on the cursor's position over
+ * the card. A decorative paw print inside parallaxes in the opposite
+ * direction for a layered, depth feel. On mouse leave, the card springs
+ * back to flat.
+ */
+function PetTypeTiltCard({
+  config,
+  productCount,
+  delay,
+}: {
+  config: PetCardConfig
+  productCount: number
+  delay: number
+}) {
+  const { navigate } = useHashRouter()
+
+  // Mouse position relative to card center, in pixels (-half..+half).
+  const x = useMotionValue(0)
+  const y = useMotionValue(0)
+
+  // Derive rotation from mouse position — max ±8 degrees at the edges.
+  const rotateX = useTransform(y, [-50, 50], [8, -8])
+  const rotateY = useTransform(x, [-50, 50], [-8, 8])
+
+  // Paw print parallax — moves opposite to tilt (half magnitude) for depth.
+  const pawX = useTransform(x, [-50, 50], [10, -10])
+  const pawY = useTransform(y, [-50, 50], [10, -10])
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const xPct = e.clientX - rect.left - rect.width / 2
+    const yPct = e.clientY - rect.top - rect.height / 2
+    x.set(xPct)
+    y.set(yPct)
+  }
+
+  const handleMouseLeave = () => {
+    x.set(0)
+    y.set(0)
+  }
+
+  // Split title on "\n" so each line breaks naturally (preserves the
+  // existing visual layout with the line break between brand list & pet type).
+  const titleLines = config.title.split('\n')
+
+  return (
+    <Reveal delay={delay}>
+      <motion.button
+        onClick={() => navigate(`/shop?pet=${config.slug}`)}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+        style={{ rotateX, rotateY, transformPerspective: 900 }}
+        // Spring transition so the tilt eases in/out smoothly
+        transition={{ type: 'spring', stiffness: 200, damping: 18 }}
+        className={`group relative flex h-72 w-full flex-col justify-end overflow-hidden rounded-3xl p-6 text-left shadow-sm transition-shadow duration-300 hover:shadow-xl sm:h-80 sm:p-8 ${config.cardClass}`}
+        aria-label={`Belanja untuk ${config.badgeText.replace('Untuk ', '')}`}
+      >
+        {/* Decorative paw print SVG (large, top-right, faded) — parallaxes on tilt */}
+        <motion.div
+          style={{ x: pawX, y: pawY }}
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-8 -top-8"
+        >
+          <svg
+            viewBox="0 0 100 100"
+            className={`size-48 transition-transform duration-500 sm:size-64 ${config.pawColor} ${config.pawHoverClass}`}
+            fill="currentColor"
+          >
+            <ellipse cx="30" cy="32" rx="9" ry="12" />
+            <ellipse cx="48" cy="22" rx="9" ry="12" />
+            <ellipse cx="66" cy="22" rx="9" ry="12" />
+            <ellipse cx="78" cy="32" rx="9" ry="12" />
+            <path d="M54 44c-12 0-22 9-22 21 0 9 6 15 12 15 3.6 0 6-1.2 8-2.4 2-1.2 3.2-1.2 5.2 0 2 1.2 4.4 2.4 8 2.4 6 0 12-6 12-15 0-12-11-21-23-21z" />
+          </svg>
+        </motion.div>
+
+        {/* Floating emoji badge (top-right) */}
+        <span className="absolute right-5 top-5 z-10 flex size-14 items-center justify-center rounded-2xl bg-white/80 text-3xl shadow-lg backdrop-blur-sm transition-transform duration-300 group-hover:scale-110 sm:right-7 sm:top-7 sm:size-16 sm:text-4xl">
+          {config.emoji}
+        </span>
+
+        {/* Content (bottom-left) */}
+        <div className="relative z-10">
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${config.badgeClass}`}
+          >
+            {config.badgeText}
+          </span>
+          <h3 className="mt-3 text-2xl font-extrabold leading-[1.1] tracking-tight text-foreground sm:text-3xl">
+            {titleLines.map((line, i) => (
+              <span key={i} className="block">
+                {line}
+              </span>
+            ))}
+          </h3>
+          <p className="mt-2 max-w-[80%] text-sm text-muted-foreground">
+            {config.description}
+          </p>
+          <div className="mt-4 flex items-center gap-4">
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background transition-transform group-hover:translate-x-1">
+              Jelajahi <ArrowRight className="size-4" />
+            </span>
+            <span className="text-xs font-medium text-muted-foreground">
+              {productCount} produk tersedia
+            </span>
+          </div>
+        </div>
+      </motion.button>
+    </Reveal>
   )
 }
 
@@ -633,26 +712,26 @@ function NewArrivalPosters({ products }: { products: Product[] }) {
   }
 
   return (
-    <div className="grid grid-cols-2 gap-0 md:grid-cols-3 md:grid-rows-2 md:h-[560px]">
+    <Stagger className="grid grid-cols-2 gap-0 md:grid-cols-3 md:grid-rows-2 md:h-[560px]">
       {/* Big poster — full-width on mobile (col-span-2), left 2x2 on desktop */}
-      <div className="col-span-2 h-[360px] md:col-span-2 md:row-span-2 md:h-full">
+      <StaggerItem className="col-span-2 h-[360px] md:col-span-2 md:row-span-2 md:h-full">
         {renderPoster(big, { size: 'big' })}
-      </div>
+      </StaggerItem>
 
       {/* Small poster 1 — bottom-left on mobile (col-span-1), top-right on desktop */}
       {small1 && (
-        <div className="col-span-1 h-[280px] md:col-span-1 md:row-span-1 md:h-full">
+        <StaggerItem className="col-span-1 h-[280px] md:col-span-1 md:row-span-1 md:h-full">
           {renderPoster(small1, { size: 'small' })}
-        </div>
+        </StaggerItem>
       )}
 
       {/* Small poster 2 — bottom-right on mobile (col-span-1), bottom-right on desktop */}
       {small2 && (
-        <div className="col-span-1 h-[280px] md:col-span-1 md:row-span-1 md:h-full">
+        <StaggerItem className="col-span-1 h-[280px] md:col-span-1 md:row-span-1 md:h-full">
           {renderPoster(small2, { size: 'small' })}
-        </div>
+        </StaggerItem>
       )}
-    </div>
+    </Stagger>
   )
 }
 
@@ -662,7 +741,10 @@ function NewArrivalPosters({ products }: { products: Product[] }) {
  * Best Seller Carousel
  * - Mobile: 1 card per view (full-width, snap)
  * - Desktop (lg+): 3 cards per view (snap)
- * Arrow buttons scroll exactly 1 card width.
+ * - Arrow buttons scroll exactly 1 card width.
+ * - Per-card motion: as the user scrolls horizontally, cards scale up & reach
+ *   full opacity as they near the container's center; cards near the edges
+ *   scale down to 0.92 and dim to 0.5 opacity (Task 4).
  */
 function BestSellerCarousel({ products }: { products: Product[] }) {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -703,15 +785,78 @@ function BestSellerCarousel({ products }: { products: Product[] }) {
         className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory [scrollbar-width:thin] [scrollbar-color:var(--border)_transparent]"
       >
         {products.map((p) => (
-          <div
-            key={p.id}
-            className="shrink-0 snap-start w-full lg:w-[calc((100%-2rem)/3)]"
-          >
-            <ProductCard product={p} />
-          </div>
+          <CarouselCard key={p.id} product={p} containerRef={scrollRef} />
         ))}
       </div>
     </div>
+  )
+}
+
+/**
+ * Single carousel card with scroll-position-driven scale/opacity.
+ *
+ * The card listens to its container's scroll events and computes a
+ * "centered ratio" — 1 when the card is at the container's center, 0 when
+ * it's at the far edge. This ratio drives `scale` (0.92 → 1) and `opacity`
+ * (0.5 → 1) via motion values for buttery-smooth, re-render-free animation.
+ */
+function CarouselCard({
+  product,
+  containerRef,
+}: {
+  product: Product
+  containerRef: React.RefObject<HTMLDivElement | null>
+}) {
+  const cardRef = useRef<HTMLDivElement>(null)
+  const scale = useMotionValue(1)
+  const opacity = useMotionValue(1)
+
+  useEffect(() => {
+    const container = containerRef.current
+    const card = cardRef.current
+    if (!container || !card) return
+
+    let raf = 0
+    const update = () => {
+      raf = 0
+      const cRect = container.getBoundingClientRect()
+      const eRect = card.getBoundingClientRect()
+      if (cRect.width === 0 || eRect.width === 0) return
+      const cardCenter = eRect.left + eRect.width / 2
+      const containerCenter = cRect.left + cRect.width / 2
+      const distance = Math.abs(cardCenter - containerCenter)
+      // Normalised 0..1 — 1 at center, 0 at the container's edge
+      const maxDistance = cRect.width / 2
+      const ratio = Math.max(0, Math.min(1, 1 - distance / maxDistance))
+      scale.set(0.92 + 0.08 * ratio)
+      opacity.set(0.5 + 0.5 * ratio)
+    }
+
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update)
+    }
+
+    // Initial compute + listeners
+    update()
+    container.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll)
+    return () => {
+      container.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onScroll)
+      if (raf) cancelAnimationFrame(raf)
+    }
+  }, [containerRef, scale, opacity])
+
+  return (
+    <motion.div
+      ref={cardRef}
+      style={{ scale, opacity }}
+      // Spring transition so the scale/opacity eases gently on scroll
+      transition={{ type: 'spring', stiffness: 150, damping: 22 }}
+      className="shrink-0 snap-start w-full lg:w-[calc((100%-2rem)/3)]"
+    >
+      <ProductCard product={product} />
+    </motion.div>
   )
 }
 
