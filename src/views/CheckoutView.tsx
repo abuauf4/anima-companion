@@ -236,6 +236,8 @@ export function CheckoutView() {
                         fill
                         sizes="56px"
                         className="h-full w-full object-cover"
+                        brandName={item.brand}
+                        slug={item.slug}
                       />
                       <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
                         {item.quantity}

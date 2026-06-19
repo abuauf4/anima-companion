@@ -90,6 +90,7 @@ export function ProductDetailView({ slug }: { slug: string }) {
       productId: product.id,
       slug: product.slug,
       name: product.name,
+      brand: product.brand,
       price: product.price,
       salePrice: product.salePrice,
       image: images[0]?.url || '',
@@ -135,6 +136,8 @@ export function ProductDetailView({ slug }: { slug: string }) {
                 priority
                 sizes="(max-width: 768px) 100vw, 50vw"
                 className="h-full w-full object-cover"
+                brandName={product.brand}
+                slug={product.slug}
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-muted-foreground">
@@ -173,6 +176,8 @@ export function ProductDetailView({ slug }: { slug: string }) {
                     fill
                     sizes="(max-width: 768px) 15vw, 100px"
                     className="h-full w-full object-cover"
+                    brandName={product.brand}
+                    slug={product.slug}
                   />
                 </button>
               ))}

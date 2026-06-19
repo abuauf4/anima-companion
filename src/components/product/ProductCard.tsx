@@ -39,6 +39,7 @@ export function ProductCard({ product }: { product: Product }) {
       productId: product.id,
       slug: product.slug,
       name: product.name,
+      brand: product.brand,
       price: product.price,
       salePrice: product.salePrice,
       image: product.images?.[0]?.url || '',
@@ -77,6 +78,8 @@ export function ProductCard({ product }: { product: Product }) {
             fill
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            brandName={product.brand}
+            slug={product.slug}
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-muted-foreground">
