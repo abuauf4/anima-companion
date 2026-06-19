@@ -1,12 +1,12 @@
 // Anima Companion — Prisma Schema
-// SQLite untuk dev/demo. Untuk produksi: tinggal ganti datasource ke PostgreSQL.
+// PostgreSQL untuk dev & production (Supabase / Neon / Vercel Postgres).
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
