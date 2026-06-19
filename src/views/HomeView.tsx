@@ -14,8 +14,9 @@ import {
   Mail, Gift,
 } from 'lucide-react'
 import {
-  Product, Problem, Banner, Testimonial, PetType,
+  Product, PetType,
 } from '@/hooks/use-fetch'
+import { useHomeData } from '@/hooks/use-home-data'
 import { VetSection } from '@/components/home/VetSection'
 import { IngredientsReveal } from '@/components/home/IngredientsReveal'
 import { motion, useMotionValue, useTransform } from 'framer-motion'
@@ -35,29 +36,20 @@ const PROBLEM_ICONS: Record<string, React.ComponentType<{ className?: string }>>
 
 export function HomeView() {
   const { navigate } = useHashRouter()
-
-  const [banners, setBanners] = useState<Banner[]>([])
-  const [bestSellers, setBestSellers] = useState<Product[]>([])
-  const [newProducts, setNewProducts] = useState<Product[]>([])
-  const [problems, setProblems] = useState<Problem[]>([])
-  const [testimonials, setTestimonials] = useState<Testimonial[]>([])
-  const [petTypes, setPetTypes] = useState<PetType[]>([])
+  // Stale-while-revalidate: instantly render cached data from sessionStorage,
+  // refresh in background. isLoading=true only on truly first visit.
+  const {
+    isLoading,
+    isStale,
+    banners,
+    bestSellers,
+    newProducts,
+    problems,
+    testimonials,
+    petTypes,
+  } = useHomeData()
 
   const [emailValue, setEmailValue] = useState('')
-
-  useEffect(() => {
-    fetch('/api/home')
-      .then((r) => r.json())
-      .then((data) => {
-        setBanners(data.banners || [])
-        setBestSellers(data.bestSellers || [])
-        setNewProducts(data.newProducts || [])
-        setProblems(data.problems || [])
-        setTestimonials(data.testimonials || [])
-        setPetTypes(data.petTypes || [])
-      })
-      .catch((err) => console.error('Home fetch failed:', err))
-  }, [])
 
   const handleNewsletter = (e: React.FormEvent) => {
     e.preventDefault()
@@ -244,9 +236,7 @@ export function HomeView() {
         />
 
         {bestSellers.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
-            Memuat produk best seller...
-          </div>
+          <BestSellerSkeleton />
         ) : (
           <BestSellerCarousel products={bestSellers} />
         )}
@@ -268,19 +258,26 @@ export function HomeView() {
             className="mb-8"
           />
 
-          <Stagger className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4">
-            {problems.map((problem) => {
-              const Icon = PROBLEM_ICONS[problem.slug] || Shield
-              const color = problem.color || '#F97316'
-              return (
-                <StaggerItem key={problem.id}>
-                  <button
-                    onClick={() => navigate(`/shop?problem=${problem.slug}`)}
-                    className="group relative flex w-full flex-col items-start gap-2 overflow-hidden rounded-2xl border border-border/60 bg-card p-4 text-left transition-all hover:shadow-md hover:border-border"
-                  >
-                    {/* Radial color glow */}
-                    <div
-                      className="pointer-events-none absolute -right-8 -top-8 size-24 rounded-full opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-30"
+          {problems.length === 0 ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="h-24 animate-pulse rounded-2xl bg-muted" />
+              ))}
+            </div>
+          ) : (
+            <Stagger className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4">
+              {problems.map((problem) => {
+                const Icon = PROBLEM_ICONS[problem.slug] || Shield
+                const color = problem.color || '#F97316'
+                return (
+                  <StaggerItem key={problem.id}>
+                    <button
+                      onClick={() => navigate(`/shop?problem=${problem.slug}`)}
+                      className="group relative flex w-full flex-col items-start gap-2 overflow-hidden rounded-2xl border border-border/60 bg-card p-4 text-left transition-all hover:shadow-md hover:border-border"
+                    >
+                      {/* Radial color glow */}
+                      <div
+                        className="pointer-events-none absolute -right-8 -top-8 size-24 rounded-full opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-30"
                       style={{ background: color }}
                     />
                     <div
@@ -299,7 +296,8 @@ export function HomeView() {
                 </StaggerItem>
               )
             })}
-          </Stagger>
+            </Stagger>
+          )}
         </div>
       </section>
 
@@ -325,8 +323,10 @@ export function HomeView() {
 
         {newProducts.length === 0 ? (
           <div className="container-page">
-            <div className="rounded-2xl border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
-              Memuat produk baru...
+            <div className="grid gap-0 md:grid-cols-3 md:grid-rows-2 md:h-[560px]">
+              <div className="h-[360px] animate-pulse rounded-2xl bg-muted md:col-span-2 md:row-span-2 md:h-full" />
+              <div className="hidden h-[280px] animate-pulse bg-muted md:block" />
+              <div className="hidden h-[280px] animate-pulse bg-muted md:block" />
             </div>
           </div>
         ) : (
@@ -736,6 +736,28 @@ function NewArrivalPosters({ products }: { products: Product[] }) {
 }
 
 /* ============== Helpers ============== */
+
+/**
+ * Skeleton placeholder for Best Sellers section while data loads.
+ * Matches the 3-card desktop layout (and 1-card mobile) so the
+ * layout doesn't jump when real data arrives.
+ */
+function BestSellerSkeleton() {
+  return (
+    <div className="flex gap-4 overflow-hidden">
+      {/* Mobile: 1 card, Desktop: 3 cards */}
+      <div className="w-full shrink-0 lg:w-[calc((100%-2rem)/3)]">
+        <div className="aspect-[3/4] animate-pulse rounded-lg bg-muted" />
+      </div>
+      <div className="hidden w-[calc((100%-2rem)/3)] shrink-0 lg:block">
+        <div className="aspect-[3/4] animate-pulse rounded-lg bg-muted" />
+      </div>
+      <div className="hidden w-[calc((100%-2rem)/3)] shrink-0 lg:block">
+        <div className="aspect-[3/4] animate-pulse rounded-lg bg-muted" />
+      </div>
+    </div>
+  )
+}
 
 /**
  * Best Seller Carousel
