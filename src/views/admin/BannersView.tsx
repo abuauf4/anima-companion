@@ -76,7 +76,7 @@ export function BannersView() {
         <div className="space-y-3">
           {banners.map((b) => (
             <Card key={b.id} className="flex gap-4 p-4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              { }
               <img src={b.imageUrl} alt={b.title} className="h-20 w-32 shrink-0 rounded-lg border border-border object-cover" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">

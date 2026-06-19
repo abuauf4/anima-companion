@@ -185,7 +185,7 @@ export function ShopView() {
 
   // Sync local search input when URL search changes
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     setLocalSearch(filters.search)
   }, [filters.search])
 
@@ -205,7 +205,7 @@ export function ShopView() {
   }, [])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     setLoading(true)
     const params = new URLSearchParams()
     if (filters.search) params.set('search', filters.search)
