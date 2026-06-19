@@ -71,6 +71,10 @@ export async function GET(req: NextRequest) {
         reviewCount: product.reviews.length,
       },
       related,
+    }, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+      },
     })
   }
 

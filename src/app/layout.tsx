@@ -54,6 +54,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="id" suppressHydrationWarning>
+      <head>
+        {/* Preload critical assets for instant first paint */}
+        {/* Logo SVG (used in navbar, above the fold) — lightweight, scalable */}
+        <link rel="preload" href="/anima-logo.svg" as="image" type="image/svg+xml" />
+        {/* Hero image (LCP element on homepage) */}
+        <link
+          rel="preload"
+          as="image"
+          href="/_next/image?url=%2Fhero-pets.webp&w=640&q=75"
+        />
+      </head>
       <body
         className={`${jakarta.variable} font-sans antialiased bg-background text-foreground min-h-screen flex flex-col`}
       >
