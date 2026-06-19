@@ -130,6 +130,8 @@ export function CartView() {
                     fill
                     sizes="96px"
                     className="h-full w-full object-cover"
+                    brandName={item.brand}
+                    slug={item.slug}
                   />
                 </button>
 

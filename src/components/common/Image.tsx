@@ -1,6 +1,7 @@
 'use client'
 
 import NextImage from 'next/image'
+import { generatePlaceholderDataUrl, isPlaceholdCo } from '@/lib/placeholder'
 
 type Props = {
   src: string
@@ -17,6 +18,10 @@ type Props = {
   height?: number
   /** Responsive sizes hint (reduces bandwidth) */
   sizes?: string
+  /** Optional: brand name for placeholder generation (only used if src is placehold.co) */
+  brandName?: string
+  /** Optional: slug for placeholder color lookup */
+  slug?: string
 }
 
 /**
@@ -42,15 +47,27 @@ export function Image({
   width,
   height,
   sizes,
+  brandName,
+  slug,
 }: Props) {
-  // placehold.co returns SVG which Next.js Image blocks — bypass optimization for it
-  const isPlaceholder = src?.includes('placehold.co') || src?.endsWith('.svg')
+  // placehold.co is slow/unreliable → replace with locally generated SVG data URL
+  // This makes product images render instantly without external network calls.
+  let resolvedSrc = src
+  let unoptimized = false
+
+  if (isPlaceholdCo(src)) {
+    // Generate a colored card with brand name + product name
+    resolvedSrc = generatePlaceholderDataUrl(alt, slug || '', brandName)
+    unoptimized = true
+  } else if (src?.endsWith('.svg')) {
+    unoptimized = true
+  }
 
   // For fill mode, parent must be relative/absolute
   if (fill) {
     return (
       <NextImage
-        src={src}
+        src={resolvedSrc}
         alt={alt}
         fill
         priority={priority}
@@ -59,14 +76,14 @@ export function Image({
         placeholder={showPlaceholder ? 'empty' : 'empty'}
         quality={priority ? 80 : 70}
         loading={priority ? undefined : 'lazy'}
-        unoptimized={isPlaceholder}
+        unoptimized={unoptimized}
       />
     )
   }
 
   return (
     <NextImage
-      src={src}
+      src={resolvedSrc}
       alt={alt}
       width={width || 400}
       height={height || 400}
@@ -75,7 +92,7 @@ export function Image({
       className={className}
       quality={priority ? 80 : 70}
       loading={priority ? undefined : 'lazy'}
-      unoptimized={isPlaceholder}
+      unoptimized={unoptimized}
     />
   )
 }

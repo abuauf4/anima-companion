@@ -7,6 +7,7 @@ export interface CartItemData {
   productId: string
   slug: string
   name: string
+  brand?: string
   price: number
   salePrice?: number | null
   image: string
