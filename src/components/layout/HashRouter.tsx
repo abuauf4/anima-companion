@@ -14,6 +14,7 @@ import { OrderHistoryView } from '@/views/OrderHistoryView'
 import { ProblemListView } from '@/views/ProblemListView'
 import { ProblemDetailView } from '@/views/ProblemDetailView'
 import { ContactView } from '@/views/ContactView'
+import { WishlistView } from '@/views/WishlistView'
 import { AdminLayout } from '@/components/admin/AdminLayout'
 import { useAuth } from '@/hooks/use-auth'
 import { useUIStore } from '@/lib/store'
@@ -67,6 +68,8 @@ export function HashRouter() {
       return second ? <ProblemDetailView slug={second} /> : <ProblemListView />
     case 'kontak':
       return <ContactView />
+    case 'wishlist':
+      return <WishlistView />
     default:
       return <NotFoundView />
   }
