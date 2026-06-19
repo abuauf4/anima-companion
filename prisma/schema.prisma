@@ -1,0 +1,315 @@
+// Anima Companion — Prisma Schema
+// SQLite untuk dev/demo. Untuk produksi: tinggal ganti datasource ke PostgreSQL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== USER & AUTH ====================
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  password     String
+  name         String
+  phone        String?
+  role         String   @default("CUSTOMER") // CUSTOMER | ADMIN | SELLER
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  cart         Cart?
+  orders       Order[]
+  reviews      Review[]
+  petProfiles  PetProfile[]
+  wishlist     Wishlist[]
+  seller       Seller?
+}
+
+model PetProfile {
+  id        String   @id @default(cuid())
+  userId    String
+  petName   String
+  petTypeId String
+  age       String   // "2 tahun" / "6 bulan"
+  weight    String   // "4.5 kg"
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  petType   PetType  @relation(fields: [petTypeId], references: [id])
+
+  @@index([userId])
+}
+
+// ==================== SELLER / BRAND (MARKETPLACE) ====================
+model Seller {
+  id          String   @id @default(cuid())
+  userId      String?  @unique // jika seller punya akun login
+  name        String   // nama brand/toko
+  slug        String   @unique
+  logo        String?
+  banner      String?
+  tagline     String?
+  description String?
+  rating      Float    @default(5.0)
+  totalSales  Int      @default(0)
+  location    String?
+  isActive    Boolean  @default(true)
+  isVerified  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  products    Product[]
+}
+
+// ==================== CATALOG ====================
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  icon      String?
+  createdAt DateTime @default(now())
+
+  products  Product[]
+}
+
+model PetType {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  icon      String?
+  createdAt DateTime @default(now())
+
+  products       ProductPetType[]
+  petProfiles    PetProfile[]
+}
+
+model Problem {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  icon        String?
+  color       String?
+  createdAt   DateTime @default(now())
+
+  products    ProductProblem[]
+}
+
+model Product {
+  id              String    @id @default(cuid())
+  name            String
+  slug            String    @unique
+  sku             String    @unique
+  brand           String    // brand label (string, e.g. "Zesty Paws", "Native Pet")
+  sellerId        String?   // relasi ke Seller (marketplace)
+  price           Int       // dalam Rupiah penuh
+  salePrice       Int?
+  subscribePrice  Int?      // harga subscribe & save (lebih murah)
+  stock           Int       @default(0)
+  weight          String?
+  description     String
+  benefit         String
+  usage           String
+  ingredients     String
+  bpomNumber      String?
+  isBestSeller    Boolean   @default(false)
+  isNew           Boolean   @default(false)
+  isSubscribeEligible Boolean @default(false) // eligible untuk Subscribe & Save
+  rating          Float     @default(5.0)
+  reviewCount     Int       @default(0)
+  isActive        Boolean   @default(true)
+  categoryId      String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  category        Category  @relation(fields: [categoryId], references: [id])
+  seller          Seller?   @relation(fields: [sellerId], references: [id], onDelete: SetNull)
+  images          ProductImage[]
+  petTypes        ProductPetType[]
+  problems        ProductProblem[]
+  reviews         Review[]
+  cartItems       CartItem[]
+  orderItems      OrderItem[]
+  wishlist        Wishlist[]
+
+  @@index([categoryId])
+  @@index([slug])
+  @@index([sellerId])
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  url       String
+  alt       String?
+  order     Int      @default(0)
+
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model ProductPetType {
+  productId String
+  petTypeId String
+
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  petType   PetType  @relation(fields: [petTypeId], references: [id], onDelete: Cascade)
+
+  @@id([productId, petTypeId])
+}
+
+model ProductProblem {
+  productId String
+  problemId String
+
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  problem   Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@id([productId, problemId])
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  productId String
+  userId    String?
+  userName  String
+  rating    Int
+  comment   String
+  petType   String?
+  createdAt DateTime @default(now())
+
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([productId])
+}
+
+// ==================== CART & WISHLIST ====================
+model Cart {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  cartId    String
+  productId String
+  quantity  Int      @default(1)
+  isSubscribe Boolean @default(false) // apakah item ini pakai subscribe & save
+  createdAt DateTime @default(now())
+
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, productId])
+}
+
+model Wishlist {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+}
+
+// ==================== VOUCHER ====================
+model Voucher {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  type        String    // PERCENTAGE | FIXED
+  value       Int
+  minSpend    Int       @default(0)
+  isActive    Boolean   @default(true)
+  validUntil  DateTime?
+  description String?
+  createdAt   DateTime  @default(now())
+}
+
+// ==================== ORDER ====================
+model Order {
+  id            String   @id @default(cuid())
+  orderNumber   String   @unique
+  userId        String?
+  status        String   @default("PENDING")
+  customerName  String
+  customerPhone String
+  address       String
+  notes         String?
+  subtotal      Int
+  discount      Int      @default(0)
+  total         Int
+  voucherCode   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user          User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  items         OrderItem[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  productId   String
+  productName String
+  productSku  String
+  price       Int
+  quantity    Int
+  subtotal    Int
+
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product  @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+}
+
+// ==================== CONTENT ====================
+model Banner {
+  id        String   @id @default(cuid())
+  title     String
+  subtitle  String?
+  imageUrl  String
+  link      String?
+  position  String   @default("HOME")
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model Testimonial {
+  id        String   @id @default(cuid())
+  name      String
+  petName   String
+  petType   String
+  message   String
+  rating    Int      @default(5)
+  avatar    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model FAQ {
+  id        String   @id @default(cuid())
+  question  String
+  answer    String
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+}

@@ -1,0 +1,407 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 16px);
+}
+
+:root {
+  --radius: 0.75rem;
+
+  /* Anima Companion Brand — Premium Pet Health E-commerce */
+  --background: oklch(0.99 0.002 80);       /* warmer cream */
+  --foreground: oklch(0.18 0.015 30);       /* near-black warm */
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.015 30);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.015 30);
+
+  /* Primary: Orange #F97316 — premium vibrant */
+  --primary: oklch(0.68 0.19 45);
+  --primary-foreground: oklch(0.99 0.005 80);
+  --primary-hover: oklch(0.62 0.20 45);
+
+  /* Secondary: Purple #7C3AED — refined */
+  --secondary: oklch(0.52 0.22 295);
+  --secondary-foreground: oklch(0.99 0.005 80);
+  --secondary-hover: oklch(0.47 0.22 295);
+
+  --muted: oklch(0.965 0.004 80);
+  --muted-foreground: oklch(0.50 0.012 60);
+
+  /* Accent: Warm cream-orange tint */
+  --accent: oklch(0.96 0.018 60);
+  --accent-foreground: oklch(0.35 0.15 50);
+
+  /* Success: Green #22C55E — vivid but classy */
+  --success: oklch(0.62 0.19 145);
+  --success-foreground: oklch(0.99 0.005 80);
+
+  --destructive: oklch(0.58 0.24 27);
+  --border: oklch(0.93 0.004 80);
+  --border-strong: oklch(0.88 0.006 70);
+  --input: oklch(0.95 0.004 80);
+  --ring: oklch(0.68 0.19 45);
+
+  /* Premium chart colors — coordinated with brand */
+  --chart-1: oklch(0.68 0.19 45);    /* orange */
+  --chart-2: oklch(0.52 0.22 295);   /* purple */
+  --chart-3: oklch(0.62 0.19 145);   /* green */
+  --chart-4: oklch(0.70 0.18 90);    /* warm yellow */
+  --chart-5: oklch(0.62 0.22 15);    /* coral red */
+
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.18 0.015 30);
+  --sidebar-primary: oklch(0.68 0.19 45);
+  --sidebar-primary-foreground: oklch(0.99 0.005 80);
+  --sidebar-accent: oklch(0.965 0.008 60);
+  --sidebar-accent-foreground: oklch(0.18 0.015 30);
+  --sidebar-border: oklch(0.93 0.004 80);
+  --sidebar-ring: oklch(0.68 0.19 45);
+
+  /* Premium shadows — softer, more diffused */
+  --shadow-xs: 0 1px 2px 0 oklch(0.18 0.02 30 / 0.04);
+  --shadow-sm: 0 1px 3px 0 oklch(0.18 0.02 30 / 0.06), 0 1px 2px -1px oklch(0.18 0.02 30 / 0.04);
+  --shadow-md: 0 4px 6px -1px oklch(0.18 0.02 30 / 0.07), 0 2px 4px -2px oklch(0.18 0.02 30 / 0.05);
+  --shadow-lg: 0 10px 15px -3px oklch(0.18 0.02 30 / 0.08), 0 4px 6px -4px oklch(0.18 0.02 30 / 0.05);
+  --shadow-xl: 0 20px 25px -5px oklch(0.18 0.02 30 / 0.10), 0 8px 10px -6px oklch(0.18 0.02 30 / 0.06);
+  --shadow-2xl: 0 25px 50px -12px oklch(0.18 0.02 30 / 0.18);
+  --shadow-glow-primary: 0 0 0 1px oklch(0.68 0.19 45 / 0.1), 0 8px 24px -6px oklch(0.68 0.19 45 / 0.25);
+  --shadow-glow-success: 0 0 0 1px oklch(0.62 0.19 145 / 0.1), 0 8px 24px -6px oklch(0.62 0.19 145 / 0.20);
+  --shadow-card-hover: 0 12px 24px -8px oklch(0.18 0.02 30 / 0.12), 0 4px 8px -4px oklch(0.18 0.02 30 / 0.06);
+}
+
+.dark {
+  --background: oklch(0.15 0.008 30);
+  --foreground: oklch(0.97 0.005 80);
+
+  --card: oklch(0.21 0.008 30);
+  --card-foreground: oklch(0.97 0.005 80);
+
+  --popover: oklch(0.21 0.008 30);
+  --popover-foreground: oklch(0.97 0.005 80);
+
+  --primary: oklch(0.70 0.19 45);
+  --primary-foreground: oklch(0.15 0.008 30);
+
+  --secondary: oklch(0.55 0.22 295);
+  --secondary-foreground: oklch(0.99 0.005 80);
+
+  --muted: oklch(0.27 0.008 30);
+  --muted-foreground: oklch(0.68 0.012 60);
+
+  --accent: oklch(0.30 0.04 295);
+  --accent-foreground: oklch(0.90 0.04 295);
+
+  --success: oklch(0.65 0.19 145);
+  --success-foreground: oklch(0.15 0.008 30);
+
+  --destructive: oklch(0.70 0.19 22);
+  --border: oklch(1 0 0 / 10%);
+  --border-strong: oklch(1 0 0 / 15%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.70 0.19 45);
+
+  --chart-1: oklch(0.70 0.19 45);
+  --chart-2: oklch(0.55 0.22 295);
+  --chart-3: oklch(0.65 0.19 145);
+  --chart-4: oklch(0.70 0.18 90);
+  --chart-5: oklch(0.62 0.22 15);
+
+  --sidebar: oklch(0.21 0.008 30);
+  --sidebar-foreground: oklch(0.97 0.005 80);
+  --sidebar-primary: oklch(0.70 0.19 45);
+  --sidebar-primary-foreground: oklch(0.15 0.008 30);
+  --sidebar-accent: oklch(0.27 0.008 30);
+  --sidebar-accent-foreground: oklch(0.97 0.005 80);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.70 0.19 45);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv01", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+  /* Premium scrollbar */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: oklch(0.97 0.004 80);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.85 0.01 60);
+    border-radius: 6px;
+    border: 2px solid oklch(0.97 0.004 80);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.75 0.02 60);
+  }
+  /* Selection */
+  ::selection {
+    background: oklch(0.68 0.19 45 / 0.2);
+    color: oklch(0.18 0.015 30);
+  }
+  /* Focus visible */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/* Premium utility classes */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .text-pretty {
+    text-wrap: pretty;
+  }
+  .container-page {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+  .container-narrow {
+    @apply mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Brand gradients */
+  .gradient-brand {
+    background: linear-gradient(135deg, oklch(0.68 0.19 45) 0%, oklch(0.52 0.22 295) 100%);
+  }
+  .gradient-brand-text {
+    background: linear-gradient(135deg, oklch(0.68 0.19 45) 0%, oklch(0.52 0.22 295) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+  .gradient-brand-soft {
+    background: linear-gradient(135deg, oklch(0.96 0.04 50) 0%, oklch(0.96 0.04 295) 100%);
+  }
+  .gradient-mesh {
+    background-color: oklch(0.99 0.002 80);
+    background-image:
+      radial-gradient(at 0% 0%, oklch(0.68 0.19 45 / 0.08) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, oklch(0.52 0.22 295 / 0.06) 0px, transparent 50%),
+      radial-gradient(at 50% 100%, oklch(0.62 0.19 145 / 0.04) 0px, transparent 50%);
+  }
+  .gradient-mesh-warm {
+    background-color: oklch(0.99 0.002 80);
+    background-image:
+      radial-gradient(at 20% 30%, oklch(0.68 0.19 45 / 0.12) 0px, transparent 50%),
+      radial-gradient(at 80% 70%, oklch(0.52 0.22 295 / 0.08) 0px, transparent 50%);
+  }
+
+  /* Glass effect */
+  .glass {
+    background: oklch(1 0 0 / 80%);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+  }
+  .glass-dark {
+    background: oklch(0.15 0.008 30 / 80%);
+    backdrop-filter: blur(16px) saturate(180%);
+  }
+
+  /* Premium shadows */
+  .shadow-premium {
+    box-shadow: var(--shadow-card-hover);
+  }
+  .shadow-glow {
+    box-shadow: var(--shadow-glow-primary);
+  }
+  .shadow-glow-success {
+    box-shadow: var(--shadow-glow-success);
+  }
+
+  /* Section eyebrow */
+  .eyebrow {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground;
+  }
+
+  /* Card hover lift */
+  .card-hover {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .card-hover:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-card-hover);
+  }
+
+  /* Subtle pattern background */
+  .pattern-dots {
+    background-image: radial-gradient(oklch(0.7 0.01 60 / 0.15) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+
+  /* Animations */
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+  }
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  @keyframes pulse-soft {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+  @keyframes ping-slow {
+    0% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(2.5);
+      opacity: 0;
+    }
+  }
+  .animate-fade-in-up {
+    animation: fade-in-up 0.6s cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+  .animate-fade-in {
+    animation: fade-in 0.4s ease both;
+  }
+  .animate-scale-in {
+    animation: scale-in 0.3s cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+  .animate-float {
+    animation: float 4s ease-in-out infinite;
+  }
+  .animate-pulse-soft {
+    animation: pulse-soft 2s ease-in-out infinite;
+  }
+  .animate-ping-slow {
+    animation: ping-slow 2.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+
+  /* Stagger delay helpers */
+  .delay-100 { animation-delay: 100ms; }
+  .delay-200 { animation-delay: 200ms; }
+  .delay-300 { animation-delay: 300ms; }
+  .delay-400 { animation-delay: 400ms; }
+  .delay-500 { animation-delay: 500ms; }
+  .delay-700 { animation-delay: 700ms; }
+
+  /* Shimmer skeleton */
+  .skeleton-shimmer {
+    background: linear-gradient(
+      90deg,
+      oklch(0.96 0.004 80) 0%,
+      oklch(0.92 0.006 70) 50%,
+      oklch(0.96 0.004 80) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.8s ease-in-out infinite;
+  }
+}
+
+/* =====================================================
+   Image loading shimmer — shown behind next/image
+   while the optimized version is being generated.
+   Improves perceived load speed.
+   ===================================================== */
+.bg-image-placeholder {
+  background: linear-gradient(
+    135deg,
+    oklch(0.94 0.005 70) 0%,
+    oklch(0.88 0.008 60) 50%,
+    oklch(0.94 0.005 70) 100%
+  );
+  background-size: 200% 200%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+/* next/image fill mode shows bg behind, so add to parent */
+.aspect-square,
+.aspect-video,
+.aspect-\[16\/9\],
+.aspect-\[21\/9\] {
+  background-color: oklch(0.95 0.005 70);
+}
+
+/* Ensure next/image fill doesn't show alt text awkwardly while loading */
+img[next-image-placeholder] {
+  background: transparent !important;
+}

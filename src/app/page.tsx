@@ -1,0 +1,21 @@
+'use client'
+
+import { Navbar } from '@/components/layout/Navbar'
+import { Footer } from '@/components/layout/Footer'
+import { HashRouter } from '@/components/layout/HashRouter'
+import { WhatsAppFloatingButton } from '@/components/layout/WhatsAppFloatingButton'
+import { PetProfileQuiz } from '@/components/home/PetProfileQuiz'
+
+export default function Home() {
+  return (
+    <div className="flex min-h-screen flex-col">
+      <Navbar />
+      <main className="flex-1">
+        <HashRouter />
+      </main>
+      <Footer />
+      <WhatsAppFloatingButton />
+      <PetProfileQuiz />
+    </div>
+  )
+}
