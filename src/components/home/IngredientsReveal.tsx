@@ -31,7 +31,7 @@ const INGREDIENTS: Ingredient[] = [
   {
     name: 'Kolostrum',
     subtitle: 'Immune Stimulant',
-    description: 'Sumber imunoglobulin alami yang meningkatkan daya tahan tubuh anabul. Pertahanan terhadap infeksi virus dan bakteri.',
+    description: 'Sumber imunoglobulin alami yang meningkatkan daya tahan tubuh anabul. Pertahanan terhadap infeksi virus dan bakteri. Bahan utama Felcover+.',
     benefit: 'Imunitas',
     color: 'from-orange-400 to-amber-500',
     emoji: '🛡️',
@@ -41,7 +41,7 @@ const INGREDIENTS: Ingredient[] = [
   {
     name: 'Prebiotik',
     subtitle: 'Gut Health Booster',
-    description: 'Makanan untuk bakteri baik di usus. Menyeimbangkan mikroflora pencernaan dan meningkatkan penyerapan nutrisi.',
+    description: 'Makanan untuk bakteri baik di usus. Menyeimbangkan mikroflora pencernaan dan meningkatkan penyerapan nutrisi. Bahan utama Felcover+.',
     benefit: 'Pencernaan',
     color: 'from-emerald-400 to-teal-500',
     emoji: '🌱',
@@ -51,62 +51,12 @@ const INGREDIENTS: Ingredient[] = [
   {
     name: 'Omega-3 (EPA & DHA)',
     subtitle: 'Wild Fish Oil',
-    description: 'Asam lemak esensial dari minyak ikan murni. Membuat bulu lebat mengkilap, jaga kesehatan jantung dan otak.',
+    description: 'Asam lemak esensial dari minyak ikan murni. Membuat bulu lebat mengkilap, jaga kesehatan jantung dan otak. Kandungan utama Sioren Fish Oil.',
     benefit: 'Bulu & Kulit',
     color: 'from-cyan-400 to-blue-500',
     emoji: '🐟',
     product: 'Sioren Fish Oil',
     slug: 'sioren-fish-oil',
-  },
-  {
-    name: 'Alpha-Casozepine',
-    subtitle: 'Stress Relief Protein',
-    description: 'Protein susu yang menenangkan sistem saraf tanpa membuat anabul ngantuk. Bantu saat ditinggal atau perjalanan.',
-    benefit: 'Stress Management',
-    color: 'from-violet-400 to-purple-500',
-    emoji: '💖',
-    product: 'Forevet',
-    slug: 'forevet-stress-manajemen',
-  },
-  {
-    name: 'L-Lysine',
-    subtitle: 'Immune Amino Acid',
-    description: 'Asam amino esensial untuk melawan virus herpes dan flu. Meningkatkan nafsu makan dan mempercepat pemulihan.',
-    benefit: 'Flu Support',
-    color: 'from-rose-400 to-pink-500',
-    emoji: '🦠',
-    product: 'Sioren Flu Support+',
-    slug: 'sioren-flu-support-plus',
-  },
-  {
-    name: 'L-Carnitine',
-    subtitle: 'Energy Booster',
-    description: 'Mengubah lemak menjadi energi. Meningkatkan stamina, nafsu makan, dan mempercepat pemulihan setelah sakit.',
-    benefit: 'Recovery',
-    color: 'from-yellow-400 to-orange-500',
-    emoji: '⚡',
-    product: 'Sioren Booster+',
-    slug: 'sioren-booster-plus',
-  },
-  {
-    name: 'Biotin',
-    subtitle: 'Skin & Coat Vitamin',
-    description: 'Vitamin B7 esensial untuk kesehatan kulit dan bulu. Mengatasi bulu rontok, gatal, dan ketombe.',
-    benefit: 'Bulu Sehat',
-    color: 'from-fuchsia-400 to-pink-500',
-    emoji: '✨',
-    product: 'Sioren Skin & Coat',
-    slug: 'sioren-skin-coat',
-  },
-  {
-    name: 'Active Charcoal',
-    subtitle: 'Natural Odor Absorber',
-    description: 'Arang aktif alami yang menyerap bau ammonia dan kelembaban. Jaga litterbox tetap segar hingga 24 jam.',
-    benefit: 'Odor Control',
-    color: 'from-slate-500 to-zinc-700',
-    emoji: '🪨',
-    product: 'Sioren Pet Odor X',
-    slug: 'sioren-pet-odor-x',
   },
 ]
 
@@ -198,7 +148,7 @@ export function IngredientsReveal() {
               transition={{ duration: 0.4, delay: Math.min(i, 3) * 0.05 }}
               onClick={() => navigate(`/product/${ing.slug}`)}
               whileHover={{ y: -4 }}
-              className={`group relative flex shrink-0 snap-start flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br ${ing.color} p-5 text-left text-white shadow-sm transition-shadow hover:shadow-lg md:p-6 w-[calc(100vw-2.5rem)] md:w-[calc(50%-0.5rem)]`}
+              className={`group relative flex shrink-0 snap-start flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br ${ing.color} p-5 text-left text-white shadow-sm transition-shadow hover:shadow-lg md:p-6 w-[calc(100vw-2.5rem)] md:w-[calc(33.333%-0.667rem)]`}
               style={{ minHeight: '340px' }}
               aria-label={`Lihat produk ${ing.product}`}
             >
