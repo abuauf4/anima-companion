@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { useHashRouter } from '@/lib/router'
+import { useWishlistStore } from '@/lib/store'
 import { whatsappAdminUrl } from '@/lib/config'
-import { Home, ShoppingBag, Heart, Menu, Cat, Dog } from 'lucide-react'
+import { Home, ShoppingBag, Heart, Menu } from 'lucide-react'
 
 /**
  * Mobile Bottom Bar — replacement for hamburger menu sidebar.
@@ -12,7 +13,7 @@ import { Home, ShoppingBag, Heart, Menu, Cat, Dog } from 'lucide-react'
  * 1. Home
  * 2. Produk (semua produk)
  * 3. WhatsApp (center, larger — agak gedeen)
- * 4. Wishlist
+ * 4. Wishlist (with count badge)
  * 5. Menu → opens 2 CTAs above the bar: Kucing + Anjing
  *
  * Visible on mobile only (md:hidden).
@@ -20,6 +21,7 @@ import { Home, ShoppingBag, Heart, Menu, Cat, Dog } from 'lucide-react'
 export function MobileBottomBar() {
   const { route, navigate } = useHashRouter()
   const [menuOpen, setMenuOpen] = useState(false)
+  const wishlistCount = useWishlistStore((s) => s.items.length)
 
   const isActive = (path: string) => {
     if (path === '/') return route.path === '/'
@@ -127,18 +129,25 @@ export function MobileBottomBar() {
           <span className="text-[10px] font-medium text-muted-foreground">WhatsApp</span>
         </a>
 
-        {/* 4. Wishlist */}
+        {/* 4. Wishlist — with count badge, navigates to /wishlist (no login required) */}
         <button
-          onClick={() => navigate('/profile')}
+          onClick={() => navigate('/wishlist')}
           aria-label="Wishlist"
-          aria-current={isActive('profile') ? 'page' : undefined}
-          className="flex flex-1 flex-col items-center gap-0.5 rounded-lg py-1.5"
+          aria-current={isActive('wishlist') ? 'page' : undefined}
+          className="relative flex flex-1 flex-col items-center gap-0.5 rounded-lg py-1.5"
         >
-          <Heart
-            className={`h-5 w-5 ${isActive('profile') ? 'text-primary' : 'text-muted-foreground'}`}
-            strokeWidth={isActive('profile') ? 2.5 : 2}
-          />
-          <span className={`text-[10px] font-medium ${isActive('profile') ? 'text-primary' : 'text-muted-foreground'}`}>
+          <span className="relative">
+            <Heart
+              className={`h-5 w-5 ${isActive('wishlist') ? 'text-primary' : 'text-muted-foreground'}`}
+              strokeWidth={isActive('wishlist') ? 2.5 : 2}
+            />
+            {wishlistCount > 0 && (
+              <span className="absolute -right-2 -top-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white ring-2 ring-card">
+                {wishlistCount > 99 ? '99+' : wishlistCount}
+              </span>
+            )}
+          </span>
+          <span className={`text-[10px] font-medium ${isActive('wishlist') ? 'text-primary' : 'text-muted-foreground'}`}>
             Wishlist
           </span>
         </button>

@@ -2,10 +2,10 @@
 
 import { Product } from '@/hooks/use-fetch'
 import { useHashRouter } from '@/lib/router'
-import { useCartStore } from '@/lib/store'
+import { useCartStore, useWishlistStore } from '@/lib/store'
 import { formatRupiah, effectivePrice, discountPercent } from '@/lib/format'
 import { Image as OptImage } from '@/components/common/Image'
-import { ShoppingCart, Check, Shield, Star, BadgeCheck, Repeat } from 'lucide-react'
+import { ShoppingCart, Check, Shield, Star, BadgeCheck, Repeat, Heart } from 'lucide-react'
 import { toast } from 'sonner'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
@@ -16,6 +16,7 @@ import { motion } from 'framer-motion'
  * - Square image, dense grid
  * - Best Seller / Baru ribbon top-left, discount % top-right
  * - Subscribe & Save small green badge under discount
+ * - Heart wishlist toggle — top-right (separate from discount badge)
  * - BPOM badge bottom-left of image
  * - Floating cart button bottom-right
  * - Brand + seller (clickable) under product name
@@ -24,6 +25,8 @@ import { motion } from 'framer-motion'
 export function ProductCard({ product }: { product: Product }) {
   const { navigate } = useHashRouter()
   const addItem = useCartStore((s) => s.addItem)
+  const toggleWishlist = useWishlistStore((s) => s.toggleItem)
+  const isWishlisted = useWishlistStore((s) => s.items.some((i) => i.productId === product.id))
   const [added, setAdded] = useState(false)
 
   const price = effectivePrice(product.price, product.salePrice)
@@ -50,6 +53,24 @@ export function ProductCard({ product }: { product: Product }) {
     })
     setAdded(true)
     setTimeout(() => setAdded(false), 1200)
+  }
+
+  const handleWishlist = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    toggleWishlist({
+      productId: product.id,
+      slug: product.slug,
+      name: product.name,
+      brand: product.brand,
+      price: product.price,
+      salePrice: product.salePrice,
+      image: product.images?.[0]?.url || '',
+      weight: product.weight,
+    })
+    toast.success(
+      isWishlisted ? `${product.name} dihapus dari wishlist` : `${product.name} ditambahkan ke wishlist`,
+      { description: isWishlisted ? undefined : 'Lihat di halaman Wishlist' }
+    )
   }
 
   const handleSellerClick = (e: React.MouseEvent) => {
@@ -112,6 +133,25 @@ export function ProductCard({ product }: { product: Product }) {
             </span>
           )}
         </div>
+
+        {/* Heart wishlist toggle — bottom-right of image (separate from cart button) */}
+        <button
+          onClick={handleWishlist}
+          aria-label={isWishlisted ? `Hapus ${product.name} dari wishlist` : `Tambah ${product.name} ke wishlist`}
+          aria-pressed={isWishlisted}
+          className="absolute right-1.5 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 translate-x-12 items-center justify-center rounded-full bg-white/90 text-foreground shadow-sm ring-1 ring-black/5 backdrop-blur-sm transition-all duration-300 hover:scale-110 hover:bg-white group-hover:translate-x-0 active:scale-95"
+        >
+          <motion.span
+            key={isWishlisted ? 'wishlisted' : 'idle'}
+            initial={{ scale: 0.6 }}
+            animate={{ scale: 1 }}
+            transition={{ duration: 0.18 }}
+          >
+            <Heart
+              className={`h-4 w-4 transition-colors ${isWishlisted ? 'fill-rose-500 text-rose-500' : 'text-foreground/70'}`}
+            />
+          </motion.span>
+        </button>
 
         {/* BPOM mini badge — bottom-left of image */}
         {product.bpomNumber && (
