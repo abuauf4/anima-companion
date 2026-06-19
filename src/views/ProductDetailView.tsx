@@ -107,9 +107,9 @@ export function ProductDetailView({ slug }: { slug: string }) {
   }
 
   return (
-    <div className="container-page py-8">
+    <div className="container-page py-4 md:py-8">
       {/* Breadcrumb */}
-      <nav className="mb-6 flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+      <nav className="mb-4 flex flex-wrap items-center gap-1.5 text-xs md:mb-6 md:text-sm text-muted-foreground">
         <button onClick={() => navigate('/')} className="hover:text-primary">Beranda</button>
         <ChevronRight className="h-3 w-3" />
         <button onClick={() => navigate('/shop')} className="hover:text-primary">Belanja</button>
@@ -124,10 +124,10 @@ export function ProductDetailView({ slug }: { slug: string }) {
         <span className="truncate text-foreground">{product.name}</span>
       </nav>
 
-      <div className="grid gap-8 md:grid-cols-2 lg:gap-12">
+      <div className="grid gap-4 md:grid-cols-2 md:gap-8 lg:gap-12">
         {/* ==================== Gallery ==================== */}
         <div>
-          <div className="relative aspect-square overflow-hidden rounded-2xl border border-border bg-muted">
+          <div className="relative aspect-square overflow-hidden rounded-xl md:rounded-2xl border border-border bg-muted">
             {images[activeImage] ? (
               <OptImage
                 src={images[activeImage].url}
@@ -146,22 +146,22 @@ export function ProductDetailView({ slug }: { slug: string }) {
             )}
             {/* Top-left badges: status */}
             {(product.isBestSeller || product.isNew) && (
-              <div className="absolute left-3 top-3 flex flex-col gap-1.5">
-                {product.isBestSeller && <Badge className="bg-primary text-primary-foreground shadow-sm">Best Seller</Badge>}
-                {product.isNew && <Badge className="bg-secondary text-secondary-foreground shadow-sm">Baru</Badge>}
+              <div className="absolute left-2 top-2 flex flex-col gap-1 md:left-3 md:top-3 md:gap-1.5">
+                {product.isBestSeller && <Badge className="bg-primary text-primary-foreground text-[10px] shadow-sm">Best Seller</Badge>}
+                {product.isNew && <Badge className="bg-secondary text-secondary-foreground text-[10px] shadow-sm">Baru</Badge>}
               </div>
             )}
             {/* Top-right: discount */}
             {discount > 0 && (
-              <div className="absolute right-3 top-3">
-                <Badge className="bg-destructive text-destructive-foreground shadow-sm">-{discount}%</Badge>
+              <div className="absolute right-2 top-2 md:right-3 md:top-3">
+                <Badge className="bg-destructive text-destructive-foreground text-[10px] shadow-sm">-{discount}%</Badge>
               </div>
             )}
           </div>
 
           {/* Thumbnails */}
           {images.length > 1 && (
-            <div className="mt-3 grid grid-cols-4 gap-2">
+            <div className="mt-2 grid grid-cols-4 gap-1.5 md:mt-3 md:gap-2">
               {images.map((img, i) => (
                 <button
                   key={img.id}
@@ -186,15 +186,15 @@ export function ProductDetailView({ slug }: { slug: string }) {
         </div>
 
         {/* ==================== Info ==================== */}
-        <div className="space-y-6">
+        <div className="space-y-4 md:space-y-6">
           {/* Brand + actions */}
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <div className="flex items-center gap-2 md:gap-3">
+              <span className="text-[10px] md:text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 {product.brand}
               </span>
               {product.bpomNumber && (
-                <Badge variant="outline" className="gap-1 text-success border-success/30 bg-success/5">
+                <Badge variant="outline" className="gap-1 text-success border-success/30 bg-success/5 text-[10px]">
                   <Shield className="h-3 w-3" /> {product.bpomNumber}
                 </Badge>
               )}
@@ -210,17 +210,17 @@ export function ProductDetailView({ slug }: { slug: string }) {
           </div>
 
           {/* Name */}
-          <div className="space-y-3">
-            <h1 className="text-balance text-3xl font-bold leading-tight tracking-tight md:text-4xl">{product.name}</h1>
+          <div className="space-y-2 md:space-y-3">
+            <h1 className="text-balance text-2xl font-bold leading-tight tracking-tight md:text-4xl">{product.name}</h1>
 
             {/* Rating */}
             {product.reviewCount && product.reviewCount > 0 && (
-              <div className="flex items-center gap-2 text-sm">
+              <div className="flex items-center gap-2 text-xs md:text-sm">
                 <div className="flex items-center gap-0.5">
                   {Array.from({ length: 5 }).map((_, i) => (
                     <Star
                       key={i}
-                      className={`h-4 w-4 ${
+                      className={`h-3.5 w-3.5 md:h-4 md:w-4 ${
                         i < Math.round(product.avgRating || 0)
                           ? 'fill-amber-400 text-amber-400'
                           : 'fill-muted text-muted'
@@ -236,13 +236,13 @@ export function ProductDetailView({ slug }: { slug: string }) {
 
           {/* Problem tags */}
           {product.problems && product.problems.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mengatasi:</span>
+            <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
+              <span className="text-[10px] md:text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mengatasi:</span>
               {product.problems.map((p) => (
                 <button
                   key={p.problem.id}
                   onClick={() => navigate(`/problem/${p.problem.slug}`)}
-                  className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium transition-all hover:scale-105"
+                  className="inline-flex items-center rounded-full px-2.5 py-0.5 md:px-3 md:py-1 text-[11px] md:text-xs font-medium transition-all hover:scale-105"
                   style={{
                     backgroundColor: (p.problem.color || '#888') + '15',
                     color: p.problem.color || '#888',
@@ -255,29 +255,29 @@ export function ProductDetailView({ slug }: { slug: string }) {
           )}
 
           {/* Price card */}
-          <div className="rounded-2xl border border-border bg-accent/40 p-5">
+          <div className="rounded-xl md:rounded-2xl border border-border bg-accent/40 p-4 md:p-5">
             {product.salePrice ? (
-              <div className="flex flex-wrap items-end gap-3">
-                <span className="text-3xl font-bold text-primary md:text-4xl">{formatRupiah(product.salePrice)}</span>
-                <span className="mb-1.5 text-base text-muted-foreground line-through">{formatRupiah(product.price)}</span>
-                <Badge className="mb-2 bg-destructive text-destructive-foreground">Hemat {discount}%</Badge>
+              <div className="flex flex-wrap items-end gap-2 md:gap-3">
+                <span className="text-2xl font-bold text-primary md:text-4xl">{formatRupiah(product.salePrice)}</span>
+                <span className="mb-1.5 text-sm md:text-base text-muted-foreground line-through">{formatRupiah(product.price)}</span>
+                <Badge className="mb-1.5 md:mb-2 bg-destructive text-destructive-foreground text-[10px] md:text-xs">Hemat {discount}%</Badge>
               </div>
             ) : (
-              <span className="text-3xl font-bold text-foreground md:text-4xl">{formatRupiah(product.price)}</span>
+              <span className="text-2xl font-bold text-foreground md:text-4xl">{formatRupiah(product.price)}</span>
             )}
             {product.weight && (
-              <p className="mt-2 text-xs text-muted-foreground">Berat bersih: {product.weight}</p>
+              <p className="mt-1.5 md:mt-2 text-[11px] md:text-xs text-muted-foreground">Berat bersih: {product.weight}</p>
             )}
           </div>
 
           {/* Pet types + stock */}
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-3 md:gap-4 sm:grid-cols-2">
             {product.petTypes && product.petTypes.length > 0 && (
               <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cocok untuk</p>
+                <p className="mb-1.5 md:mb-2 text-[10px] md:text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cocok untuk</p>
                 <div className="flex flex-wrap gap-1.5">
                   {product.petTypes.map((p) => (
-                    <Badge key={p.petType.id} variant="outline" className="gap-1 border-border-strong">
+                    <Badge key={p.petType.id} variant="outline" className="gap-1 border-border-strong text-[11px] md:text-xs">
                       {p.petType.name}
                     </Badge>
                   ))}
@@ -285,21 +285,21 @@ export function ProductDetailView({ slug }: { slug: string }) {
               </div>
             )}
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ketersediaan</p>
+              <p className="mb-1.5 md:mb-2 text-[10px] md:text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ketersediaan</p>
               {product.stock > 0 ? (
-                <span className="inline-flex items-center gap-1.5 rounded-md bg-success/10 px-2.5 py-1 text-sm font-medium text-success">
-                  <Check className="h-4 w-4" /> Stok {product.stock} unit
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-success/10 px-2 py-0.5 md:px-2.5 md:py-1 text-xs md:text-sm font-medium text-success">
+                  <Check className="h-3.5 w-3.5 md:h-4 md:w-4" /> Stok {product.stock} unit
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-md bg-destructive/10 px-2.5 py-1 text-sm font-medium text-destructive">
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-destructive/10 px-2 py-0.5 md:px-2.5 md:py-1 text-xs md:text-sm font-medium text-destructive">
                   Stok Habis
                 </span>
               )}
             </div>
           </div>
 
-          {/* Quantity + Add to cart */}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
+          {/* Quantity + Add to cart — desktop: 1 row (qty + 2 buttons), mobile: stack */}
+          <div className="hidden gap-3 sm:flex-row sm:items-stretch md:flex">
             <div className="flex items-center justify-between rounded-xl border border-border-strong bg-card sm:justify-start">
               <Button
                 variant="ghost"
@@ -350,78 +350,125 @@ export function ProductDetailView({ slug }: { slug: string }) {
             </Button>
           </div>
 
+          {/* Mobile-only: qty selector full-width + Tambah Keranjang full-width button.
+              Beli Sekarang is in mobile sticky bottom bar. */}
+          <div className="space-y-2 md:hidden">
+            {/* Quantity selector — full width */}
+            <div className="flex items-center justify-between rounded-xl border border-border-strong bg-card">
+              <span className="pl-4 text-xs font-medium text-muted-foreground">Jumlah</span>
+              <div className="flex items-center">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                  disabled={quantity <= 1}
+                  className="h-11 w-11 rounded-r-none"
+                >
+                  <Minus className="h-4 w-4" />
+                </Button>
+                <Input
+                  type="number"
+                  value={quantity}
+                  onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="h-11 w-14 border-0 text-center text-base font-semibold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                  min={1}
+                  max={product.stock}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
+                  disabled={quantity >= product.stock}
+                  className="h-11 w-11 rounded-l-none"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            {/* Tambah Keranjang — full width */}
+            <Button
+              onClick={handleAddToCart}
+              disabled={product.stock <= 0}
+              variant="outline"
+              className="h-11 w-full gap-2 border-border-strong text-sm"
+            >
+              {added ? <Check className="h-4 w-4" /> : <ShoppingCart className="h-4 w-4" />}
+              {added ? 'Ditambahkan ke Keranjang' : 'Tambah ke Keranjang'}
+            </Button>
+          </div>
+
           {/* Ask via WhatsApp */}
           <a
             href={whatsappAdminUrl(`Halo Anima Companion! Saya ingin bertanya tentang produk ${product.name} (${formatRupiah(price)}) 🐾`)}
             target="_blank"
             rel="noopener noreferrer"
           >
-            <Button variant="outline" className="h-11 w-full gap-2 border-success/40 bg-success/5 text-success hover:bg-success hover:text-success-foreground">
-              <MessageCircle className="h-4 w-4" /> Tanya Produk Ini via WhatsApp
+            <Button variant="outline" className="h-11 w-full gap-2 border-success/40 bg-success/5 text-success hover:bg-success hover:text-success-foreground text-xs md:text-sm">
+              <MessageCircle className="h-4 w-4" /> Tanya Produk via WhatsApp
             </Button>
           </a>
 
           {/* Trust */}
-          <div className="grid grid-cols-3 gap-3 rounded-2xl border border-border bg-card p-4 text-center">
+          <div className="grid grid-cols-3 gap-2 md:gap-3 rounded-xl md:rounded-2xl border border-border bg-card p-3 md:p-4 text-center">
             <div className="flex flex-col items-center gap-1">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Truck className="h-4 w-4" />
+              <div className="flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Truck className="h-3.5 w-3.5 md:h-4 md:w-4" />
               </div>
-              <p className="text-xs font-semibold">Pengiriman Cepat</p>
-              <p className="text-[10px] text-muted-foreground">1-4 hari kerja</p>
+              <p className="text-[10px] md:text-xs font-semibold">Pengiriman Cepat</p>
+              <p className="text-[9px] md:text-[10px] text-muted-foreground">1-4 hari kerja</p>
             </div>
             <div className="flex flex-col items-center gap-1 border-x border-border">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Shield className="h-4 w-4" />
+              <div className="flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Shield className="h-3.5 w-3.5 md:h-4 md:w-4" />
               </div>
-              <p className="text-xs font-semibold">100% Asli</p>
-              <p className="text-[10px] text-muted-foreground">BPOM Terdaftar</p>
+              <p className="text-[10px] md:text-xs font-semibold">100% Asli</p>
+              <p className="text-[9px] md:text-[10px] text-muted-foreground">BPOM Terdaftar</p>
             </div>
             <div className="flex flex-col items-center gap-1">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <MessageCircle className="h-4 w-4" />
+              <div className="flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <MessageCircle className="h-3.5 w-3.5 md:h-4 md:w-4" />
               </div>
-              <p className="text-xs font-semibold">Fast Response</p>
-              <p className="text-[10px] text-muted-foreground">via WhatsApp</p>
+              <p className="text-[10px] md:text-xs font-semibold">Fast Response</p>
+              <p className="text-[9px] md:text-[10px] text-muted-foreground">via WhatsApp</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* ==================== Tabs: Description / Benefit / Usage / Ingredients / Reviews ==================== */}
-      <div className="mt-16 pb-24 md:pb-0">
+      <div className="mt-8 pb-24 md:mt-16 md:pb-0">
         <Tabs defaultValue="description">
-          <TabsList className="w-full justify-start overflow-x-auto h-12">
-            <TabsTrigger value="description" className="text-sm">Deskripsi</TabsTrigger>
-            <TabsTrigger value="benefit" className="text-sm">Manfaat</TabsTrigger>
-            <TabsTrigger value="usage" className="text-sm">Cara Pakai</TabsTrigger>
-            <TabsTrigger value="ingredients" className="text-sm">Kandungan</TabsTrigger>
-            <TabsTrigger value="reviews" className="text-sm">Ulasan ({product.reviews?.length || 0})</TabsTrigger>
+          <TabsList className="w-full justify-start overflow-x-auto h-11 md:h-12">
+            <TabsTrigger value="description" className="text-xs md:text-sm">Deskripsi</TabsTrigger>
+            <TabsTrigger value="benefit" className="text-xs md:text-sm">Manfaat</TabsTrigger>
+            <TabsTrigger value="usage" className="text-xs md:text-sm">Cara Pakai</TabsTrigger>
+            <TabsTrigger value="ingredients" className="text-xs md:text-sm">Kandungan</TabsTrigger>
+            <TabsTrigger value="reviews" className="text-xs md:text-sm">Ulasan ({product.reviews?.length || 0})</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="description" className="mt-6">
-            <Card className="p-7">
-              <p className="whitespace-pre-line leading-relaxed text-foreground/90">{product.description}</p>
+          <TabsContent value="description" className="mt-4 md:mt-6">
+            <Card className="p-4 md:p-7">
+              <p className="whitespace-pre-line text-sm md:text-base leading-relaxed text-foreground/90">{product.description}</p>
             </Card>
           </TabsContent>
 
-          <TabsContent value="benefit" className="mt-6">
-            <Card className="p-7">
-              <p className="whitespace-pre-line leading-relaxed text-foreground/90">{product.benefit}</p>
+          <TabsContent value="benefit" className="mt-4 md:mt-6">
+            <Card className="p-4 md:p-7">
+              <p className="whitespace-pre-line text-sm md:text-base leading-relaxed text-foreground/90">{product.benefit}</p>
             </Card>
           </TabsContent>
 
-          <TabsContent value="usage" className="mt-6">
-            <Card className="p-7">
-              <p className="whitespace-pre-line leading-relaxed text-foreground/90">{product.usage}</p>
+          <TabsContent value="usage" className="mt-4 md:mt-6">
+            <Card className="p-4 md:p-7">
+              <p className="whitespace-pre-line text-sm md:text-base leading-relaxed text-foreground/90">{product.usage}</p>
             </Card>
           </TabsContent>
 
-          <TabsContent value="ingredients" className="mt-6">
+          <TabsContent value="ingredients" className="mt-4 md:mt-6">
             <IngredientSpotlight slug={product.slug} rawIngredients={product.ingredients} />
           </TabsContent>
 
-          <TabsContent value="reviews" className="mt-6">
+          <TabsContent value="reviews" className="mt-4 md:mt-6">
             <ReviewsSection product={product} />
           </TabsContent>
         </Tabs>
@@ -429,14 +476,14 @@ export function ProductDetailView({ slug }: { slug: string }) {
 
       {/* ==================== Related Products ==================== */}
       {related.length > 0 && (
-        <div className="mt-16 pb-24 md:pb-0">
+        <div className="mt-8 pb-24 md:mt-16 md:pb-0">
           <SectionHeader
             eyebrow="Rekomendasi"
             eyebrowIcon={<Sparkles className="h-3 w-3" />}
             title="Produk Terkait"
-            className="mb-8"
+            className="mb-4 md:mb-8"
           />
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 sm:gap-5">
+          <div className="grid grid-cols-2 gap-3 md:gap-4 sm:grid-cols-3 lg:grid-cols-4 sm:gap-5">
             {related.map((p) => (
               <ProductCard key={p.id} product={p} />
             ))}
