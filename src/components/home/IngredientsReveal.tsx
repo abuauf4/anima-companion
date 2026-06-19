@@ -1,29 +1,19 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { motion, useScroll, useTransform, useInView } from 'framer-motion'
-import { FlaskConical, ArrowRight } from 'lucide-react'
+import { useCallback, useRef, useState } from 'react'
+import { motion } from 'framer-motion'
+import { FlaskConical, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useHashRouter } from '@/lib/router'
 import { SectionHeader } from '@/components/common/SectionHeader'
 
 /**
- * Premium Active Ingredients — "Bahan Aktif Pilihan"
+ * Active Ingredients — "Bahan Aktif Pilihan"
  *
- * A stacked-card reveal section showcasing 8 key Anima Companion ingredients.
- *
- * Layout:
- * - Desktop (md+): 2-column asymmetric grid
- *   * LEFT (40%, sticky): section header + active ingredient index (01-08)
- *     + active name + active description — updates as user scrolls
- *   * RIGHT (60%): vertical scroll list of full-width cards (80vh each)
- * - Mobile (<md): single column — section header on top, then the cards
- *   scroll vertically with the same reveal animation
- *
- * Card motion (THE KEY):
- * - Active card (centered in viewport): opacity 1, scale 1, y 0
- * - Card above (exiting top): opacity 0.3, scale 0.95, y -50
- * - Card below (entering bottom): opacity 0.3, scale 0.95, y 50
- * - Subtle parallax: emoji moves slightly slower than card
+ * Horizontal slide carousel with arrow controls (NOT scroll-triggered).
+ * - Desktop: 2 cards visible per view, slide by 2 per click
+ * - Mobile: 1 card per view, slide by 1 per click
+ * - Card hover: subtle lift (y -4) + shadow — no over-the-top animation
+ * - Click card → navigate to product detail
  */
 
 interface Ingredient {
@@ -34,348 +24,249 @@ interface Ingredient {
   color: string
   emoji: string
   product: string
+  slug: string
 }
 
 const INGREDIENTS: Ingredient[] = [
   {
     name: 'Kolostrum',
     subtitle: 'Immune Stimulant',
-    description:
-      'Sumber imunoglobulin alami yang meningkatkan daya tahan tubuh anabul. Awal pertahanan terhadap infeksi virus dan bakteri.',
+    description: 'Sumber imunoglobulin alami yang meningkatkan daya tahan tubuh anabul. Pertahanan terhadap infeksi virus dan bakteri.',
     benefit: 'Imunitas',
     color: 'from-orange-400 to-amber-500',
     emoji: '🛡️',
     product: 'Felcover+',
+    slug: 'felcover-plus-immune-stimulant',
   },
   {
     name: 'Prebiotik',
     subtitle: 'Gut Health Booster',
-    description:
-      'Makanan untuk bakteri baik di usus. Menyeimbangkan mikroflora pencernaan, mengatasi diare, dan meningkatkan penyerapan nutrisi.',
+    description: 'Makanan untuk bakteri baik di usus. Menyeimbangkan mikroflora pencernaan dan meningkatkan penyerapan nutrisi.',
     benefit: 'Pencernaan',
     color: 'from-emerald-400 to-teal-500',
     emoji: '🌱',
     product: 'Felcover+',
+    slug: 'felcover-plus-immune-stimulant',
   },
   {
     name: 'Omega-3 (EPA & DHA)',
     subtitle: 'Wild Fish Oil',
-    description:
-      'Asam lemak esensial dari minyak ikan murni. Membuat bulu lebat mengkilap, menjaga kesehatan jantung, otak, dan mengurangi peradangan.',
+    description: 'Asam lemak esensial dari minyak ikan murni. Membuat bulu lebat mengkilap, jaga kesehatan jantung dan otak.',
     benefit: 'Bulu & Kulit',
     color: 'from-cyan-400 to-blue-500',
     emoji: '🐟',
     product: 'Sioren Fish Oil',
+    slug: 'sioren-fish-oil',
   },
   {
     name: 'Alpha-Casozepine',
     subtitle: 'Stress Relief Protein',
-    description:
-      'Protein susu yang menenangkan sistem saraf tanpa membuat anabul ngantuk. Membantu saat ditinggal, perjalanan, atau kunjungan ke dokter.',
+    description: 'Protein susu yang menenangkan sistem saraf tanpa membuat anabul ngantuk. Bantu saat ditinggal atau perjalanan.',
     benefit: 'Stress Management',
     color: 'from-violet-400 to-purple-500',
     emoji: '💖',
     product: 'Forevet',
+    slug: 'forevet-stress-manajemen',
   },
   {
     name: 'L-Lysine',
     subtitle: 'Immune Amino Acid',
-    description:
-      'Asam amino esensial yang membantu tubuh melawan virus herpes dan flu. Meningkatkan nafsu makan dan mempercepat pemulihan.',
+    description: 'Asam amino esensial untuk melawan virus herpes dan flu. Meningkatkan nafsu makan dan mempercepat pemulihan.',
     benefit: 'Flu Support',
     color: 'from-rose-400 to-pink-500',
     emoji: '🦠',
     product: 'Sioren Flu Support+',
+    slug: 'sioren-flu-support-plus',
   },
   {
     name: 'L-Carnitine',
     subtitle: 'Energy Booster',
-    description:
-      'Mengubah lemak menjadi energi. Meningkatkan stamina, nafsu makan, dan mempercepat pemulihan setelah sakit atau operasi.',
+    description: 'Mengubah lemak menjadi energi. Meningkatkan stamina, nafsu makan, dan mempercepat pemulihan setelah sakit.',
     benefit: 'Recovery',
     color: 'from-yellow-400 to-orange-500',
     emoji: '⚡',
     product: 'Sioren Booster+',
+    slug: 'sioren-booster-plus',
   },
   {
     name: 'Biotin',
     subtitle: 'Skin & Coat Vitamin',
-    description:
-      'Vitamin B7 yang esensial untuk kesehatan kulit dan bulu. Mengatasi bulu rontok, gatal, ketombe, dan membuat bulu lebih lebat.',
+    description: 'Vitamin B7 esensial untuk kesehatan kulit dan bulu. Mengatasi bulu rontok, gatal, dan ketombe.',
     benefit: 'Bulu Sehat',
     color: 'from-fuchsia-400 to-pink-500',
     emoji: '✨',
     product: 'Sioren Skin & Coat',
+    slug: 'sioren-skin-coat',
   },
   {
     name: 'Active Charcoal',
     subtitle: 'Natural Odor Absorber',
-    description:
-      'Arang aktif alami yang menyerap bau ammonia dan kelembaban. Menjaga litterbox tetap segar hingga 24 jam, aman dipakai harian.',
+    description: 'Arang aktif alami yang menyerap bau ammonia dan kelembaban. Jaga litterbox tetap segar hingga 24 jam.',
     benefit: 'Odor Control',
     color: 'from-slate-500 to-zinc-700',
     emoji: '🪨',
     product: 'Sioren Pet Odor X',
+    slug: 'sioren-pet-odor-x',
   },
 ]
 
-/** Map product display name → product slug (for click-to-detail navigation) */
-const PRODUCT_SLUG: Record<string, string> = {
-  'Felcover+': 'felcover-plus-immune-stimulant',
-  'Sioren Fish Oil': 'sioren-fish-oil',
-  Forevet: 'forevet-stress-manajemen',
-  'Sioren Flu Support+': 'sioren-flu-support-plus',
-  'Sioren Booster+': 'sioren-booster-plus',
-  'Sioren Skin & Coat': 'sioren-skin-coat',
-  'Sioren Pet Odor X': 'sioren-pet-odor-x',
-}
-
-/** Single ingredient card — uses scroll progress to drive opacity/scale/y */
-function IngredientCard({
-  ingredient,
-  index,
-  onActive,
-}: {
-  ingredient: Ingredient
-  index: number
-  onActive: (idx: number) => void
-}) {
-  const { navigate } = useHashRouter()
-  const ref = useRef<HTMLButtonElement>(null)
-
-  // Track when this card is the most-visible — triggers sticky panel update.
-  // amount: 0.5 means at least 50% of the card must be visible to be "active".
-  const inView = useInView(ref, { amount: 0.5 })
-
-  useEffect(() => {
-    if (inView) onActive(index)
-  }, [inView, index, onActive])
-
-  // Per-card scroll progress: 0 = card just entered bottom of viewport,
-  // 0.5 = card centered, 1 = card just exited top of viewport.
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ['start end', 'end start'],
-  })
-
-  // Active card is at scrollYProgress ≈ 0.5.
-  // Outside the 0.4–0.6 band, the card fades to 0.3 opacity and scales down.
-  const opacity = useTransform(
-    scrollYProgress,
-    [0, 0.4, 0.5, 0.6, 1],
-    [0.3, 0.3, 1, 0.3, 0.3],
-  )
-  const scale = useTransform(
-    scrollYProgress,
-    [0, 0.4, 0.5, 0.6, 1],
-    [0.95, 0.95, 1, 0.95, 0.95],
-  )
-  const y = useTransform(scrollYProgress, [0, 0.5, 1], [50, 0, -50])
-
-  // Emoji parallax — moves slower than card (half the distance).
-  const emojiY = useTransform(scrollYProgress, [0, 0.5, 1], [20, 0, -20])
-
-  const handleNavigate = () => {
-    const slug = PRODUCT_SLUG[ingredient.product]
-    if (slug) navigate(`/product/${slug}`)
-  }
-
-  return (
-    <motion.button
-      ref={ref}
-      type="button"
-      onClick={handleNavigate}
-      style={{ opacity, scale, y }}
-      aria-label={`Lihat produk ${ingredient.product} — bahan aktif ${ingredient.name}`}
-      className={`group relative flex h-[70vh] w-full flex-col justify-between overflow-hidden rounded-3xl bg-gradient-to-br ${ingredient.color} p-6 text-left text-white shadow-2xl ring-1 ring-white/10 transition-shadow hover:shadow-3xl sm:h-[80vh] sm:p-8`}
-    >
-      {/* Decorative big emoji (top-right, faded) — parallaxes slightly */}
-      <motion.span
-        style={{ y: emojiY }}
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-4 -top-8 select-none text-[180px] leading-none sm:text-[240px]"
-      >
-        <span className="block opacity-15">{ingredient.emoji}</span>
-      </motion.span>
-
-      {/* Soft white radial glow — top-left for depth */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -left-12 -top-12 size-72 rounded-full bg-white/15 blur-3xl"
-      />
-
-      {/* TOP: Subtitle (uppercase tracking) */}
-      <div className="relative z-10">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-[11px] font-bold uppercase tracking-widest backdrop-blur-sm">
-          {ingredient.subtitle}
-        </span>
-      </div>
-
-      {/* MIDDLE/BOTTOM: Name + description + meta row */}
-      <div className="relative z-10 space-y-3">
-        <h3 className="text-3xl font-extrabold leading-[1.05] tracking-tight drop-shadow-sm sm:text-4xl md:text-5xl">
-          {ingredient.name}
-        </h3>
-        <p className="max-w-xl text-sm leading-relaxed text-white/90 sm:text-base">
-          {ingredient.description}
-        </p>
-
-        {/* Meta row: benefit badge + product + CTA arrow */}
-        <div className="flex flex-wrap items-center gap-3 pt-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/25 px-3 py-1.5 text-xs font-bold backdrop-blur-sm">
-            {ingredient.benefit}
-          </span>
-          <span className="text-xs font-medium text-white/80">
-            Dalam: <span className="font-bold text-white">{ingredient.product}</span>
-          </span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-foreground transition-transform duration-300 group-hover:translate-x-1">
-            Lihat Produk <ArrowRight className="size-3" />
-          </span>
-        </div>
-      </div>
-
-      {/* Card index number — small, bottom-right */}
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute bottom-4 right-5 text-xs font-bold tabular-nums text-white/40"
-      >
-        {String(index + 1).padStart(2, '0')} / {String(INGREDIENTS.length).padStart(2, '0')}
-      </span>
-    </motion.button>
-  )
-}
-
-/**
- * Sticky LEFT panel — updates as the active card changes.
- * Shows the active ingredient's index, name, and description so the user
- * always has context for the card currently in view.
- */
-function StickyPanel({
-  activeIdx,
-  isDesktop,
-}: {
-  activeIdx: number
-  isDesktop: boolean
-}) {
-  const active = INGREDIENTS[activeIdx]
-  // Smoothly animate the changing content
-  return (
-    <div className={isDesktop ? 'md:sticky md:top-24 md:flex md:h-[80vh] md:flex-col md:justify-center' : ''}>
-      <motion.div
-        key={activeIdx}
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ type: 'spring', stiffness: 120, damping: 18 }}
-        className="space-y-4"
-      >
-        {/* Big faded index number */}
-        <div className="flex items-baseline gap-3">
-          <span className="text-6xl font-extrabold tabular-nums leading-none gradient-brand-text sm:text-7xl">
-            {String(activeIdx + 1).padStart(2, '0')}
-          </span>
-          <span className="text-lg font-bold text-muted-foreground/60 tabular-nums">
-            / {String(INGREDIENTS.length).padStart(2, '0')}
-          </span>
-        </div>
-
-        {/* Active ingredient name */}
-        <h3 className="text-balance text-2xl font-extrabold leading-[1.05] tracking-tight text-foreground sm:text-3xl">
-          {active.name}
-        </h3>
-
-        {/* Subtitle eyebrow */}
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold uppercase tracking-wider text-primary">
-          <span aria-hidden="true" className="inline-block h-px w-3 bg-primary" />
-          {active.subtitle}
-        </span>
-
-        {/* Description */}
-        <p className="max-w-md text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
-          {active.description}
-        </p>
-
-        {/* Benefit + product row */}
-        <div className="flex flex-wrap items-center gap-2 pt-1">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary">
-            {active.benefit}
-          </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary/10 px-3 py-1.5 text-xs font-bold text-secondary">
-            {active.product}
-          </span>
-        </div>
-
-        {/* Progress dots — 8 dots, active highlighted */}
-        <div className="flex items-center gap-1.5 pt-2" aria-hidden="true">
-          {INGREDIENTS.map((_, i) => (
-            <span
-              key={i}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
-                i === activeIdx ? 'w-6 bg-primary' : 'w-1.5 bg-border'
-              }`}
-            />
-          ))}
-        </div>
-      </motion.div>
-    </div>
-  )
-}
-
 export function IngredientsReveal() {
+  const { navigate } = useHashRouter()
+  const scrollRef = useRef<HTMLDivElement>(null)
   const [activeIdx, setActiveIdx] = useState(0)
 
-  // Stable callback so each card's effect doesn't re-fire when activeIdx changes.
-  const handleActive = useCallback((idx: number) => setActiveIdx(idx), [])
+  const scrollByCards = useCallback((dir: 1 | -1) => {
+    if (!scrollRef.current) return
+    const container = scrollRef.current
+    // Detect desktop (md+) by container width
+    const isDesktop = window.matchMedia('(min-width: 768px)').matches
+    // Desktop: 2 cards per view → scroll by ~50% container width
+    // Mobile: 1 card per view → scroll by ~100% card width
+    const amount = isDesktop
+      ? container.clientWidth * 0.5
+      : container.clientWidth
+    container.scrollBy({ left: dir * amount, behavior: 'smooth' })
+  }, [])
+
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current) return
+    const container = scrollRef.current
+    const isDesktop = window.matchMedia('(min-width: 768px)').matches
+    const cardsVisible = isDesktop ? 2 : 1
+    const cardWidth = container.scrollWidth / INGREDIENTS.length
+    // Active index = which card is leftmost visible
+    const idx = Math.round(container.scrollLeft / cardWidth)
+    setActiveIdx(Math.max(0, Math.min(INGREDIENTS.length - cardsVisible, idx)))
+  }, [])
+
+  const isAtStart = activeIdx === 0
+  const isAtEnd = activeIdx >= INGREDIENTS.length - 2
 
   return (
-    <section className="relative overflow-clip bg-gradient-to-b from-muted/30 to-background py-12 md:py-20">
-      {/* Decorative blurred orbs */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -left-32 top-20 size-80 rounded-full bg-primary/5 blur-3xl"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-32 bottom-20 size-96 rounded-full bg-secondary/5 blur-3xl"
-      />
+    <section className="relative overflow-hidden bg-gradient-to-b from-background via-muted/30 to-background py-10 md:py-14">
+      {/* Decorative subtle blob */}
+      <div className="pointer-events-none absolute -top-20 left-1/4 size-80 rounded-full bg-primary/5 blur-3xl" />
 
       <div className="container-page relative">
-        {/* Section header — full-width on mobile, only on left column on desktop */}
-        <div className="mb-8 md:mb-12">
-          <SectionHeader
-            eyebrow="Diformulasikan dengan Sains"
-            eyebrowIcon={<FlaskConical className="size-3" />}
-            title={
-              <>
-                Bahan Aktif <span className="gradient-brand-text">Pilihan</span>
-              </>
-            }
-            subtitle="Setiap produk Anima Companion diformulasikan dengan bahan aktif premium yang teruji klinis dan direkomendasikan dokter hewan."
-            className="mb-0"
-          />
+        <SectionHeader
+          eyebrow="Diformulasikan dengan Sains"
+          eyebrowIcon={<FlaskConical className="size-3" />}
+          title={<>Bahan Aktif <span className="gradient-brand-text">Pilihan</span></>}
+          subtitle="Setiap produk Anima Companion diformulasikan dengan bahan aktif premium yang teruji klinis dan direkomendasikan dokter hewan."
+          action={
+            <div className="hidden items-center gap-2 sm:flex">
+              {/* Index indicator */}
+              <span className="text-sm font-medium text-muted-foreground">
+                <span className="font-bold text-foreground">{String(activeIdx + 1).padStart(2, '0')}</span>
+                {' / '}
+                {String(INGREDIENTS.length).padStart(2, '0')}
+              </span>
+              {/* Arrow controls */}
+              <button
+                onClick={() => scrollByCards(-1)}
+                disabled={isAtStart}
+                aria-label="Sebelumnya"
+                className="flex size-10 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition-all hover:bg-accent disabled:opacity-40 disabled:hover:bg-card"
+              >
+                <ChevronLeft className="size-5" />
+              </button>
+              <button
+                onClick={() => scrollByCards(1)}
+                disabled={isAtEnd}
+                aria-label="Berikutnya"
+                className="flex size-10 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition-all hover:bg-accent disabled:opacity-40 disabled:hover:bg-card"
+              >
+                <ChevronRight className="size-5" />
+              </button>
+            </div>
+          }
+          className="mb-8"
+        />
+
+        {/* Carousel container */}
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {INGREDIENTS.map((ing, i) => (
+            <motion.button
+              key={ing.name}
+              initial={{ opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: '-50px' }}
+              transition={{ duration: 0.4, delay: Math.min(i, 3) * 0.05 }}
+              onClick={() => navigate(`/product/${ing.slug}`)}
+              whileHover={{ y: -4 }}
+              className={`group relative flex shrink-0 snap-start flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br ${ing.color} p-5 text-left text-white shadow-sm transition-shadow hover:shadow-lg md:p-6 w-[calc(100vw-2.5rem)] md:w-[calc(50%-0.5rem)]`}
+              style={{ minHeight: '340px' }}
+              aria-label={`Lihat produk ${ing.product}`}
+            >
+              {/* Top: emoji + benefit badge */}
+              <div className="flex items-start justify-between">
+                <span className="text-5xl drop-shadow-sm md:text-6xl">{ing.emoji}</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-white/25 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm">
+                  {ing.benefit}
+                </span>
+              </div>
+
+              {/* Bottom: text content */}
+              <div className="mt-6">
+                <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-white/70">
+                  {ing.subtitle}
+                </span>
+                <h3 className="mt-1 text-2xl font-extrabold leading-tight tracking-tight drop-shadow-sm md:text-3xl">
+                  {ing.name}
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-white/90">
+                  {ing.description}
+                </p>
+                <div className="mt-4 flex items-center gap-2 text-xs font-semibold">
+                  <span className="rounded-md bg-white/20 px-2 py-1 backdrop-blur-sm">
+                    {ing.product}
+                  </span>
+                  <span className="inline-flex items-center gap-1 transition-transform group-hover:translate-x-1">
+                    Lihat Produk <ArrowRight className="size-3" />
+                  </span>
+                </div>
+              </div>
+
+              {/* Decorative big emoji background (faded) */}
+              <span
+                className="pointer-events-none absolute -bottom-6 -right-4 select-none text-[140px] opacity-15 transition-transform duration-300 group-hover:scale-110"
+                style={{ lineHeight: 1 }}
+                aria-hidden="true"
+              >
+                {ing.emoji}
+              </span>
+            </motion.button>
+          ))}
         </div>
 
-        {/* 2-column layout: sticky panel LEFT (40%) + scrolling cards RIGHT (60%) */}
-        <div className="grid gap-8 md:grid-cols-[40%_60%] md:gap-10">
-          {/* LEFT: Sticky panel (desktop only — hidden on mobile to save space) */}
-          <div className="hidden md:block">
-            <StickyPanel activeIdx={activeIdx} isDesktop />
-          </div>
-
-          {/* RIGHT: Scrolling ingredient cards */}
-          <div className="space-y-6 md:space-y-8">
-            {/* Mobile-only compact active indicator (above the cards) */}
-            <div className="md:hidden">
-              <StickyPanel activeIdx={activeIdx} isDesktop={false} />
-            </div>
-
-            {INGREDIENTS.map((ingredient, idx) => (
-              <IngredientCard
-                key={ingredient.name}
-                ingredient={ingredient}
-                index={idx}
-                onActive={handleActive}
-              />
-            ))}
+        {/* Mobile arrow controls */}
+        <div className="mt-4 flex items-center justify-between sm:hidden">
+          <span className="text-sm font-medium text-muted-foreground">
+            <span className="font-bold text-foreground">{String(activeIdx + 1).padStart(2, '0')}</span>
+            {' / '}
+            {String(INGREDIENTS.length).padStart(2, '0')}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => scrollByCards(-1)}
+              disabled={isAtStart}
+              aria-label="Sebelumnya"
+              className="flex size-10 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition-all hover:bg-accent disabled:opacity-40 disabled:hover:bg-card"
+            >
+              <ChevronLeft className="size-5" />
+            </button>
+            <button
+              onClick={() => scrollByCards(1)}
+              disabled={activeIdx >= INGREDIENTS.length - 1}
+              aria-label="Berikutnya"
+              className="flex size-10 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition-all hover:bg-accent disabled:opacity-40 disabled:hover:bg-card"
+            >
+              <ChevronRight className="size-5" />
+            </button>
           </div>
         </div>
       </div>
