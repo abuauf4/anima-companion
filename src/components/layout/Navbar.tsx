@@ -16,7 +16,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import {
   ShoppingCart, Menu, Search, User, X,
-  ChevronDown, PawPrint, Shield, Store,
+  ChevronDown, PawPrint, Shield,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import {
@@ -48,20 +48,12 @@ const BENEFITS_MENU = [
   { name: 'Harian', slug: 'harian', emoji: '☀️' },
 ]
 
-const BRANDS_MENU = [
-  { name: 'Zesty Paws', slug: 'zesty-paws' },
-  { name: 'Native Pet', slug: 'native-pet' },
-  { name: 'Vetri Science', slug: 'vetri-science' },
-  { name: 'Pet Honesty', slug: 'pet-honesty' },
-  { name: 'Anima Companion', slug: 'anima-companion' },
-]
-
 export function Navbar() {
   const { route, navigate } = useHashRouter()
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchValue, setSearchValue] = useState('')
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [mobileSection, setMobileSection] = useState<'main' | 'pets' | 'benefits' | 'brands'>('main')
+  const [mobileSection, setMobileSection] = useState<'main' | 'pets' | 'benefits'>('main')
   const { user, logout } = useAuth()
   const items = useCartStore((s) => s.items)
   const cartCount = items.reduce((sum, i) => sum + i.quantity, 0)
@@ -123,13 +115,6 @@ export function Navbar() {
                     className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium hover:bg-accent"
                   >
                     <span className="flex items-center gap-2"><Shield className="size-4 text-primary" /> Belanja by Manfaat</span>
-                    <ChevronDown className="size-4 -rotate-90" />
-                  </button>
-                  <button
-                    onClick={() => setMobileSection('brands')}
-                    className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium hover:bg-accent"
-                  >
-                    <span className="flex items-center gap-2"><Store className="size-4 text-primary" /> Belanja by Brand</span>
                     <ChevronDown className="size-4 -rotate-90" />
                   </button>
                   <button
@@ -217,14 +202,6 @@ export function Navbar() {
                   onNavigate={(slug) => { goShop('problem', slug); setMobileOpen(false) }}
                 />
               )}
-              {mobileSection === 'brands' && (
-                <MobileSubmenu
-                  title="Belanja by Brand"
-                  onBack={() => setMobileSection('main')}
-                  items={BRANDS_MENU}
-                  onNavigate={(slug) => { goShop('brand', slug); setMobileOpen(false) }}
-                />
-              )}
             </nav>
           </SheetContent>
         </Sheet>
@@ -237,7 +214,7 @@ export function Navbar() {
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Cari vitamin, suplemen, brand..."
+              placeholder="Cari suplemen, vitamin, perawatan..."
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
               className="pl-9 bg-card"
@@ -264,10 +241,10 @@ export function Navbar() {
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="start"
-              className="w-[640px] p-4"
+              className="w-[480px] p-4"
               sideOffset={8}
             >
-              <div className="grid grid-cols-3 gap-6">
+              <div className="grid grid-cols-2 gap-6">
                 {/* By Pet */}
                 <div>
                   <div className="mb-3 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-primary">
@@ -301,27 +278,6 @@ export function Navbar() {
                       >
                         <span className="text-base">{p.emoji}</span>
                         <span className="text-foreground/80">{p.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* By Brand */}
-                <div>
-                  <div className="mb-3 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-primary">
-                    <Store className="size-3.5" /> By Brand
-                  </div>
-                  <div className="space-y-1">
-                    {BRANDS_MENU.map((b) => (
-                      <button
-                        key={b.slug}
-                        onClick={() => goShop('brand', b.slug)}
-                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
-                      >
-                        <span className="flex size-5 items-center justify-center rounded text-[10px] font-bold text-white gradient-brand">
-                          {b.name.charAt(0)}
-                        </span>
-                        <span className="text-foreground/80">{b.name}</span>
                       </button>
                     ))}
                   </div>

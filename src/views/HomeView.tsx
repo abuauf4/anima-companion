@@ -10,11 +10,11 @@ import { Reveal, Stagger, StaggerItem } from '@/components/common/Reveal'
 import {
   Shield, Utensils, Sparkles, Bone, Activity, Eye, Heart, Sun,
   ArrowRight, MessageCircle, Star, ChevronRight, ChevronLeft,
-  Truck, Clock, PawPrint, Package, BadgeCheck,
-  Repeat, Mail, Gift, ShoppingCart,
+  PawPrint, Package,
+  Mail, Gift, ShoppingCart,
 } from 'lucide-react'
 import {
-  Product, Problem, Banner, Testimonial, Seller, PetType,
+  Product, Problem, Banner, Testimonial, PetType,
 } from '@/hooks/use-fetch'
 import { VetSection } from '@/components/home/VetSection'
 import { motion } from 'framer-motion'
@@ -33,7 +33,7 @@ const PROBLEM_ICONS: Record<string, React.ComponentType<{ className?: string }>>
   harian: Sun,
 }
 
-// Bundles — marketplace-style "Paket Hemat" (saved-curated, not actual product)
+// Bundles — "Paket Hemat" curated bundles based on product problems
 const BUNDLES: { problemSlug: string; title: string; tag: string; emoji: string; gradient: string }[] = [
   { problemSlug: 'nafsu-makan', title: 'Paket Nafsu Makan', tag: 'HEMAT 25%', emoji: '🍗', gradient: 'from-orange-400 to-rose-400' },
   { problemSlug: 'imunitas', title: 'Paket Imunitas', tag: 'HEMAT 30%', emoji: '🛡️', gradient: 'from-emerald-400 to-teal-500' },
@@ -48,10 +48,8 @@ export function HomeView() {
   const [banners, setBanners] = useState<Banner[]>([])
   const [bestSellers, setBestSellers] = useState<Product[]>([])
   const [newProducts, setNewProducts] = useState<Product[]>([])
-  const [subscribeProducts, setSubscribeProducts] = useState<Product[]>([])
   const [problems, setProblems] = useState<Problem[]>([])
   const [testimonials, setTestimonials] = useState<Testimonial[]>([])
-  const [sellers, setSellers] = useState<Seller[]>([])
   const [petTypes, setPetTypes] = useState<PetType[]>([])
 
   const [emailValue, setEmailValue] = useState('')
@@ -63,10 +61,8 @@ export function HomeView() {
         setBanners(data.banners || [])
         setBestSellers(data.bestSellers || [])
         setNewProducts(data.newProducts || [])
-        setSubscribeProducts(data.subscribeProducts || [])
         setProblems(data.problems || [])
         setTestimonials(data.testimonials || [])
-        setSellers(data.sellers || [])
         setPetTypes(data.petTypes || [])
       })
       .catch((err) => console.error('Home fetch failed:', err))
@@ -153,19 +149,24 @@ export function HomeView() {
             className="space-y-4 text-foreground"
           >
             <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
-              <PawPrint className="size-3" /> Marketplace Suplemen Hewan #1
+              <PawPrint className="size-3" /> Suplemen Rekomendasi Dokter Hewan
             </span>
 
             <h1 className="text-balance text-3xl font-extrabold leading-[1.05] tracking-tight sm:text-4xl lg:text-5xl">
-              Sehatkan Hewan,<br />
-              <span className="gradient-brand-text">Bahagiakan Hati</span>
+              Elevating<br />
+              <span className="gradient-brand-text">Animal Health</span>
             </h1>
 
             <p className="max-w-md text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
-              Marketplace multi-brand untuk suplemen & vitamin hewan peliharaan.
-              <span className="font-semibold text-foreground"> 15+ brand premium</span>, BPOM terdaftar,
-              konsultasi dokter hewan gratis.
+              Suplemen & vitamin hewan peliharaan premium dari <span className="font-semibold text-foreground">Anima Companion</span> — PT Sutan Vet Medika. Diformulasikan bersama dokter hewan, tersedia di <span className="font-semibold text-foreground">515+ klinik</span> seluruh Indonesia.
             </p>
+
+            {/* Hashtag pill */}
+            <div className="pt-1">
+              <span className="inline-flex items-center gap-1 rounded-full bg-secondary/10 px-3 py-1 text-xs font-semibold text-secondary">
+                <Heart className="size-3" /> #PawrentHebatAnabulSehat
+              </span>
+            </div>
 
             {/* CTAs */}
             <div className="flex flex-wrap items-center gap-2.5 pt-1">
@@ -190,7 +191,7 @@ export function HomeView() {
             <div className="grid grid-cols-2 gap-3 pt-4 sm:grid-cols-4">
               {[
                 { v: '50rb+', l: 'Pelanggan' },
-                { v: '15+', l: 'Brand Premium' },
+                { v: '515+', l: 'Klinik Resmi' },
                 { v: '4.9★', l: 'Rating' },
                 { v: '24/7', l: 'Konsul Vet' },
               ].map((s) => (
@@ -212,7 +213,7 @@ export function HomeView() {
             <div className="relative h-full w-full overflow-hidden rounded-3xl shadow-2xl ring-4 ring-white/60">
               <OptImage
                 src="/hero-pets.webp"
-                alt="Anima Companion — healthy pets marketplace"
+                alt="Anima Companion — Elevating Animal Health"
                 fill
                 priority
                 sizes="(max-width: 768px) 100vw, 50vw"
@@ -351,84 +352,6 @@ export function HomeView() {
         )}
       </section>
 
-      {/* ==================== SUBSCRIBE & SAVE BANNER ==================== */}
-      <section className="container-page py-6 md:py-10">
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 p-6 text-white shadow-xl sm:p-10">
-          {/* Decorative orbs */}
-          <div className="pointer-events-none absolute -right-12 -top-12 size-64 rounded-full bg-white/10 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-12 -left-12 size-64 rounded-full bg-amber-300/20 blur-3xl" />
-
-          <div className="relative grid items-center gap-6 md:grid-cols-2">
-            <div className="space-y-3">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-[11px] font-bold uppercase tracking-wider backdrop-blur-sm">
-                <Repeat className="size-3" /> Subscribe & Save
-              </span>
-              <h2 className="text-balance text-2xl font-extrabold leading-tight sm:text-3xl">
-                Hemat 15% + Gratis Ongkir Setiap Pesanan
-              </h2>
-              <p className="max-w-md text-sm text-white/90 sm:text-base">
-                Langganan berkala — produk dikirim otomatis tiap bulan. Bisa pause, skip, atau
-                cancel kapan saja. Tanpa kontrak.
-              </p>
-              <div className="flex flex-wrap gap-3 pt-2">
-                <Button
-                  onClick={() => navigate('/shop?subscribe=1')}
-                  className="bg-white text-emerald-700 hover:bg-white/90"
-                  size="lg"
-                >
-                  Lihat Produk Subscribe
-                </Button>
-                <Button
-                  onClick={() => navigate('/kontak')}
-                  variant="outline"
-                  className="border-white/40 bg-transparent text-white hover:bg-white/10"
-                  size="lg"
-                >
-                  Pelajari Lebih Lanjut
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { icon: Repeat, t: 'Hemat 15%', s: 'Setiap pesanan berulang' },
-                { icon: Truck, t: 'Gratis Ongkir', s: 'Untuk subscriber aktif' },
-                { icon: Clock, t: 'Flexible', s: 'Pause / cancel kapan saja' },
-                { icon: Gift, t: 'Bonus Voucher', s: 'Reward tiap 3 bulan' },
-              ].map((b) => {
-                const Icon = b.icon
-                return (
-                  <div key={b.t} className="rounded-2xl bg-white/15 p-4 backdrop-blur-sm">
-                    <Icon className="size-5 text-amber-200" />
-                    <p className="mt-2 text-sm font-bold">{b.t}</p>
-                    <p className="text-[11px] text-white/80">{b.s}</p>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ==================== SUBSCRIBE PRODUCTS ==================== */}
-      {subscribeProducts.length > 0 && (
-        <section className="container-page py-10 md:py-14">
-          <SectionHeader
-            eyebrow="Subscribe & Save Eligible"
-            eyebrowIcon={<Repeat className="size-3 text-emerald-500" />}
-            title={<>Produk <span className="gradient-brand-text">Subscribe</span></>}
-            subtitle="Produk-produk yang tersedia untuk program Subscribe & Save hemat 15%."
-            action={
-              <Button variant="outline" size="sm" onClick={() => navigate('/shop?subscribe=1')} className="gap-1.5">
-                Lihat Semua <ArrowRight className="size-4" />
-              </Button>
-            }
-            className="mb-8"
-          />
-          <ProductScrollRow products={subscribeProducts.slice(0, 4)} />
-        </section>
-      )}
-
       {/* ==================== SHOP BY BENEFIT (PROBLEM) ==================== */}
       <section className="bg-muted/30 py-10 md:py-14">
         <div className="container-page">
@@ -480,56 +403,6 @@ export function HomeView() {
         </div>
       </section>
 
-      {/* ==================== FEATURED BRANDS ==================== */}
-      <section className="container-page py-10 md:py-14">
-        <SectionHeader
-          eyebrow="Brand Pilihan"
-          eyebrowIcon={<BadgeCheck className="size-3 text-sky-500" />}
-          title={<>Brand <span className="gradient-brand-text">Premium</span> Kami</>}
-          subtitle="Brand-brand terkurasi dengan kualitas terjamin dan BPOM terdaftar."
-          className="mb-8"
-        />
-
-        <Stagger className="flex gap-3 overflow-x-auto pb-4 [scrollbar-width:thin]">
-          {sellers.map((seller) => (
-            <StaggerItem key={seller.id}>
-              <button
-                onClick={() => navigate(`/shop?brand=${seller.slug}`)}
-                className="group flex w-56 shrink-0 flex-col gap-3 rounded-2xl border border-border/60 bg-card p-4 text-left transition-all hover:shadow-md hover:border-border"
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className="flex size-12 shrink-0 items-center justify-center rounded-xl text-lg font-bold text-white shadow-md"
-                    style={{ background: `linear-gradient(135deg, ${sellerColor(seller.slug)}, ${sellerColor(seller.slug, true)})` }}
-                  >
-                    {seller.name.charAt(0)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1">
-                      <h3 className="truncate text-sm font-bold text-foreground">{seller.name}</h3>
-                      {seller.isVerified && (
-                        <BadgeCheck className="size-4 shrink-0 text-sky-500" />
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                      <Star className="size-3 fill-amber-400 text-amber-400" />
-                      <span className="font-medium text-foreground">{seller.rating.toFixed(1)}</span>
-                      <span>· {seller._count?.products || 0} produk</span>
-                    </div>
-                  </div>
-                </div>
-                {seller.tagline && (
-                  <p className="line-clamp-2 text-[11px] text-muted-foreground">{seller.tagline}</p>
-                )}
-                <span className="mt-auto inline-flex items-center gap-1 text-xs font-semibold text-primary">
-                  Jelajahi Produk <ArrowRight className="size-3 transition-transform group-hover:translate-x-1" />
-                </span>
-              </button>
-            </StaggerItem>
-          ))}
-        </Stagger>
-      </section>
-
       {/* ==================== NEW ARRIVALS ==================== */}
       <section className="bg-muted/30 py-10 md:py-14">
         <div className="container-page">
@@ -537,7 +410,7 @@ export function HomeView() {
             eyebrow="Produk Baru"
             eyebrowIcon={<Sparkles className="size-3 text-violet-500" />}
             title={<>New <span className="gradient-brand-text">Arrivals</span></>}
-            subtitle="Produk terbaru yang baru saja masuk di marketplace kami."
+            subtitle="Produk terbaru dari Anima Companion yang baru saja diluncurkan."
             action={
               <Button variant="outline" size="sm" onClick={() => navigate('/shop?new=1')} className="gap-1.5">
                 Lihat Semua <ArrowRight className="size-4" />
@@ -658,7 +531,7 @@ export function HomeView() {
           <div className="relative mx-auto max-w-xl space-y-3">
             <Gift className="mx-auto size-10 text-amber-200" />
             <h2 className="text-balance text-2xl font-extrabold sm:text-3xl">
-              Daftar Newsletter & Dapat Rp 25.000
+              Daftar & Dapat Voucher Rp 25.000
             </h2>
             <p className="text-sm text-white/90 sm:text-base">
               Berlangganan newsletter kami untuk info promo, tips kesehatan hewan, dan voucher
@@ -733,16 +606,4 @@ function ProductScrollRow({ products }: { products: Product[] }) {
       </div>
     </div>
   )
-}
-
-function sellerColor(slug: string, alt: boolean = false): string {
-  const palette: Record<string, [string, string]> = {
-    'zesty-paws': ['#F97316', '#FB923C'],
-    'native-pet': ['#22C55E', '#10B981'],
-    'vetri-science': ['#0EA5E9', '#06B6D4'],
-    'pet-honesty': ['#EF4444', '#F43F5E'],
-    'anima-companion': ['#7C3AED', '#A855F7'],
-  }
-  const pair = palette[slug] || ['#F97316', '#7C3AED']
-  return alt ? pair[1] : pair[0]
 }

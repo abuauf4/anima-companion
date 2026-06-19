@@ -1,0 +1,995 @@
+     1→     1→import { db } from '../src/lib/db'
+     2→     2→import bcrypt from 'bcryptjs'
+     3→     3→
+     4→     4→async function main() {
+     5→     5→  console.log('🌱 Seeding Anima Companion — Zesty Paws Marketplace Edition...')
+     6→     6→
+     7→     7→  // ==================== CLEAN UP (correct FK order) ====================
+     8→     8→  await db.petProfile.deleteMany()   // FK to PetType + User
+     9→     9→  await db.fAQ.deleteMany()
+    10→    10→  await db.testimonial.deleteMany()
+    11→    11→  await db.banner.deleteMany()
+    12→    12→  await db.orderItem.deleteMany()
+    13→    13→  await db.order.deleteMany()
+    14→    14→  await db.cartItem.deleteMany()
+    15→    15→  await db.cart.deleteMany()
+    16→    16→  await db.wishlist.deleteMany()
+    17→    17→  await db.review.deleteMany()
+    18→    18→  await db.productPetType.deleteMany()
+    19→    19→  await db.productProblem.deleteMany()
+    20→    20→  await db.productImage.deleteMany()
+    21→    21→  await db.product.deleteMany()      // FK to Seller (nullable, OK)
+    22→    22→  await db.seller.deleteMany()
+    23→    23→  await db.category.deleteMany()
+    24→    24→  await db.petType.deleteMany()
+    25→    25→  await db.problem.deleteMany()
+    26→    26→  await db.voucher.deleteMany()
+    27→    27→  await db.user.deleteMany()
+    28→    28→
+    29→    29→  // ==================== ADMIN USER ====================
+    30→    30→  const adminPassword = await bcrypt.hash('admin123', 10)
+    31→    31→  const admin = await db.user.create({
+    32→    32→    data: {
+    33→    33→      email: 'admin@anima.id',
+    34→    34→      password: adminPassword,
+    35→    35→      name: 'Admin Anima',
+    36→    36→      phone: '081234567890',
+    37→    37→      role: 'ADMIN',
+    38→    38→    },
+    39→    39→  })
+    40→    40→  console.log('✅ Admin user created:', admin.email)
+    41→    41→
+    42→    42→  // ==================== DEMO CUSTOMER ====================
+    43→    43→  const customerPassword = await bcrypt.hash('customer123', 10)
+    44→    44→  const customer = await db.user.create({
+    45→    45→    data: {
+    46→    46→      email: 'budi@example.com',
+    47→    47→      password: customerPassword,
+    48→    48→      name: 'Budi Santoso',
+    49→    49→      phone: '081298765432',
+    50→    50→      role: 'CUSTOMER',
+    51→    51→    },
+    52→    52→  })
+    53→    53→  console.log('✅ Demo customer created:', customer.email)
+    54→    54→
+    55→    55→  // ==================== CATEGORIES ====================
+    56→    56→  const categories = await db.$transaction([
+    57→    57→    db.category.create({ data: { name: 'Vitamin', slug: 'vitamin', icon: 'pill' } }),
+    58→    58→    db.category.create({ data: { name: 'Suplemen', slug: 'suplemen', icon: 'flask' } }),
+    59→    59→    db.category.create({ data: { name: 'Perawatan', slug: 'perawatan', icon: 'heart' } }),
+    60→    60→    db.category.create({ data: { name: 'Grooming', slug: 'grooming', icon: 'sparkles' } }),
+    61→    61→  ])
+    62→    62→  console.log('✅ Categories created:', categories.length)
+    63→    63→
+    64→    64→  // ==================== PET TYPES ====================
+    65→    65→  const petTypes = await db.$transaction([
+    66→    66→    db.petType.create({ data: { name: 'Kucing', slug: 'kucing', icon: 'cat' } }),
+    67→    67→    db.petType.create({ data: { name: 'Anjing', slug: 'anjing', icon: 'dog' } }),
+    68→    68→    db.petType.create({ data: { name: 'Burung', slug: 'burung', icon: 'bird' } }),
+    69→    69→    db.petType.create({ data: { name: 'Ikan', slug: 'ikan', icon: 'fish' } }),
+    70→    70→    db.petType.create({ data: { name: 'Hewan Kecil', slug: 'hewan-kecil', icon: 'rabbit' } }),
+    71→    71→  ])
+    72→    72→  console.log('✅ Pet types created:', petTypes.length)
+    73→    73→
+    74→    74→  // ==================== PROBLEMS (Shop By Problem) ====================
+    75→    75→  const problems = await db.$transaction([
+    76→    76→    db.problem.create({
+    77→    77→      data: {
+    78→    78→        name: 'Imunitas',
+    79→    79→        slug: 'imunitas',
+    80→    80→        description: 'Tingkatkan daya tahan tubuh hewan peliharaan agar tidak mudah sakit.',
+    81→    81→        icon: 'shield',
+    82→    82→        color: '#3B82F6',
+    83→    83→      },
+    84→    84→    }),
+    85→    85→    db.problem.create({
+    86→    86→      data: {
+    87→    87→        name: 'Nafsu Makan',
+    88→    88→        slug: 'nafsu-makan',
+    89→    89→        description: 'Bantu hewan kembali lahap makan dan nutrisi tercukupi.',
+    90→    90→        icon: 'utensils',
+    91→    91→        color: '#EF4444',
+    92→    92→      },
+    93→    93→    }),
+    94→    94→    db.problem.create({
+    95→    95→      data: {
+    96→    96→        name: 'Bulu & Kulit',
+    97→    97→        slug: 'bulu-dan-kulit',
+    98→    98→        description: 'Bulu sehat, mengkilap, dan kulit bebas masalah.',
+    99→    99→        icon: 'sparkles',
+   100→   100→        color: '#EC4899',
+   101→   101→      },
+   102→   102→    }),
+   103→   103→    db.problem.create({
+   104→   104→      data: {
+   105→   105→        name: 'Tulang & Sendi',
+   106→   106→        slug: 'tulang-dan-sendi',
+   107→   107→        description: 'Jaga mobilitas dan kesehatan sendi hewan peliharaan.',
+   108→   108→        icon: 'bone',
+   109→   109→        color: '#F59E0B',
+   110→   110→      },
+   111→   111→    }),
+   112→   112→    db.problem.create({
+   113→   113→      data: {
+   114→   114→        name: 'Pencernaan',
+   115→   115→        slug: 'pencernaan',
+   116→   116→        description: 'Sistem pencernaan sehat, penyerapan nutrisi optimal.',
+   117→   117→        icon: 'activity',
+   118→   118→        color: '#22C55E',
+   119→   119→      },
+   120→   120→    }),
+   121→   121→    db.problem.create({
+   122→   122→      data: {
+   123→   123→        name: 'Mata',
+   124→   124→        slug: 'mata',
+   125→   125→        description: 'Jaga kesehatan mata dan ketajaman penglihatan.',
+   126→   126→        icon: 'eye',
+   127→   127→        color: '#7C3AED',
+   128→   128→      },
+   129→   129→    }),
+   130→   130→    db.problem.create({
+   131→   131→      data: {
+   132→   132→        name: 'Recovery',
+   133→   133→        slug: 'recovery',
+   134→   134→        description: 'Membantu pemulihan setelah sakit atau operasi.',
+   135→   135→        icon: 'heart',
+   136→   136→        color: '#F43F5E',
+   137→   137→      },
+   138→   138→    }),
+   139→   139→    db.problem.create({
+   140→   140→      data: {
+   141→   141→        name: 'Harian',
+   142→   142→        slug: 'harian',
+   143→   143→        description: 'Multivitamin harian untuk menjaga kesehatan optimal.',
+   144→   144→        icon: 'sun',
+   145→   145→        color: '#F97316',
+   146→   146→      },
+   147→   147→    }),
+   148→   148→  ])
+   149→   149→  console.log('✅ Problems created:', problems.length)
+   150→   150→
+   151→   151→  // ==================== SELLERS / BRANDS (Marketplace) ====================
+   152→   152→  const sellers = await db.$transaction([
+   153→   153→    db.seller.create({
+   154→   154→      data: {
+   155→   155→        name: 'Zesty Paws ID',
+   156→   156→        slug: 'zesty-paws',
+   157→   157→        tagline: 'Premium US-style pet supplements',
+   158→   158→        description: 'Zesty Paws menghadirkan suplemen premium berkualitas tinggi untuk kucing dan anjing. Formula dengan bahan alami terbaik, dibuat di USA dengan standar GMP.',
+   159→   159→        location: 'Jakarta, Indonesia (Distributor Resmi)',
+   160→   160→        rating: 4.9,
+   161→   161→        totalSales: 1250,
+   162→   162→        isActive: true,
+   163→   163→        isVerified: true,
+   164→   164→      },
+   165→   165→    }),
+   166→   166→    db.seller.create({
+   167→   167→      data: {
+   168→   168→        name: 'Native Pet',
+   169→   169→        slug: 'native-pet',
+   170→   170→        tagline: 'Natural & organic supplements',
+   171→   171→        description: 'Native Pet fokus pada suplemen alami dengan bahan organik. Tanpa pengawet, tanpa pewarna buatan, aman untuk hewan peliharaan sensitif.',
+   172→   172→        location: 'Surabaya, Indonesia',
+   173→   173→        rating: 4.8,
+   174→   174→        totalSales: 890,
+   175→   175→        isActive: true,
+   176→   176→        isVerified: true,
+   177→   177→      },
+   178→   178→    }),
+   179→   179→    db.seller.create({
+   180→   180→      data: {
+   181→   181→        name: 'Vetri Science',
+   182→   182→        slug: 'vetri-science',
+   183→   183→        tagline: 'Vet-formulated supplements',
+   184→   184→        description: 'Vetri Science Laboratories — formula yang dikembangkan oleh dokter hewan bersertifikat. Produk dengan kualitas farmasi untuk hasil klinis nyata.',
+   185→   185→        location: 'Bandung, Indonesia',
+   186→   186→        rating: 4.9,
+   187→   187→        totalSales: 640,
+   188→   188→        isActive: true,
+   189→   189→        isVerified: true,
+   190→   190→      },
+   191→   191→    }),
+   192→   192→    db.seller.create({
+   193→   193→      data: {
+   194→   194→        name: 'Pet Honesty',
+   195→   195→        slug: 'pet-honesty',
+   196→   196→        tagline: 'Health-focused supplements',
+   197→   197→        description: 'Pet Honesty dibuat dengan bahan premium dan transparansi penuh. Setiap produk diuji pihak ketiga untuk memastikan kualitas dan kemurnian.',
+   198→   198→        location: 'Jakarta, Indonesia',
+   199→   199→        rating: 4.7,
+   200→   200→        totalSales: 720,
+   201→   201→        isActive: true,
+   202→   202→        isVerified: false,
+   203→   203→      },
+   204→   204→    }),
+   205→   205→    db.seller.create({
+   206→   206→      data: {
+   207→   207→        name: 'Anima Companion',
+   208→   208→        slug: 'anima-companion',
+   209→   209→        tagline: 'Local Indonesian brand',
+   210→   210→        description: 'Brand lokal Anima Companion — riset IPB & BRIN. Formula khusus untuk iklim dan pola makan hewan peliharaan di Indonesia.',
+   211→   211→        location: 'Bogor, Indonesia',
+   212→   212→        rating: 4.8,
+   213→   213→        totalSales: 1580,
+   214→   214→        isActive: true,
+   215→   215→        isVerified: true,
+   216→   216→      },
+   217→   217→    }),
+   218→   218→  ])
+   219→   219→  console.log('✅ Sellers/Brands created:', sellers.length)
+   220→   220→
+   221→   221→  const sellerBySlug = (slug: string) => sellers.find((s) => s.slug === slug)!
+   222→   222→
+   223→   223→  // ==================== PRODUCTS (15 marketplace products) ====================
+   224→   224→  const img = (label: string, color: string, idx: number) =>
+   225→   225→    `https://placehold.co/600x600/${color}/ffffff?text=${encodeURIComponent(label + ' ' + (idx + 1))}`
+   226→   226→
+   227→   227→  // Helper: subscribe price = 15% off (rounded to nearest 1000)
+   228→   228→  const sub = (price: number) => Math.round(price * 0.85 / 1000) * 1000
+   229→   229→
+   230→   230→  interface ProductSeed {
+   231→   231→    name: string
+   232→   232→    slug: string
+   233→   233→    sku: string
+   234→   234→    brand: string
+   235→   235→    sellerSlug: string
+   236→   236→    price: number
+   237→   237→    salePrice: number | null
+   238→   238→    subscribePrice: number | null
+   239→   239→    isSubscribeEligible: boolean
+   240→   240→    stock: number
+   241→   241→    weight: string
+   242→   242→    description: string
+   243→   243→    benefit: string
+   244→   244→    usage: string
+   245→   245→    ingredients: string
+   246→   246→    bpomNumber: string
+   247→   247→    isBestSeller: boolean
+   248→   248→    isNew: boolean
+   249→   249→    rating: number
+   250→   250→    reviewCount: number
+   251→   251→    categorySlug: string
+   252→   252→    problemSlugs: string[]
+   253→   253→    petTypeSlugs: string[]
+   254→   254→    color: string
+   255→   255→  }
+   256→   256→
+   257→   257→  const productsData: ProductSeed[] = [
+   258→   258→    // ============ ZESTY PAWS (7 products) ============
+   259→   259→    {
+   260→   260→      name: 'Zesty Paws Probiotic Bites for Dogs',
+   261→   261→      slug: 'zesty-paws-probiotic-bites-dogs',
+   262→   262→      sku: 'ZP-PBD-001',
+   263→   263→      brand: 'Zesty Paws',
+   264→   264→      sellerSlug: 'zesty-paws',
+   265→   265→      price: 145000,
+   266→   266→      salePrice: 125000,
+   267→   267→      subscribePrice: sub(125000),
+   268→   268→      isSubscribeEligible: true,
+   269→   269→      stock: 48,
+   270→   270→      weight: '90 chewable bites',
+   271→   271→      description:
+   272→   272→        'Probiotic Bites for Dogs dari Zesty Paws — suplemen probiotik premium dengan 6 strain bakteri baik dan prebiotik untuk kesehatan pencernaan anjing. Membantu mengatasi diare, kembung, dan meningkatkan penyerapan nutrisi.',
+   273→   273→      benefit:
+   274→   274→        'Menyeimbangkan mikroflora usus, mengatasi diare dan masalah pencernaan, memperkuat imunitas, dan meningkatkan penyerapan nutrisi. Anjing lebih sehat dan aktif.',
+   275→   275→      usage:
+   276→   276→        'Anjing <11kg: 1 bite sehari.\nAnjing 11-23kg: 2 bites sehari.\nAnjing >23kg: 3 bites sehari.\nDiberikan sebagai camilan atau dicampur makanan.',
+   277→   277→      ingredients:
+   278→   278→        'Probiotic Blend 6B CFU (Lactobacillus acidophilus, L. rhamnosus, Bifidobacterium animalis), Prebiotic FOS 200mg, Pumpkin 50mg, Digestive Enzymes 25mg.',
+   279→   279→      bpomNumber: 'BPOM TR 211234567001',
+   280→   280→      isBestSeller: true,
+   281→   281→      isNew: false,
+   282→   282→      rating: 4.9,
+   283→   283→      reviewCount: 42,
+   284→   284→      categorySlug: 'suplemen',
+   285→   285→      problemSlugs: ['pencernaan', 'imunitas'],
+   286→   286→      petTypeSlugs: ['anjing'],
+   287→   287→      color: 'F97316',
+   288→   288→    },
+   289→   289→    {
+   290→   290→      name: 'Zesty Paws 8-in-1 Multivitamin Bites for Dogs',
+   291→   291→      slug: 'zesty-paws-8in1-multivitamin-dogs',
+   292→   292→      sku: 'ZP-MV8-002',
+   293→   293→      brand: 'Zesty Paws',
+   294→   294→      sellerSlug: 'zesty-paws',
+   295→   295→      price: 175000,
+   296→   296→      salePrice: null,
+   297→   297→      subscribePrice: sub(175000),
+   298→   298→      isSubscribeEligible: true,
+   299→   299→      stock: 32,
+   300→   300→      weight: '90 chewable bites',
+   301→   301→      description:
+   302→   302→        'Multivitamin 8-in-1 untuk anjing — satu produk untuk 8 manfaat: imunitas, bulu, sendi, pencernaan, jantung, hati, mata, dan energi. Formula lengkap untuk menjaga kesehatan menyeluruh anjing peliharaan.',
+   303→   303→      benefit:
+   304→   304→        '8 manfaat dalam 1 produk: imunitas, bulu sehat, sendi kuat, pencernaan lancar, jantung sehat, fungsi hati, mata jernih, dan energi harian. Cocok untuk anjing semua usia.',
+   305→   305→      usage:
+   306→   306→        'Anjing <11kg: 1 bite sehari.\nAnjing 11-23kg: 2 bites sehari.\nAnjing >23kg: 3 bites sehari.\nDiberikan setiap hari setelah makan.',
+   307→   307→      ingredients:
+   308→   308→        'Vitamin A 5000IU, Vitamin B Kompleks, Vitamin C 50mg, Vitamin D3 500IU, Vitamin E 50IU, Glucosamine 250mg, Omega 3 200mg, Probiotic 1B CFU.',
+   309→   309→      bpomNumber: 'BPOM TR 211234567002',
+   310→   310→      isBestSeller: true,
+   311→   311→      isNew: false,
+   312→   312→      rating: 4.8,
+   313→   313→      reviewCount: 38,
+   314→   314→      categorySlug: 'vitamin',
+   315→   315→      problemSlugs: ['harian', 'imunitas'],
+   316→   316→      petTypeSlugs: ['anjing'],
+   317→   317→      color: '7C3AED',
+   318→   318→    },
+   319→   319→    {
+   320→   320→      name: 'Zesty Paws Hip & Joint Advanced Bites',
+   321→   321→      slug: 'zesty-paws-hip-joint-advanced',
+   322→   322→      sku: 'ZP-HJA-003',
+   323→   323→      brand: 'Zesty Paws',
+   324→   324→      sellerSlug: 'zesty-paws',
+   325→   325→      price: 195000,
+   326→   326→      salePrice: 165000,
+   327→   327→      subscribePrice: sub(165000),
+   328→   328→      isSubscribeEligible: true,
+   329→   329→      stock: 25,
+   330→   330→      weight: '90 chewable bites',
+   331→   331→      description:
+   332→   332→        'Hip & Joint Advanced Bites — formula extra strength untuk kesehatan sendi anjing. Dengan Glucosamine, Chondroitin, MSM, dan Turmeric yang membantu menjaga mobilitas anjing senior atau anjing aktif.',
+   333→   333→      benefit:
+   334→   334→        'Mengurangi peradangan sendi, meningkatkan mobilitas, mencegah osteoarthritis, dan membantu pemulihan pasca operasi. Hasil terlihat dalam 4-6 minggu.',
+   335→   335→      usage:
+   336→   336→        'Anjing <11kg: 1 bite sehari.\nAnjing 11-23kg: 2 bites sehari.\nAnjing >23kg: 3 bites sehari.\nUntuk hasil maksimal, gunakan rutin minimal 6 minggu.',
+   337→   337→      ingredients:
+   338→   338→        'Glucosamine HCl 500mg, Chondroitin Sulfate 200mg, MSM 150mg, Turmeric Curcumin 100mg, Hyaluronic Acid 10mg, Vitamin C 50mg.',
+   339→   339→      bpomNumber: 'BPOM TR 211234567003',
+   340→   340→      isBestSeller: false,
+   341→   341→      isNew: false,
+   342→   342→      rating: 4.9,
+   343→   343→      reviewCount: 28,
+   344→   344→      categorySlug: 'suplemen',
+   345→   345→      problemSlugs: ['tulang-dan-sendi', 'recovery'],
+   346→   346→      petTypeSlugs: ['anjing'],
+   347→   347→      color: 'F59E0B',
+   348→   348→    },
+   349→   349→    {
+   350→   350→      name: 'Zesty Paws Calming Bites for Cats',
+   351→   351→      slug: 'zesty-paws-calming-bites-cats',
+   352→   352→      sku: 'ZP-CBC-004',
+   353→   353→      brand: 'Zesty Paws',
+   354→   354→      sellerSlug: 'zesty-paws',
+   355→   355→      price: 135000,
+   356→   356→      salePrice: null,
+   357→   357→      subscribePrice: sub(135000),
+   358→   358→      isSubscribeEligible: true,
+   359→   359→      stock: 40,
+   360→   360→      weight: '60 soft chews',
+   361→   361→      description:
+   362→   362→        'Calming Bites untuk kucing — suplemen penenang alami yang membantu kucing tetap tenang saat situasi stres (tamanya dokter, perjalanan, kembarnya tamu, atau petasan). Dengan L-Theanine, L-Tryptophan, dan chamomile.',
+   363→   363→      benefit:
+   364→   364→        'Membantu kucing tetap tenang tanpa mengantuk, mengurangi stres dan kecemasan, membantu perilaku agresif, dan meningkatkan kualitas tidur. Aman digunakan jangka panjang.',
+   365→   365→      usage:
+   366→   366→        'Kucing <5kg: 1 chew sehari.\nKucing >5kg: 2 chews sehari.\nBerikan 30 menit sebelum situasi stres atau rutin setiap hari.',
+   367→   367→      ingredients:
+   368→   368→        'L-Theanine 50mg, L-Tryptophan 30mg, Chamomile Extract 25mg, Passion Flower 20mg, Ginger 15mg, Magnesium 10mg.',
+   369→   369→      bpomNumber: 'BPOM TR 211234567004',
+   370→   370→      isBestSeller: false,
+   371→   371→      isNew: true,
+   372→   372→      rating: 4.7,
+   373→   373→      reviewCount: 15,
+   374→   374→      categorySlug: 'suplemen',
+   375→   375→      problemSlugs: ['harian'],
+   376→   376→      petTypeSlugs: ['kucing'],
+   377→   377→      color: 'EC4899',
+   378→   378→    },
+   379→   379→    {
+   380→   380→      name: 'Zesty Paws Skin & Coat Omega Bites',
+   381→   381→      slug: 'zesty-paws-skin-coat-omega-bites',
+   382→   382→      sku: 'ZP-SCO-005',
+   383→   383→      brand: 'Zesty Paws',
+   384→   384→      sellerSlug: 'zesty-paws',
+   385→   385→      price: 155000,
+   386→   386→      salePrice: null,
+   387→   387→      subscribePrice: sub(155000),
+   388→   388→      isSubscribeEligible: true,
+   389→   389→      stock: 35,
+   390→   390→      weight: '90 chewable bites',
+   391→   391→      description:
+   392→   392→        'Skin & Coat Omega Bites — suplemen untuk bulu dan kulit dengan kandungan Omega 3 (EPA & DHA), Biotin, dan Vitamin E. Membuat bulu lebih tebal, mengkilap, dan kulit bebas gatal.',
+   393→   393→      benefit:
+   394→   394→        'Mengatasi bulu rontok, kulit kering dan gatal, ketombe, serta membuat bulu lebih tebal dan mengkilap. Hasil terlihat dalam 3-4 minggu pemakaian rutin.',
+   395→   395→      usage:
+   396→   396→        'Kucing & anjing kecil: 1 bite sehari.\nAnjing besar: 2-3 bites sehari.\nDiberikan sebagai camilan atau dicampur makanan.',
+   397→   397→      ingredients:
+   398→   398→        'Omega 3 EPA 180mg, DHA 120mg, Omega 6 GLA 50mg, Biotin 500mcg, Vitamin E 30IU, Salmon Oil 200mg, Flaxseed 100mg.',
+   399→   399→      bpomNumber: 'BPOM TR 211234567005',
+   400→   400→      isBestSeller: false,
+   401→   401→      isNew: false,
+   402→   402→      rating: 4.8,
+   403→   403→      reviewCount: 22,
+   404→   404→      categorySlug: 'suplemen',
+   405→   405→      problemSlugs: ['bulu-dan-kulit'],
+   406→   406→      petTypeSlugs: ['kucing', 'anjing'],
+   407→   407→      color: 'EC4899',
+   408→   408→    },
+   409→   409→    {
+   410→   410→      name: 'Zesty Paws Allergy & Immune Bites for Dogs',
+   411→   411→      slug: 'zesty-paws-allergy-immune-dogs',
+   412→   412→      sku: 'ZP-AID-006',
+   413→   413→      brand: 'Zesty Paws',
+   414→   414→      sellerSlug: 'zesty-paws',
+   415→   415→      price: 165000,
+   416→   416→      salePrice: null,
+   417→   417→      subscribePrice: sub(165000),
+   418→   418→      isSubscribeEligible: true,
+   419→   419→      stock: 28,
+   420→   420→      weight: '90 chewable bites',
+   421→   421→      description:
+   422→   422→        'Allergy & Immune Bites — suplemen untuk anjing dengan alergi dan daya tahan tubuh lemah. Dengan colostrum, quercetin, dan epicatechin yang membantu meredakan gejala alergi dan memperkuat sistem imun.',
+   423→   423→      benefit:
+   424→   424→        'Meredakan gatal-gatal akibat alergi, mengurangi peradangan, memperkuat sistem imun, dan mencegah infeksi. Cocok untuk anjing dengan kulit sensitif.',
+   425→   425→      usage:
+   426→   426→        'Anjing <11kg: 1 bite sehari.\nAnjing 11-23kg: 2 bites sehari.\nAnjing >23kg: 3 bites sehari.\nDiberikan setiap hari untuk hasil optimal.',
+   427→   427→      ingredients:
+   428→   428→        'Colostrum 100mg, Quercetin 80mg, Epicatechin 50mg, Vitamin C 50mg, Zinc 10mg, Astragalus 30mg, Reishi Mushroom 25mg.',
+   429→   429→      bpomNumber: 'BPOM TR 211234567006',
+   430→   430→      isBestSeller: true,
+   431→   431→      isNew: false,
+   432→   432→      rating: 4.8,
+   433→   433→      reviewCount: 31,
+   434→   434→      categorySlug: 'suplemen',
+   435→   435→      problemSlugs: ['imunitas', 'bulu-dan-kulit'],
+   436→   436→      petTypeSlugs: ['anjing'],
+   437→   437→      color: '3B82F6',
+   438→   438→    },
+   439→   439→    {
+   440→   440→      name: 'Zesty Paws Urinary Tract Bites for Cats',
+   441→   441→      slug: 'zesty-paws-urinary-tract-cats',
+   442→   442→      sku: 'ZP-UTC-007',
+   443→   443→      brand: 'Zesty Paws',
+   444→   444→      sellerSlug: 'zesty-paws',
+   445→   445→      price: 175000,
+   446→   446→      salePrice: null,
+   447→   447→      subscribePrice: sub(175000),
+   448→   448→      isSubscribeEligible: true,
+   449→   449→      stock: 22,
+   450→   450→      weight: '60 soft chews',
+   451→   451→      description:
+   452→   452→        'Urinary Tract Bites untuk kucing — suplemen khusus kesehatan saluran kemih. Dengan Cranberry, D-Mannose, dan Nettle Leaf yang membantu mencegah FIC (Feline Idiopathic Cystitis) dan batu ginjal.',
+   453→   453→      benefit:
+   454→   454→        'Menjaga kesehatan saluran kemih, mencegah kristal dan batu, mengurangi peradangan kandung kemih, dan mendukung fungsi ginjal. Wajib untuk kucing dengan riwayat FUS.',
+   455→   455→      usage:
+   456→   456→        'Kucing <5kg: 1 chew sehari.\nKucing >5kg: 2 chews sehari.\nDiberikan rutin setiap hari.',
+   457→   457→      ingredients:
+   458→   458→        'Cranberry Extract 150mg, D-Mannose 100mg, Nettle Leaf 80mg, Vitamin C 50mg, Glucosamine 50mg, Corn Silk 30mg.',
+   459→   459→      bpomNumber: 'BPOM TR 211234567007',
+   460→   460→      isBestSeller: false,
+   461→   461→      isNew: true,
+   462→   462→      rating: 4.9,
+   463→   463→      reviewCount: 12,
+   464→   464→      categorySlug: 'suplemen',
+   465→   465→      problemSlugs: ['harian'],
+   466→   466→      petTypeSlugs: ['kucing'],
+   467→   467→      color: '7C3AED',
+   468→   468→    },
+   469→   469→
+   470→   470→    // ============ NATIVE PET (2 products) ============
+   471→   471→    {
+   472→   472→      name: 'Native Pet Probiotic Powder for Dogs',
+   473→   473→      slug: 'native-pet-probiotic-powder-dogs',
+   474→   474→      sku: 'NP-PPD-008',
+   475→   475→      brand: 'Native Pet',
+   476→   476→      sellerSlug: 'native-pet',
+   477→   477→      price: 125000,
+   478→   478→      salePrice: null,
+   479→   479→      subscribePrice: sub(125000),
+   480→   480→      isSubscribeEligible: true,
+   481→   481→      stock: 38,
+   482→   482→      weight: '150g powder (30 servings)',
+   483→   483→      description:
+   484→   484→        'Probiotic Powder untuk anjing dari Native Pet — bubuk probiotik alami dengan 5 miliar CFU. Tanpa rasa, aroma, atau pengawet buatan. Mudah dicampur ke makanan anjing.',
+   485→   485→      benefit:
+   486→   486→        'Menyeimbangkan flora usus, mengatasi diare dan kembung, meningkatkan penyerapan nutrisi, dan memperkuat sistem imun. 100% natural, aman untuk anjing sensitif.',
+   487→   487→      usage:
+   488→   488→        'Anjing <10kg: 1 sendok takar (5g) sehari.\nAnjing 10-25kg: 2 sendok takar sehari.\nAnjing >25kg: 3 sendok takar sehari.\nCampurkan ke makanan, berikan 1x sehari.',
+   489→   489→      ingredients:
+   490→   490→        'Probiotic Blend 5B CFU (Lactobacillus acidophilus, L. plantarum, Bifidobacterium lactis, L. casei), Prebiotic Inulin 500mg, Pumpkin Powder 200mg.',
+   491→   491→      bpomNumber: 'BPOM TR 211234567008',
+   492→   492→      isBestSeller: false,
+   493→   493→      isNew: false,
+   494→   494→      rating: 4.7,
+   495→   495→      reviewCount: 18,
+   496→   496→      categorySlug: 'suplemen',
+   497→   497→      problemSlugs: ['pencernaan', 'imunitas'],
+   498→   498→      petTypeSlugs: ['anjing'],
+   499→   499→      color: '22C55E',
+   500→   500→    },
+   501→   501→    {
+   502→   502→      name: 'Native Pet Omega 3 Salmon Oil',
+   503→   503→      slug: 'native-pet-omega-3-salmon-oil',
+   504→   504→      sku: 'NP-OSO-009',
+   505→   505→      brand: 'Native Pet',
+   506→   506→      sellerSlug: 'native-pet',
+   507→   507→      price: 110000,
+   508→   508→      salePrice: null,
+   509→   509→      subscribePrice: sub(110000),
+   510→   510→      isSubscribeEligible: true,
+   511→   511→      stock: 45,
+   512→   512→      weight: '250ml',
+   513→   513→      description:
+   514→   514→        'Omega 3 Salmon Oil murni dari Native Pet — minyak salmon wild-caught Alaska, kaya EPA dan DHA. Untuk kesehatan bulu, jantung, sendi, dan otak hewan peliharaan.',
+   515→   515→      benefit:
+   516→   516→        'Bulu lebih tebal dan mengkilap, kulit sehat bebas gatal, jantung kuat, sendi lentur, dan otak berkembang optimal. Aman untuk kucing, anjing, dan burung.',
+   517→   517→      usage:
+   518→   518→        'Kucing: 1ml per 2kg berat badan.\nAnjing: 2ml per 5kg berat badan.\nBurung: 2-3 tetes ke makanan.\nCampurkan ke makanan, berikan 1x sehari.',
+   519→   519→      ingredients:
+   520→   520→        'Wild Alaskan Salmon Oil 99.5%, Vitamin E 100IU (antioksidan). Mengandung EPA 18%, DHA 12%.',
+   521→   521→      bpomNumber: 'BPOM TR 211234567009',
+   522→   522→      isBestSeller: true,
+   523→   523→      isNew: false,
+   524→   524→      rating: 4.8,
+   525→   525→      reviewCount: 26,
+   526→   526→      categorySlug: 'suplemen',
+   527→   527→      problemSlugs: ['bulu-dan-kulit', 'recovery', 'harian'],
+   528→   528→      petTypeSlugs: ['kucing', 'anjing', 'burung'],
+   529→   529→      color: 'F43F5E',
+   530→   530→    },
+   531→   531→
+   532→   532→    // ============ VETRI SCIENCE (2 products) ============
+   533→   533→    {
+   534→   534→      name: 'Vetri Science GlycoFlex Hip & Joint',
+   535→   535→      slug: 'vetri-science-glycoflex-hip-joint',
+   536→   536→      sku: 'VS-GFH-010',
+   537→   537→      brand: 'Vetri Science',
+   538→   538→      sellerSlug: 'vetri-science',
+   539→   539→      price: 220000,
+   540→   540→      salePrice: null,
+   541→   541→      subscribePrice: sub(220000),
+   542→   542→      isSubscribeEligible: true,
+   543→   543→      stock: 18,
+   544→   544→      weight: '120 chewable tablets',
+   545→   545→      description:
+   546→   546→        'GlycoFlex Hip & Joint dari Vetri Science Laboratories — vet-formulated dengan GlycOmega Perna canaliculus (green-lipped mussel) untuk kesehatan sendi. Direkomendasikan dokter hewan untuk anjing dengan masalah sendi.',
+   547→   547→      benefit:
+   548→   548→        'Memperbaiki kartilago sendi, mengurangi peradangan, meningkatkan mobilitas, dan meredakan nyeri. Vet-strength formula yang terbukti klinis.',
+   549→   549→      usage:
+   550→   550→        'Anjing <13kg: 1 tablet sehari.\nAnjing 14-29kg: 2 tablets sehari.\nAnjing 30-45kg: 3 tablets sehari.\nAnjing >45kg: 4 tablets sehari.',
+   551→   551→      ingredients:
+   552→   552→        'GlycOmega Perna Canaliculus 300mg, Glucosamine HCl 500mg, DMG 100mg, MSM 100mg, Manganese 5mg.',
+   553→   553→      bpomNumber: 'BPOM TR 211234567010',
+   554→   554→      isBestSeller: false,
+   555→   555→      isNew: false,
+   556→   556→      rating: 5.0,
+   557→   557→      reviewCount: 9,
+   558→   558→      categorySlug: 'suplemen',
+   559→   559→      problemSlugs: ['tulang-dan-sendi', 'recovery'],
+   560→   560→      petTypeSlugs: ['anjing'],
+   561→   561→      color: '0EA5E9',
+   562→   562→    },
+   563→   563→    {
+   564→   564→      name: 'Vetri Science Immune Support for Cats',
+   565→   565→      slug: 'vetri-science-immune-support-cats',
+   566→   566→      sku: 'VS-ISC-011',
+   567→   567→      brand: 'Vetri Science',
+   568→   568→      sellerSlug: 'vetri-science',
+   569→   569→      price: 145000,
+   570→   570→      salePrice: null,
+   571→   571→      subscribePrice: sub(145000),
+   572→   572→      isSubscribeEligible: true,
+   573→   573→      stock: 30,
+   574→   574→      weight: '60 chewable tablets',
+   575→   575→      description:
+   576→   576→        'Immune Support untuk kucing — vet-formulated dengan L-Lysine, colostrum, dan antioxidant blend. Membantu kucing yang sering pilek, flu, atau memiliki FIV/FeLV.',
+   577→   577→      benefit:
+   578→   578→        'Memperkuat sistem imun, mencegah infeksi virus (herpesvirus, calicivirus), mempercepat penyembuhan, dan menjaga kesehatan saluran napas.',
+   579→   579→      usage:
+   580→   580→        'Kucing <3kg: 1 tablet sehari.\nKucing >3kg: 2 tablets sehari.\nBoleh dihancurkan dan dicampur makanan.',
+   581→   581→      ingredients:
+   582→   582→        'L-Lysine 250mg, Bovine Colostrum 100mg, Vitamin C 50mg, Vitamin E 30IU, Zinc 5mg, Selenium 25mcg, Echinacea 30mg.',
+   583→   583→      bpomNumber: 'BPOM TR 211234567011',
+   584→   584→      isBestSeller: false,
+   585→   585→      isNew: true,
+   586→   586→      rating: 4.9,
+   587→   587→      reviewCount: 8,
+   588→   588→      categorySlug: 'suplemen',
+   589→   589→      problemSlugs: ['imunitas', 'recovery'],
+   590→   590→      petTypeSlugs: ['kucing'],
+   591→   591→      color: '3B82F6',
+   592→   592→    },
+   593→   593→
+   594→   594→    // ============ PET HONESTY (2 products) ============
+   595→   595→    {
+   596→   596→      name: 'Pet Honesty Allergy Support for Dogs',
+   597→   597→      slug: 'pet-honesty-allergy-support-dogs',
+   598→   598→      sku: 'PH-ASD-012',
+   599→   599→      brand: 'Pet Honesty',
+   600→   600→      sellerSlug: 'pet-honesty',
+   601→   601→      price: 155000,
+   602→   602→      salePrice: null,
+   603→   603→      subscribePrice: sub(155000),
+   604→   604→      isSubscribeEligible: true,
+   605→   605→      stock: 26,
+   606→   606→      weight: '90 soft chews',
+   607→   607→      description:
+   608→   608→        'Allergy Support untuk anjing dari Pet Honesty — suplemen alami dengan colostrum, salmon oil, dan turmeric. Membantu anjing dengan alergi makanan, alergi kulit, atau gatal-gatal musiman.',
+   609→   609→      benefit:
+   610→   610→        'Meredakan gatal dan kulit iritasi, mengurangi peradangan, memperkuat sistem imun, dan membuat bulu sehat. Tanpa bahan sintetis.',
+   611→   611→      usage:
+   612→   612→        'Anjing <11kg: 1 chew sehari.\nAnjing 11-23kg: 2 chews sehari.\nAnjing >23kg: 3 chews sehari.',
+   613→   613→      ingredients:
+   614→   614→        'Colostrum 150mg, Salmon Oil 200mg, Turmeric 100mg, Quercetin 80mg, Omega 3 150mg, Vitamin C 50mg.',
+   615→   615→      bpomNumber: 'BPOM TR 211234567012',
+   616→   616→      isBestSeller: false,
+   617→   617→      isNew: false,
+   618→   618→      rating: 4.7,
+   619→   619→      reviewCount: 14,
+   620→   620→      categorySlug: 'suplemen',
+   621→   621→      problemSlugs: ['imunitas', 'bulu-dan-kulit'],
+   622→   622→      petTypeSlugs: ['anjing'],
+   623→   623→      color: 'EF4444',
+   624→   624→    },
+   625→   625→    {
+   626→   626→      name: 'Pet Honesty Multivitamin 10-in-1',
+   627→   627→      slug: 'pet-honesty-multivitamin-10in1',
+   628→   628→      sku: 'PH-MV10-013',
+   629→   629→      brand: 'Pet Honesty',
+   630→   630→      sellerSlug: 'pet-honesty',
+   631→   631→      price: 165000,
+   632→   632→      salePrice: null,
+   633→   633→      subscribePrice: null,
+   634→   634→      isSubscribeEligible: false,
+   635→   635→      stock: 33,
+   636→   636→      weight: '90 soft chews',
+   637→   637→      description:
+   638→   638→        'Multivitamin 10-in-1 untuk anjing — 10 manfaat dalam 1 produk: imunitas, bulu, sendi, jantung, hati, pencernaan, mata, energi, saraf, dan kesehatan gigi.',
+   639→   639→      benefit:
+   640→   640→        '10 manfaat untuk kesehatan menyeluruh anjing. Cocok untuk anjing semua usia, terutama yang butuh support harian.',
+   641→   641→      usage:
+   642→   642→        'Anjing <11kg: 1 chew sehari.\nAnjing 11-23kg: 2 chews sehari.\nAnjing >23kg: 3 chews sehari.',
+   643→   643→      ingredients:
+   644→   644→        'Vitamin A, B Kompleks, C, D3, E, Glucosamine 250mg, Omega 3 200mg, Probiotic 1B CFU, Kelp 50mg, Biotin 500mcg.',
+   645→   645→      bpomNumber: 'BPOM TR 211234567013',
+   646→   646→      isBestSeller: false,
+   647→   647→      isNew: false,
+   648→   648→      rating: 4.6,
+   649→   649→      reviewCount: 11,
+   650→   650→      categorySlug: 'vitamin',
+   651→   651→      problemSlugs: ['harian', 'imunitas'],
+   652→   652→      petTypeSlugs: ['anjing'],
+   653→   653→      color: '7C3AED',
+   654→   654→    },
+   655→   655→
+   656→   656→    // ============ ANIMA COMPANION (2 local products) ============
+   657→   657→    {
+   658→   658→      name: 'Anima Companion Immuno Plus',
+   659→   659→      slug: 'immuno-plus',
+   660→   660→      sku: 'AC-IMM-014',
+   661→   661→      brand: 'Anima Companion',
+   662→   662→      sellerSlug: 'anima-companion',
+   663→   663→      price: 85000,
+   664→   664→      salePrice: 72000,
+   665→   665→      subscribePrice: null,
+   666→   666→      isSubscribeEligible: false,
+   667→   667→      stock: 50,
+   668→   668→      weight: '60 tablet',
+   669→   669→      description:
+   670→   670→        'Immuno Plus — suplemen imunitas lokal dari Anima Companion. Diformulasikan dengan Echinacea, Vitamin C, dan Zinc untuk meningkatkan daya tahan tubuh kucing dan anjing.',
+   671→   671→      benefit:
+   672→   672→        'Meningkatkan sistem imun, mencegah infeksi, mempercepat penyembuhan, dan menjaga kesehatan secara keseluruhan. Cocok untuk pemakaian harian atau masa pemulihan.',
+   673→   673→      usage:
+   674→   674→        'Kucing: 1 tablet sehari, dapat dihancurkan dan dicampur makanan.\nAnjing kecil (<10kg): 1-2 tablet sehari.\nAnjing besar (>10kg): 2-3 tablet sehari.',
+   675→   675→      ingredients:
+   676→   676→        'Echinacea Purpurea 100mg, Vitamin C 50mg, Zinc Picolinate 5mg, Vitamin E 10IU, Selenium 25mcg, L-Lysine 50mg.',
+   677→   677→      bpomNumber: 'BPOM TR 2012345678901',
+   678→   678→      isBestSeller: true,
+   679→   679→      isNew: false,
+   680→   680→      rating: 4.8,
+   681→   681→      reviewCount: 36,
+   682→   682→      categorySlug: 'suplemen',
+   683→   683→      problemSlugs: ['imunitas', 'recovery'],
+   684→   684→      petTypeSlugs: ['kucing', 'anjing'],
+   685→   685→      color: '3B82F6',
+   686→   686→    },
+   687→   687→    {
+   688→   688→      name: 'Anima Companion Appetite Booster',
+   689→   689→      slug: 'appetite-booster',
+   690→   690→      sku: 'AC-APP-015',
+   691→   691→      brand: 'Anima Companion',
+   692→   692→      sellerSlug: 'anima-companion',
+   693→   693→      price: 65000,
+   694→   694→      salePrice: null,
+   695→   695→      subscribePrice: null,
+   696→   696→      isSubscribeEligible: false,
+   697→   697→      stock: 35,
+   698→   698→      weight: '50 ml',
+   699→   699→      description:
+   700→   700→        'Appetite Booster — suplemen penambah nafsu makan lokal dengan rasa ikan yang disukai kucing dan anjing. Diformulasi dengan Vitamin B Kompleks dan herbal alami.',
+   701→   701→      benefit:
+   702→   702→        'Menambah nafsu makan, meningkatkan energi, membantu pertambahan berat badan yang sehat, dan menjaga kestabilan nutrisi harian.',
+   703→   703→      usage:
+   704→   704→        'Kucing: 1ml per 2kg berat badan, 2x sehari.\nAnjing: 2ml per 5kg berat badan, 2x sehari.\nDapat dicampur langsung ke makanan atau diberikan langsung.',
+   705→   705→      ingredients:
+   706→   706→        'Vitamin B1 2mg, Vitamin B6 1mg, Vitamin B12 5mcg, Ekstrak Gentian 50mg, Ekstrak Jahe 30mg, L-Carnitine 20mg.',
+   707→   707→      bpomNumber: 'BPOM TR 2012345678902',
+   708→   708→      isBestSeller: false,
+   709→   709→      isNew: false,
+   710→   710→      rating: 4.7,
+   711→   711→      reviewCount: 22,
+   712→   712→      categorySlug: 'suplemen',
+   713→   713→      problemSlugs: ['nafsu-makan'],
+   714→   714→      petTypeSlugs: ['kucing', 'anjing'],
+   715→   715→      color: 'EF4444',
+   716→   716→    },
+   717→   717→  ]
+   718→   718→
+   719→   719→  for (const p of productsData) {
+   720→   720→    const category = categories.find((c) => c.slug === p.categorySlug)!
+   721→   721→    const seller = sellerBySlug(p.sellerSlug)
+   722→   722→    const product = await db.product.create({
+   723→   723→      data: {
+   724→   724→        name: p.name,
+   725→   725→        slug: p.slug,
+   726→   726→        sku: p.sku,
+   727→   727→        brand: p.brand,
+   728→   728→        sellerId: seller.id,
+   729→   729→        price: p.price,
+   730→   730→        salePrice: p.salePrice,
+   731→   731→        subscribePrice: p.subscribePrice,
+   732→   732→        isSubscribeEligible: p.isSubscribeEligible,
+   733→   733→        stock: p.stock,
+   734→   734→        weight: p.weight,
+   735→   735→        description: p.description,
+   736→   736→        benefit: p.benefit,
+   737→   737→        usage: p.usage,
+   738→   738→        ingredients: p.ingredients,
+   739→   739→        bpomNumber: p.bpomNumber,
+   740→   740→        isBestSeller: p.isBestSeller,
+   741→   741→        isNew: p.isNew,
+   742→   742→        rating: p.rating,
+   743→   743→        reviewCount: p.reviewCount,
+   744→   744→        categoryId: category.id,
+   745→   745→        images: {
+   746→   746→          create: [0, 1, 2, 3].map((i) => ({
+   747→   747→            url: img(p.name, p.color, i),
+   748→   748→            alt: `${p.name} - gambar ${i + 1}`,
+   749→   749→            order: i,
+   750→   750→          })),
+   751→   751→        },
+   752→   752→        petTypes: {
+   753→   753→          create: p.petTypeSlugs.map((slug) => ({
+   754→   754→            petTypeId: petTypes.find((pt) => pt.slug === slug)!.id,
+   755→   755→          })),
+   756→   756→        },
+   757→   757→        problems: {
+   758→   758→          create: p.problemSlugs.map((slug) => ({
+   759→   759→            problemId: problems.find((pr) => pr.slug === slug)!.id,
+   760→   760→          })),
+   761→   761→        },
+   762→   762→      },
+   763→   763→    })
+   764→   764→    console.log(`✅ Product created: ${product.name} [${seller.name}]`)
+   765→   765→  }
+   766→   766→
+   767→   767→  // ==================== REVIEWS ====================
+   768→   768→  const allProducts = await db.product.findMany({ select: { id: true, slug: true, petTypes: { include: { petType: true } } } })
+   769→   769→  const reviewTemplates: { userName: string; petType: string; rating: number; comment: string }[] = [
+   770→   770→    { userName: 'Diana Pradnya', petType: 'Kucing', rating: 5, comment: 'Bulunya jadi lebih tebal dan mengkilap setelah 3 minggu pakai. Kucing saya suka rasanya juga!' },
+   771→   771→    { userName: 'Rizky Aditya', petType: 'Anjing', rating: 5, comment: 'Anjing golden saya yang sebelumnya malas gerak, sekarang lebih aktif. Recommended banget!' },
+   772→   772→    { userName: 'Maya Sari', petType: 'Kucing', rating: 4, comment: 'Bagus untuk pencernaan kucing persian saya yang sensitif. Pengiriman juga cepat.' },
+   773→   773→    { userName: 'Fajar Ramadhan', petType: 'Anjing', rating: 5, comment: 'Hip & Joint Advanced benar-benar membantu anjing senior saya. Sudah pesan ulang 3x.' },
+   774→   774→    { userName: 'Tika Maharani', petType: 'Kucing', rating: 5, comment: 'Nafsu makan kucing saya yang lagi drop langsung balik. Owner juga fast response di WA.' },
+   775→   775→    { userName: 'Andre Wijaya', petType: 'Anjing', rating: 4, comment: 'Produk bagus, packing rapi. Anjing saya suka rasanya, jadi gampang dikasih.' },
+   776→   776→    { userName: 'Putri Lestari', petType: 'Kucing', rating: 5, comment: 'Kucing saya yang sering muntah setelah pakai probiotik ini jadi sehat. Worth the price!' },
+   777→   777→    { userName: 'Hendra Gunawan', petType: 'Anjing', rating: 5, comment: 'Vet-strength beneran. Anjing husky saya jadi lebih lincah walau udah 8 tahun.' },
+   778→   778→    { userName: 'Sari Wulandari', petType: 'Kucing', rating: 4, comment: 'Calm bites bantu kucing saya yang stres saat ke dokter. Aman dan tidak bikin ngantuk.' },
+   779→   779→    { userName: 'Bagus Santoso', petType: 'Anjing', rating: 5, comment: 'Multivitamin lengkap, satu produk untuk semua kebutuhan. Harga sepadan dengan kualitas.' },
+   780→   780→    { userName: 'Indah Permata', petType: 'Kucing', rating: 5, comment: 'Urinary tract bites wajib untuk kucing yang sering FUS. Sudah 6 bulan pakai, aman.' },
+   781→   781→    { userName: 'Yoga Pratama', petType: 'Anjing', rating: 4, comment: 'Allergy support membantu anjing saya yang alergi kulit. Gatal-gatal berkurang signifikan.' },
+   782→   782→  ]
+   783→   783→
+   784→   784→  // Distribute reviews across products deterministically
+   785→   785→  for (let i = 0; i < allProducts.length; i++) {
+   786→   786→    const product = allProducts[i]
+   787→   787→    const numReviews = 2 + (i % 3) // 2-4 reviews per product
+   788→   788→    for (let j = 0; j < numReviews; j++) {
+   789→   789→      const template = reviewTemplates[(i * 3 + j) % reviewTemplates.length]
+   790→   790→      const petTypeFromProduct = product.petTypes[0]?.petType.name || template.petType
+   791→   791→      await db.review.create({
+   792→   792→        data: {
+   793→   793→          productId: product.id,
+   794→   794→          userName: template.userName,
+   795→   795→          petType: petTypeFromProduct,
+   796→   796→          rating: template.rating,
+   797→   797→          comment: template.comment,
+   798→   798→        },
+   799→   799→      })
+   800→   800→    }
+   801→   801→  }
+   802→   802→  console.log('✅ Reviews created')
+   803→   803→
+   804→   804→  // ==================== BANNERS ====================
+   805→   805→  await db.$transaction([
+   806→   806→    db.banner.create({
+   807→   807→      data: {
+   808→   808→        title: 'Sehatkan Hewan Kesayanganmu',
+   809→   809→        subtitle: 'Marketplace vitamin & suplemen premium untuk kucing, anjing, dan hewan peliharaan lainnya.',
+   810→   810→        imageUrl: 'https://placehold.co/1400x500/F97316/ffffff?text=Anima+Companion+Marketplace',
+   811→   811→        link: '#/shop',
+   812→   812→        position: 'HOME',
+   813→   813→        order: 0,
+   814→   814→        isActive: true,
+   815→   815→      },
+   816→   816→    }),
+   817→   817→    db.banner.create({
+   818→   818→      data: {
+   819→   819→        title: 'Diskon 20% Pembelian Pertama',
+   820→   820→        subtitle: 'Pakai kode HELLO20 di checkout. Berlaku untuk semua produk.',
+   821→   821→        imageUrl: 'https://placehold.co/1400x300/7C3AED/ffffff?text=Promo+Spesial+%E2%80%94+Diskon+20%25',
+   822→   822→        link: '#/shop',
+   823→   823→        position: 'PROMO',
+   824→   824→        order: 0,
+   825→   825→        isActive: true,
+   826→   826→      },
+   827→   827→    }),
+   828→   828→    db.banner.create({
+   829→   829→      data: {
+   830→   830→        title: 'Konsultasi Gratis via WhatsApp',
+   831→   831→        subtitle: 'Bingung pilih produk yang tepat? Chat admin kami sekarang!',
+   832→   832→        imageUrl: 'https://placehold.co/1400x200/22C55E/ffffff?text=Gratis+Konsultasi+%E2%80%94+WhatsApp+Sekarang',
+   833→   833→        link: '#/kontak',
+   834→   834→        position: 'HOME',
+   835→   835→        order: 1,
+   836→   836→        isActive: true,
+   837→   837→      },
+   838→   838→    }),
+   839→   839→  ])
+   840→   840→  console.log('✅ Banners created')
+   841→   841→
+   842→   842→  // ==================== TESTIMONIALS ====================
+   843→   843→  await db.$transaction([
+   844→   844→    db.testimonial.create({
+   845→   845→      data: {
+   846→   846→        name: 'Sarah Wijaya',
+   847→   847→        petName: 'Milo',
+   848→   848→        petType: 'Kucing Persia',
+   849→   849→        message: 'Anima Companion benar-benar solusi buat Milo yang sering pilek. Setelah pakai Immuno Plus rutin, jauh lebih sehat!',
+   850→   850→        rating: 5,
+   851→   851→        isActive: true,
+   852→   852→      },
+   853→   853→    }),
+   854→   854→    db.testimonial.create({
+   855→   855→      data: {
+   856→   856→        name: 'Bayu Pratama',
+   857→   857→        petName: 'Bruno',
+   858→   858→        petType: 'Anjing Golden Retriever',
+   859→   859→        message: 'Hip & Joint Advanced dari Zesty Paws bikin Bruno (9 tahun) bisa lari lagi seperti muda. Pengiriman cepat, admin juga helpful.',
+   860→   860→        rating: 5,
+   861→   861→        isActive: true,
+   862→   862→      },
+   863→   863→    }),
+   864→   864→    db.testimonial.create({
+   865→   865→      data: {
+   866→   866→        name: 'Intan Permata',
+   867→   867→        petName: 'Luna',
+   868→   868→        petType: 'Kucing Maine Coon',
+   869→   869→        message: 'Skin & Coat Omega Bites luar biasa. Bulu Luna jadi panjang dan mengkilap. Foto-fotonya jadi makin cakep!',
+   870→   870→        rating: 5,
+   871→   871→        isActive: true,
+   872→   872→      },
+   873→   873→    }),
+   874→   874→    db.testimonial.create({
+   875→   875→      data: {
+   876→   876→        name: 'Doni Kurniawan',
+   877→   877→        petName: 'Coco',
+   878→   878→        petType: 'Anjing Pomeranian',
+   879→   879→        message: 'Suka belanja di Anima Companion karena ada banyak brand premium. Packing rapi, produk asli, checkout via WhatsApp gampang.',
+   880→   880→        rating: 5,
+   881→   881→        isActive: true,
+   882→   882→      },
+   883→   883→    }),
+   884→   884→  ])
+   885→   885→  console.log('✅ Testimonials created')
+   886→   886→
+   887→   887→  // ==================== VOUCHERS ====================
+   888→   888→  await db.$transaction([
+   889→   889→    db.voucher.create({
+   890→   890→      data: {
+   891→   891→        code: 'HELLO20',
+   892→   892→        type: 'PERCENTAGE',
+   893→   893→        value: 20,
+   894→   894→        minSpend: 50000,
+   895→   895→        isActive: true,
+   896→   896→        description: 'Diskon 20% untuk pembelian pertama, min belanja Rp 50.000',
+   897→   897→      },
+   898→   898→    }),
+   899→   899→    db.voucher.create({
+   900→   900→      data: {
+   901→   901→        code: 'HEMAT15',
+   902→   902→        type: 'FIXED',
+   903→   903→        value: 15000,
+   904→   904→        minSpend: 100000,
+   905→   905→        isActive: true,
+   906→   906→        description: 'Potongan Rp 15.000 untuk pembelian min Rp 100.000',
+   907→   907→      },
+   908→   908→    }),
+   909→   909→    db.voucher.create({
+   910→   910→      data: {
+   911→   911→        code: 'GRATISONGKIR',
+   912→   912→        type: 'FIXED',
+   913→   913→        value: 20000,
+   914→   914→        minSpend: 75000,
+   915→   915→        isActive: true,
+   916→   916→        description: 'Potongan ongkir Rp 20.000 untuk pembelian min Rp 75.000',
+   917→   917→      },
+   918→   918→    }),
+   919→   919→  ])
+   920→   920→  console.log('✅ Vouchers created')
+   921→   921→
+   922→   922→  // ==================== FAQs ====================
+   923→   923→  await db.$transaction([
+   924→   924→    db.fAQ.create({
+   925→   925→      data: {
+   926→   926→        question: 'Apakah produk Anima Companion sudah terdaftar BPOM?',
+   927→   927→        answer: 'Ya, semua produk kami sudah terdaftar di BPOM dengan nomor registrasi yang tertera pada kemasan dan halaman produk.',
+   928→   928→        order: 0,
+   929→   929→        isActive: true,
+   930→   930→      },
+   931→   931→    }),
+   932→   932→    db.fAQ.create({
+   933→   933→      data: {
+   934→   934→        question: 'Bagaimana cara pemesanan?',
+   935→   935→        answer: 'Pilih produk yang diinginkan, masukkan ke keranjang, lalu checkout. Pesanan akan dikirim ke WhatsApp admin kami untuk konfirmasi pembayaran dan pengiriman.',
+   936→   936→        order: 1,
+   937→   937→        isActive: true,
+   938→   938→      },
+   939→   939→    }),
+   940→   940→    db.fAQ.create({
+   941→   941→      data: {
+   942→   942→        question: 'Apakah tersedia konsultasi gratis?',
+   943→   943→        answer: 'Ya! Tim kami siap membantu via WhatsApp untuk konsultasi seputar kesehatan hewan peliharaan dan pemilihan produk yang tepat.',
+   944→   944→        order: 2,
+   945→   945→        isActive: true,
+   946→   946→      },
+   947→   947→    }),
+   948→   948→    db.fAQ.create({
+   949→   949→      data: {
+   950→   950→        question: 'Berapa lama waktu pengiriman?',
+   951→   951→        answer: 'Untuk wilayah Jakarta 1-2 hari, dan luar Jakarta 2-4 hari kerja menggunakan ekspedisi JNE/JNT/SiCepat.',
+   952→   952→        order: 3,
+   953→   953→        isActive: true,
+   954→   954→      },
+   955→   955→    }),
+   956→   956→  ])
+   957→   957→  console.log('✅ FAQs created')
+   958→   958→
+   959→   959→  // ==================== PET PROFILE untuk demo customer ====================
+   960→   960→  const catType = petTypes.find((pt) => pt.slug === 'kucing')!
+   961→   961→  await db.petProfile.create({
+   962→   962→    data: {
+   963→   963→      userId: customer.id,
+   964→   964→      petName: 'Tommy',
+   965→   965→      petTypeId: catType.id,
+   966→   966→      age: '2 tahun',
+   967→   967→      weight: '4.5 kg',
+   968→   968→      notes: 'Kucing domestik, suka makan ikan',
+   969→   969→    },
+   970→   970→  })
+   971→   971→  console.log('✅ Demo pet profile created')
+   972→   972→
+   973→   973→  console.log('\n🎉 Seeding completed!')
+   974→   974→  console.log('━━━━━━━━━━━━━━━━━━━━')
+   975→   975→  console.log(`Sellers/Brands: ${sellers.length}`)
+   976→   976→  console.log(`Products: ${productsData.length}`)
+   977→   977→  console.log('Admin login:')
+   978→   978→  console.log('  Email: admin@anima.id')
+   979→   979→  console.log('  Password: admin123')
+   980→   980→  console.log('')
+   981→   981→  console.log('Customer login:')
+   982→   982→  console.log('  Email: budi@example.com')
+   983→   983→  console.log('  Password: customer123')
+   984→   984→  console.log('━━━━━━━━━━━━━━━━━━━━')
+   985→   985→}
+   986→   986→
+   987→   987→main()
+   988→   988→  .catch((e) => {
+   989→   989→    console.error(e)
+   990→   990→    process.exit(1)
+   991→   991→  })
+   992→   992→  .finally(async () => {
+   993→   993→    await db.$disconnect()
+   994→   994→  })
+   995→   995→

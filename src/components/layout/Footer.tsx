@@ -2,8 +2,8 @@
 
 import { useHashRouter } from '@/lib/router'
 import { Logo } from './Logo'
-import { SITE_CONFIG, whatsappAdminUrl } from '@/lib/config'
-import { Mail, Phone, MapPin, Clock, Instagram, MessageCircle } from 'lucide-react'
+import { whatsappAdminUrl } from '@/lib/config'
+import { Mail, Phone, MapPin, Clock, Instagram, MessageCircle, ShoppingBag, Music2, Hash, Building2 } from 'lucide-react'
 
 export function Footer() {
   const { navigate } = useHashRouter()
@@ -16,7 +16,7 @@ export function Footer() {
           {[
             { icon: '🛡️', title: 'BPOM Terdaftar', desc: 'Produk resmi & aman' },
             { icon: '✅', title: '100% Asli', desc: 'Dijamin original' },
-            { icon: '🚚', title: 'Pengiriman Cepat', desc: '1-4 hari kerja' },
+            { icon: '🏥', title: '515+ Klinik', desc: 'Distributor resmi' },
             { icon: '💬', title: 'Fast Response', desc: 'via WhatsApp' },
           ].map((b, i) => (
             <div key={i} className="flex items-center gap-3">
@@ -36,27 +36,75 @@ export function Footer() {
           <div className="col-span-2 lg:col-span-2">
             <Logo showTagline />
             <p className="mt-4 max-w-sm text-sm text-muted-foreground">
-              Platform e-commerce vitamin, suplemen, dan kebutuhan kesehatan hewan
-              peliharaan. Belanja mudah, cepat, dan terpercaya.
+              <span className="font-semibold text-foreground">Elevating Animal Health</span> — Suplemen Rekomendasi drh.
+              Vitamin & suplemen hewan peliharaan premium dari PT Sutan Vet Medika, tersedia di 515+ klinik seluruh Indonesia.
             </p>
-            <div className="mt-4 flex items-center gap-3">
+            {/* Company info */}
+            <div className="mt-4 space-y-1.5 text-sm text-muted-foreground">
+              <p className="flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-primary" />
+                <span>PT Sutan Vet Medika</span>
+              </p>
+              <p className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-primary" />
+                <span>Bogor, Jawa Barat, Indonesia</span>
+              </p>
+              <p className="flex items-center gap-2">
+                <Hash className="h-4 w-4 text-primary" />
+                <span className="font-semibold text-secondary">#PawrentHebatAnabulSehat</span>
+              </p>
+            </div>
+            {/* Social links */}
+            <div className="mt-4 flex items-center gap-2">
               <a
                 href={whatsappAdminUrl('Halo Anima Companion! 🐾')}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-success/10 text-success hover:bg-success hover:text-success-foreground transition-colors"
                 aria-label="WhatsApp"
+                title="WhatsApp"
               >
                 <MessageCircle className="h-4 w-4" />
               </a>
               <a
-                href={`https://instagram.com/${SITE_CONFIG.instagram.replace('@', '')}`}
+                href="https://instagram.com/anima.companion"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary/10 text-secondary hover:bg-secondary hover:text-secondary-foreground transition-colors"
-                aria-label="Instagram"
+                aria-label="Instagram @anima.companion"
+                title="Instagram @anima.companion"
               >
                 <Instagram className="h-4 w-4" />
+              </a>
+              <a
+                href="https://shopee.co.id/anima.companion"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground transition-colors"
+                aria-label="Shopee anima.companion"
+                title="Shopee anima.companion"
+              >
+                <ShoppingBag className="h-4 w-4" />
+              </a>
+              <a
+                href="https://www.tokopedia.com/find/felcover"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground transition-colors"
+                aria-label="Tokopedia"
+                title="Tokopedia"
+              >
+                <ShoppingBag className="h-4 w-4" />
+              </a>
+              <a
+                href="#"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground transition-colors"
+                aria-label="TikTok Shop (segera)"
+                title="TikTok Shop (segera)"
+              >
+                <Music2 className="h-4 w-4" />
               </a>
             </div>
           </div>
@@ -91,7 +139,7 @@ export function Footer() {
             <ul className="space-y-3 text-sm text-muted-foreground">
               <li className="flex items-start gap-2">
                 <Mail className="mt-0.5 h-4 w-4 text-primary" />
-                <span>{SITE_CONFIG.email}</span>
+                <span>hello@animacompanion.id</span>
               </li>
               <li className="flex items-start gap-2">
                 <Phone className="mt-0.5 h-4 w-4 text-primary" />
@@ -99,18 +147,60 @@ export function Footer() {
               </li>
               <li className="flex items-start gap-2">
                 <MapPin className="mt-0.5 h-4 w-4 text-primary" />
-                <span>{SITE_CONFIG.address}</span>
+                <span>Bogor, Jawa Barat, Indonesia</span>
               </li>
               <li className="flex items-start gap-2">
                 <Clock className="mt-0.5 h-4 w-4 text-primary" />
-                <span>{SITE_CONFIG.hours}</span>
+                <span>Senin–Sabtu, 09.00–18.00 WIB</span>
               </li>
             </ul>
           </div>
         </div>
 
-        <div className="mt-8 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row">
-          <p>© 2026 Anima Companion. Semua hak dilindungi.</p>
+        {/* Marketplace channels row */}
+        <div className="mt-8 rounded-2xl border border-border/60 bg-accent/40 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Beli Resmi di Marketplace</p>
+              <p className="mt-0.5 text-sm text-foreground">Tersedia di Shopee, Tokopedia, dan TikTok Shop (segera)</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <a
+                href="https://shopee.co.id/anima.companion"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium hover:border-primary hover:text-primary transition-colors"
+              >
+                <ShoppingBag className="h-3.5 w-3.5" /> Shopee
+              </a>
+              <a
+                href="https://www.tokopedia.com/find/felcover"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium hover:border-primary hover:text-primary transition-colors"
+              >
+                <ShoppingBag className="h-3.5 w-3.5" /> Tokopedia
+              </a>
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground"
+                title="TikTok Shop — segera hadir"
+              >
+                <Music2 className="h-3.5 w-3.5" /> TikTok Shop (segera)
+              </span>
+              <a
+                href="https://instagram.com/anima.companion"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium hover:border-primary hover:text-primary transition-colors"
+              >
+                <Instagram className="h-3.5 w-3.5" /> @anima.companion
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row">
+          <p>© 2026 PT Sutan Vet Medika — Anima Companion. All rights reserved.</p>
           <div className="flex items-center gap-4">
             <button className="hover:text-primary">Kebijakan Privasi</button>
             <button className="hover:text-primary">Syarat & Ketentuan</button>

@@ -1,0 +1,749 @@
+     1→'use client'
+     2→import { useEffect, useState, useRef } from 'react'
+     3→import { useHashRouter } from '@/lib/router'
+     4→import { Button } from '@/components/ui/button'
+     5→import { Input } from '@/components/ui/input'
+     6→import { ProductCard } from '@/components/product/ProductCard'
+     7→import { Image as OptImage } from '@/components/common/Image'
+     8→import { SectionHeader } from '@/components/common/SectionHeader'
+     9→import { Reveal, Stagger, StaggerItem } from '@/components/common/Reveal'
+    10→import {
+    11→  Shield, Utensils, Sparkles, Bone, Activity, Eye, Heart, Sun,
+    12→  ArrowRight, MessageCircle, Star, ChevronRight, ChevronLeft,
+    13→  Truck, Clock, PawPrint, Package, BadgeCheck,
+    14→  Repeat, Mail, Gift, ShoppingCart,
+    15→} from 'lucide-react'
+    16→import {
+    17→  Product, Problem, Banner, Testimonial, Seller, PetType,
+    18→} from '@/hooks/use-fetch'
+    19→import { VetSection } from '@/components/home/VetSection'
+    20→import { motion } from 'framer-motion'
+    21→import { useCartStore } from '@/lib/store'
+    22→import { toast } from 'sonner'
+    23→import { formatRupiah, effectivePrice } from '@/lib/format'
+    24→
+    25→const PROBLEM_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+    26→  imunitas: Shield,
+    27→  'nafsu-makan': Utensils,
+    28→  'bulu-dan-kulit': Sparkles,
+    29→  'tulang-dan-sendi': Bone,
+    30→  pencernaan: Activity,
+    31→  mata: Eye,
+    32→  recovery: Heart,
+    33→  harian: Sun,
+    34→}
+    35→
+    36→// Bundles — marketplace-style "Paket Hemat" (saved-curated, not actual product)
+    37→const BUNDLES: { problemSlug: string; title: string; tag: string; emoji: string; gradient: string }[] = [
+    38→  { problemSlug: 'nafsu-makan', title: 'Paket Nafsu Makan', tag: 'HEMAT 25%', emoji: '🍗', gradient: 'from-orange-400 to-rose-400' },
+    39→  { problemSlug: 'imunitas', title: 'Paket Imunitas', tag: 'HEMAT 30%', emoji: '🛡️', gradient: 'from-emerald-400 to-teal-500' },
+    40→  { problemSlug: 'bulu-dan-kulit', title: 'Paket Bulu Sehat', tag: 'B2G1 FREE', emoji: '✨', gradient: 'from-pink-400 to-fuchsia-400' },
+    41→  { problemSlug: 'recovery', title: 'Paket Recovery', tag: 'HEMAT 28%', emoji: '💖', gradient: 'from-sky-400 to-cyan-500' },
+    42→]
+    43→
+    44→export function HomeView() {
+    45→  const { navigate } = useHashRouter()
+    46→  const addItem = useCartStore((s) => s.addItem)
+    47→
+    48→  const [banners, setBanners] = useState<Banner[]>([])
+    49→  const [bestSellers, setBestSellers] = useState<Product[]>([])
+    50→  const [newProducts, setNewProducts] = useState<Product[]>([])
+    51→  const [subscribeProducts, setSubscribeProducts] = useState<Product[]>([])
+    52→  const [problems, setProblems] = useState<Problem[]>([])
+    53→  const [testimonials, setTestimonials] = useState<Testimonial[]>([])
+    54→  const [sellers, setSellers] = useState<Seller[]>([])
+    55→  const [petTypes, setPetTypes] = useState<PetType[]>([])
+    56→
+    57→  const [emailValue, setEmailValue] = useState('')
+    58→
+    59→  useEffect(() => {
+    60→    fetch('/api/home')
+    61→      .then((r) => r.json())
+    62→      .then((data) => {
+    63→        setBanners(data.banners || [])
+    64→        setBestSellers(data.bestSellers || [])
+    65→        setNewProducts(data.newProducts || [])
+    66→        setSubscribeProducts(data.subscribeProducts || [])
+    67→        setProblems(data.problems || [])
+    68→        setTestimonials(data.testimonials || [])
+    69→        setSellers(data.sellers || [])
+    70→        setPetTypes(data.petTypes || [])
+    71→      })
+    72→      .catch((err) => console.error('Home fetch failed:', err))
+    73→  }, [])
+    74→
+    75→  // Bundles derived from bestSellers (grouped by problem)
+    76→  const bundles = BUNDLES.map((b) => {
+    77→    const productsInBundle = [...bestSellers, ...newProducts].filter((p) =>
+    78→      p.problems?.some((pp) => pp.problem.slug === b.problemSlug)
+    79→    ).slice(0, 3)
+    80→    if (productsInBundle.length === 0) return null
+    81→    const totalPrice = productsInBundle.reduce(
+    82→      (sum, p) => sum + effectivePrice(p.price, p.salePrice),
+    83→      0
+    84→    )
+    85→    const bundlePrice = Math.round(totalPrice * 0.75)
+    86→    return { ...b, products: productsInBundle, totalPrice, bundlePrice }
+    87→  }).filter(Boolean).slice(0, 4) as Array<{
+    88→    problemSlug: string
+    89→    title: string
+    90→    tag: string
+    91→    emoji: string
+    92→    gradient: string
+    93→    products: Product[]
+    94→    totalPrice: number
+    95→    bundlePrice: number
+    96→  }>
+    97→
+    98→  const handleAddBundle = (bundle: typeof bundles[number]) => {
+    99→    bundle.products.forEach((p) => {
+   100→      addItem({
+   101→        productId: p.id,
+   102→        slug: p.slug,
+   103→        name: p.name,
+   104→        price: p.price,
+   105→        salePrice: p.salePrice,
+   106→        image: p.images?.[0]?.url || '',
+   107→        weight: p.weight,
+   108→      })
+   109→    })
+   110→    toast.success(`${bundle.title} ditambahkan ke keranjang`, {
+   111→      description: `${bundle.products.length} produk • Hemat ${formatRupiah(bundle.totalPrice - bundle.bundlePrice)}`,
+   112→    })
+   113→  }
+   114→
+   115→  const handleNewsletter = (e: React.FormEvent) => {
+   116→    e.preventDefault()
+   117→    if (!emailValue) return
+   118→    toast.success('Berhasil daftar newsletter! 🎁', {
+   119→      description: 'Voucher Rp 25.000 akan dikirim ke email Anda.',
+   120→    })
+   121→    setEmailValue('')
+   122→  }
+   123→
+   124→  // Big pet-type cards (Kucing + Anjing) + small row (Burung, Ikan, Hewan Kecil)
+   125→  const mainPetTypes = petTypes.filter((p) => ['kucing', 'anjing'].includes(p.slug))
+   126→  const otherPetTypes = petTypes.filter((p) => !['kucing', 'anjing'].includes(p.slug))
+   127→
+   128→  const petEmoji: Record<string, string> = {
+   129→    kucing: '🐈', anjing: '🐕', burung: '🐦', ikan: '🐟', 'hewan-kecil': '🐰',
+   130→  }
+   131→  const petGradient: Record<string, string> = {
+   132→    kucing: 'from-orange-100 to-rose-100',
+   133→    anjing: 'from-violet-100 to-sky-100',
+   134→    burung: 'from-amber-100 to-yellow-100',
+   135→    ikan: 'from-cyan-100 to-blue-100',
+   136→    'hewan-kecil': 'from-emerald-100 to-teal-100',
+   137→  }
+   138→
+   139→  return (
+   140→    <div className="overflow-x-hidden">
+   141→      {/* ==================== HERO — Zesty Paws-style split ==================== */}
+   142→      <section className="relative overflow-hidden gradient-mesh-warm">
+   143→        {/* Decorative blurred orbs */}
+   144→        <div className="pointer-events-none absolute -right-24 -top-24 size-96 rounded-full bg-primary/15 blur-3xl" />
+   145→        <div className="pointer-events-none absolute -bottom-24 -left-24 size-96 rounded-full bg-secondary/15 blur-3xl" />
+   146→
+   147→        <div className="container-page relative grid items-center gap-6 py-8 md:grid-cols-2 md:py-12 lg:py-16">
+   148→          {/* LEFT: Copy + CTA */}
+   149→          <motion.div
+   150→            initial={{ opacity: 0, y: 16 }}
+   151→            animate={{ opacity: 1, y: 0 }}
+   152→            transition={{ duration: 0.5 }}
+   153→            className="space-y-4 text-foreground"
+   154→          >
+   155→            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
+   156→              <PawPrint className="size-3" /> Marketplace Suplemen Hewan #1
+   157→            </span>
+   158→
+   159→            <h1 className="text-balance text-3xl font-extrabold leading-[1.05] tracking-tight sm:text-4xl lg:text-5xl">
+   160→              Sehatkan Hewan,<br />
+   161→              <span className="gradient-brand-text">Bahagiakan Hati</span>
+   162→            </h1>
+   163→
+   164→            <p className="max-w-md text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
+   165→              Marketplace multi-brand untuk suplemen & vitamin hewan peliharaan.
+   166→              <span className="font-semibold text-foreground"> 15+ brand premium</span>, BPOM terdaftar,
+   167→              konsultasi dokter hewan gratis.
+   168→            </p>
+   169→
+   170→            {/* CTAs */}
+   171→            <div className="flex flex-wrap items-center gap-2.5 pt-1">
+   172→              <Button
+   173→                size="lg"
+   174→                onClick={() => navigate('/shop?pet=anjing')}
+   175→                className="h-11 gap-2 bg-primary px-6 text-sm font-bold shadow-md hover:bg-primary/90"
+   176→              >
+   177→                🐕 Belanja untuk Anjing
+   178→              </Button>
+   179→              <Button
+   180→                size="lg"
+   181→                variant="outline"
+   182→                onClick={() => navigate('/shop?pet=kucing')}
+   183→                className="h-11 gap-2 border-secondary/30 bg-card px-6 text-sm font-semibold text-secondary hover:bg-secondary/5 hover:text-secondary"
+   184→              >
+   185→                🐈 Belanja untuk Kucing
+   186→              </Button>
+   187→            </div>
+   188→
+   189→            {/* Trust stats below CTAs */}
+   190→            <div className="grid grid-cols-2 gap-3 pt-4 sm:grid-cols-4">
+   191→              {[
+   192→                { v: '50rb+', l: 'Pelanggan' },
+   193→                { v: '15+', l: 'Brand Premium' },
+   194→                { v: '4.9★', l: 'Rating' },
+   195→                { v: '24/7', l: 'Konsul Vet' },
+   196→              ].map((s) => (
+   197→                <div key={s.l} className="text-center sm:text-left">
+   198→                  <div className="text-lg font-extrabold gradient-brand-text sm:text-2xl">{s.v}</div>
+   199→                  <div className="text-[10px] text-muted-foreground sm:text-xs">{s.l}</div>
+   200→                </div>
+   201→              ))}
+   202→            </div>
+   203→          </motion.div>
+   204→
+   205→          {/* RIGHT: Hero image with floating cards */}
+   206→          <motion.div
+   207→            initial={{ opacity: 0, scale: 0.95 }}
+   208→            animate={{ opacity: 1, scale: 1 }}
+   209→            transition={{ duration: 0.6, delay: 0.1 }}
+   210→            className="relative h-64 sm:h-80 md:h-96"
+   211→          >
+   212→            <div className="relative h-full w-full overflow-hidden rounded-3xl shadow-2xl ring-4 ring-white/60">
+   213→              <OptImage
+   214→                src="/hero-pets.webp"
+   215→                alt="Anima Companion — healthy pets marketplace"
+   216→                fill
+   217→                priority
+   218→                sizes="(max-width: 768px) 100vw, 50vw"
+   219→                className="object-cover"
+   220→              />
+   221→              {/* Soft overlay gradient */}
+   222→              <div className="absolute inset-0 bg-gradient-to-tr from-primary/10 via-transparent to-secondary/10" />
+   223→            </div>
+   224→
+   225→            {/* Floating card — top-right: rating */}
+   226→            <motion.div
+   227→              animate={{ y: [0, -8, 0] }}
+   228→              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+   229→              className="absolute -right-2 top-4 flex items-center gap-2 rounded-2xl bg-card/95 p-2.5 shadow-xl ring-1 ring-border/30 backdrop-blur-sm sm:-right-4 sm:top-6"
+   230→            >
+   231→              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100">
+   232→                <Star className="size-5 fill-amber-400 text-amber-400" />
+   233→              </div>
+   234→              <div>
+   235→                <p className="text-xs font-bold text-foreground">4.9★ 12rb+ ulasan</p>
+   236→                <p className="text-[10px] text-muted-foreground">Rating pelanggan</p>
+   237→              </div>
+   238→            </motion.div>
+   239→
+   240→            {/* Floating card — bottom-left: BPOM */}
+   241→            <motion.div
+   242→              animate={{ y: [0, 8, 0] }}
+   243→              transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
+   244→              className="absolute -left-2 bottom-4 flex items-center gap-2 rounded-2xl bg-card/95 p-2.5 shadow-xl ring-1 ring-border/30 backdrop-blur-sm sm:-left-4 sm:bottom-8"
+   245→            >
+   246→              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100">
+   247→                <Shield className="size-5 text-emerald-600" />
+   248→              </div>
+   249→              <div>
+   250→                <p className="text-xs font-bold text-foreground">BPOM Terdaftar</p>
+   251→                <p className="text-[10px] text-muted-foreground">100% Original</p>
+   252→              </div>
+   253→            </motion.div>
+   254→
+   255→            {/* Floating card — top-left small: vet */}
+   256→            <motion.div
+   257→              animate={{ y: [0, -6, 0] }}
+   258→              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+   259→              className="absolute left-4 top-4 hidden items-center gap-2 rounded-2xl bg-card/95 p-2.5 shadow-xl ring-1 ring-border/30 backdrop-blur-sm sm:flex"
+   260→            >
+   261→              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/10">
+   262→                <MessageCircle className="size-5 text-secondary" />
+   263→              </div>
+   264→              <div>
+   265→                <p className="text-xs font-bold text-foreground">Gratis Konsul Vet</p>
+   266→                <p className="text-[10px] text-muted-foreground">Chat WhatsApp</p>
+   267→              </div>
+   268→            </motion.div>
+   269→          </motion.div>
+   270→        </div>
+   271→      </section>
+   272→
+   273→      {/* ==================== SHOP BY PET TYPE ==================== */}
+   274→      <section className="container-page py-10 md:py-14">
+   275→        <SectionHeader
+   276→          eyebrow="Belanja Berdasarkan Hewan"
+   277→          eyebrowIcon={<PawPrint className="size-3" />}
+   278→          title={<>Pilih <span className="gradient-brand-text">Hewan Peliharaanmu</span></>}
+   279→          subtitle="Kami punya suplemen khusus untuk setiap jenis hewan — formula disesuaikan kebutuhan nutrisi masing-masing."
+   280→          className="mb-8"
+   281→        />
+   282→
+   283→        {/* Big cards: Kucing & Anjing */}
+   284→        <div className="grid gap-4 sm:grid-cols-2">
+   285→          {mainPetTypes.map((pet, i) => (
+   286→            <Reveal key={pet.id} delay={i * 0.1}>
+   287→              <button
+   288→                onClick={() => navigate(`/shop?pet=${pet.slug}`)}
+   289→                className={`group relative flex w-full items-center overflow-hidden rounded-3xl bg-gradient-to-br ${petGradient[pet.slug]} p-6 text-left transition-all hover:shadow-lg sm:p-8`}
+   290→              >
+   291→                <div className="relative z-10 flex-1">
+   292→                  <span className="text-4xl sm:text-5xl">{petEmoji[pet.slug]}</span>
+   293→                  <h3 className="mt-3 text-xl font-bold text-foreground sm:text-2xl">
+   294→                    Untuk {pet.name}
+   295→                  </h3>
+   296→                  <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+   297→                    {pet._count?.products || 0} produk tersedia
+   298→                  </p>
+   299→                  <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary">
+   300→                    Jelajahi Produk <ArrowRight className="size-3 transition-transform group-hover:translate-x-1" />
+   301→                  </span>
+   302→                </div>
+   303→                <span className="pointer-events-none absolute -right-4 -top-4 text-[120px] opacity-20 transition-transform group-hover:scale-110 sm:text-[180px]">
+   304→                  {petEmoji[pet.slug]}
+   305→                </span>
+   306→              </button>
+   307→            </Reveal>
+   308→          ))}
+   309→        </div>
+   310→
+   311→        {/* Small row: Burung, Ikan, Hewan Kecil */}
+   312→        {otherPetTypes.length > 0 && (
+   313→          <div className="mt-4 grid grid-cols-3 gap-3 sm:gap-4">
+   314→            {otherPetTypes.map((pet, i) => (
+   315→              <Reveal key={pet.id} delay={0.1 + i * 0.05}>
+   316→                <button
+   317→                  onClick={() => navigate(`/shop?pet=${pet.slug}`)}
+   318→                  className={`group flex w-full flex-col items-center gap-2 rounded-2xl bg-gradient-to-br ${petGradient[pet.slug]} p-3 text-center transition-all hover:shadow-md sm:p-4`}
+   319→                >
+   320→                  <span className="text-2xl sm:text-3xl">{petEmoji[pet.slug]}</span>
+   321→                  <span className="text-xs font-semibold text-foreground sm:text-sm">{pet.name}</span>
+   322→                  <span className="text-[10px] text-muted-foreground">{pet._count?.products || 0} produk</span>
+   323→                </button>
+   324→              </Reveal>
+   325→            ))}
+   326→          </div>
+   327→        )}
+   328→      </section>
+   329→
+   330→      {/* ==================== BEST SELLERS ==================== */}
+   331→      <section className="container-page py-10 md:py-14">
+   332→        <SectionHeader
+   333→          eyebrow="Paling Dicari"
+   334→          eyebrowIcon={<Star className="size-3 fill-amber-400 text-amber-400" />}
+   335→          title={<>Best <span className="gradient-brand-text">Seller</span> Bulan Ini</>}
+   336→          subtitle="Produk yang paling banyak dibeli dan diulas positif oleh pelanggan kami."
+   337→          action={
+   338→            <Button variant="outline" size="sm" onClick={() => navigate('/shop?bestSeller=1')} className="gap-1.5">
+   339→              Lihat Semua <ArrowRight className="size-4" />
+   340→            </Button>
+   341→          }
+   342→          className="mb-8"
+   343→        />
+   344→
+   345→        {bestSellers.length === 0 ? (
+   346→          <div className="rounded-2xl border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
+   347→            Memuat produk best seller...
+   348→          </div>
+   349→        ) : (
+   350→          <ProductScrollRow products={bestSellers} />
+   351→        )}
+   352→      </section>
+   353→
+   354→      {/* ==================== SUBSCRIBE & SAVE BANNER ==================== */}
+   355→      <section className="container-page py-6 md:py-10">
+   356→        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 p-6 text-white shadow-xl sm:p-10">
+   357→          {/* Decorative orbs */}
+   358→          <div className="pointer-events-none absolute -right-12 -top-12 size-64 rounded-full bg-white/10 blur-3xl" />
+   359→          <div className="pointer-events-none absolute -bottom-12 -left-12 size-64 rounded-full bg-amber-300/20 blur-3xl" />
+   360→
+   361→          <div className="relative grid items-center gap-6 md:grid-cols-2">
+   362→            <div className="space-y-3">
+   363→              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-[11px] font-bold uppercase tracking-wider backdrop-blur-sm">
+   364→                <Repeat className="size-3" /> Subscribe & Save
+   365→              </span>
+   366→              <h2 className="text-balance text-2xl font-extrabold leading-tight sm:text-3xl">
+   367→                Hemat 15% + Gratis Ongkir Setiap Pesanan
+   368→              </h2>
+   369→              <p className="max-w-md text-sm text-white/90 sm:text-base">
+   370→                Langganan berkala — produk dikirim otomatis tiap bulan. Bisa pause, skip, atau
+   371→                cancel kapan saja. Tanpa kontrak.
+   372→              </p>
+   373→              <div className="flex flex-wrap gap-3 pt-2">
+   374→                <Button
+   375→                  onClick={() => navigate('/shop?subscribe=1')}
+   376→                  className="bg-white text-emerald-700 hover:bg-white/90"
+   377→                  size="lg"
+   378→                >
+   379→                  Lihat Produk Subscribe
+   380→                </Button>
+   381→                <Button
+   382→                  onClick={() => navigate('/kontak')}
+   383→                  variant="outline"
+   384→                  className="border-white/40 bg-transparent text-white hover:bg-white/10"
+   385→                  size="lg"
+   386→                >
+   387→                  Pelajari Lebih Lanjut
+   388→                </Button>
+   389→              </div>
+   390→            </div>
+   391→
+   392→            <div className="grid grid-cols-2 gap-3">
+   393→              {[
+   394→                { icon: Repeat, t: 'Hemat 15%', s: 'Setiap pesanan berulang' },
+   395→                { icon: Truck, t: 'Gratis Ongkir', s: 'Untuk subscriber aktif' },
+   396→                { icon: Clock, t: 'Flexible', s: 'Pause / cancel kapan saja' },
+   397→                { icon: Gift, t: 'Bonus Voucher', s: 'Reward tiap 3 bulan' },
+   398→              ].map((b) => {
+   399→                const Icon = b.icon
+   400→                return (
+   401→                  <div key={b.t} className="rounded-2xl bg-white/15 p-4 backdrop-blur-sm">
+   402→                    <Icon className="size-5 text-amber-200" />
+   403→                    <p className="mt-2 text-sm font-bold">{b.t}</p>
+   404→                    <p className="text-[11px] text-white/80">{b.s}</p>
+   405→                  </div>
+   406→                )
+   407→              })}
+   408→            </div>
+   409→          </div>
+   410→        </div>
+   411→      </section>
+   412→
+   413→      {/* ==================== SUBSCRIBE PRODUCTS ==================== */}
+   414→      {subscribeProducts.length > 0 && (
+   415→        <section className="container-page py-10 md:py-14">
+   416→          <SectionHeader
+   417→            eyebrow="Subscribe & Save Eligible"
+   418→            eyebrowIcon={<Repeat className="size-3 text-emerald-500" />}
+   419→            title={<>Produk <span className="gradient-brand-text">Subscribe</span></>}
+   420→            subtitle="Produk-produk yang tersedia untuk program Subscribe & Save hemat 15%."
+   421→            action={
+   422→              <Button variant="outline" size="sm" onClick={() => navigate('/shop?subscribe=1')} className="gap-1.5">
+   423→                Lihat Semua <ArrowRight className="size-4" />
+   424→              </Button>
+   425→            }
+   426→            className="mb-8"
+   427→          />
+   428→          <ProductScrollRow products={subscribeProducts.slice(0, 4)} />
+   429→        </section>
+   430→      )}
+   431→
+   432→      {/* ==================== SHOP BY BENEFIT (PROBLEM) ==================== */}
+   433→      <section className="bg-muted/30 py-10 md:py-14">
+   434→        <div className="container-page">
+   435→          <SectionHeader
+   436→            eyebrow="Belanja Berdasarkan Manfaat"
+   437→            eyebrowIcon={<Heart className="size-3 text-rose-500" />}
+   438→            title={<>Shop by <span className="gradient-brand-text">Benefit</span></>}
+   439→            subtitle="Pilih produk sesuai kebutuhan kesehatan hewan peliharaanmu."
+   440→            action={
+   441→              <Button variant="outline" size="sm" onClick={() => navigate('/problem')} className="gap-1.5">
+   442→                Semua Kategori <ArrowRight className="size-4" />
+   443→              </Button>
+   444→            }
+   445→            className="mb-8"
+   446→          />
+   447→
+   448→          <Stagger className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4">
+   449→            {problems.map((problem) => {
+   450→              const Icon = PROBLEM_ICONS[problem.slug] || Shield
+   451→              const color = problem.color || '#F97316'
+   452→              return (
+   453→                <StaggerItem key={problem.id}>
+   454→                  <button
+   455→                    onClick={() => navigate(`/shop?problem=${problem.slug}`)}
+   456→                    className="group relative flex w-full flex-col items-start gap-2 overflow-hidden rounded-2xl border border-border/60 bg-card p-4 text-left transition-all hover:shadow-md hover:border-border"
+   457→                  >
+   458→                    {/* Radial color glow */}
+   459→                    <div
+   460→                      className="pointer-events-none absolute -right-8 -top-8 size-24 rounded-full opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-30"
+   461→                      style={{ background: color }}
+   462→                    />
+   463→                    <div
+   464→                      className="flex size-10 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-110"
+   465→                      style={{ backgroundColor: `${color}1a`, color }}
+   466→                    >
+   467→                      <Icon className="size-5" />
+   468→                    </div>
+   469→                    <div>
+   470→                      <h3 className="text-sm font-semibold text-foreground">{problem.name}</h3>
+   471→                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+   472→                        {problem._count?.products || 0} produk
+   473→                      </p>
+   474→                    </div>
+   475→                  </button>
+   476→                </StaggerItem>
+   477→              )
+   478→            })}
+   479→          </Stagger>
+   480→        </div>
+   481→      </section>
+   482→
+   483→      {/* ==================== FEATURED BRANDS ==================== */}
+   484→      <section className="container-page py-10 md:py-14">
+   485→        <SectionHeader
+   486→          eyebrow="Brand Pilihan"
+   487→          eyebrowIcon={<BadgeCheck className="size-3 text-sky-500" />}
+   488→          title={<>Brand <span className="gradient-brand-text">Premium</span> Kami</>}
+   489→          subtitle="Brand-brand terkurasi dengan kualitas terjamin dan BPOM terdaftar."
+   490→          className="mb-8"
+   491→        />
+   492→
+   493→        <Stagger className="flex gap-3 overflow-x-auto pb-4 [scrollbar-width:thin]">
+   494→          {sellers.map((seller) => (
+   495→            <StaggerItem key={seller.id}>
+   496→              <button
+   497→                onClick={() => navigate(`/shop?brand=${seller.slug}`)}
+   498→                className="group flex w-56 shrink-0 flex-col gap-3 rounded-2xl border border-border/60 bg-card p-4 text-left transition-all hover:shadow-md hover:border-border"
+   499→              >
+   500→                <div className="flex items-center gap-3">
+   501→                  <div
+   502→                    className="flex size-12 shrink-0 items-center justify-center rounded-xl text-lg font-bold text-white shadow-md"
+   503→                    style={{ background: `linear-gradient(135deg, ${sellerColor(seller.slug)}, ${sellerColor(seller.slug, true)})` }}
+   504→                  >
+   505→                    {seller.name.charAt(0)}
+   506→                  </div>
+   507→                  <div className="min-w-0 flex-1">
+   508→                    <div className="flex items-center gap-1">
+   509→                      <h3 className="truncate text-sm font-bold text-foreground">{seller.name}</h3>
+   510→                      {seller.isVerified && (
+   511→                        <BadgeCheck className="size-4 shrink-0 text-sky-500" />
+   512→                      )}
+   513→                    </div>
+   514→                    <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+   515→                      <Star className="size-3 fill-amber-400 text-amber-400" />
+   516→                      <span className="font-medium text-foreground">{seller.rating.toFixed(1)}</span>
+   517→                      <span>· {seller._count?.products || 0} produk</span>
+   518→                    </div>
+   519→                  </div>
+   520→                </div>
+   521→                {seller.tagline && (
+   522→                  <p className="line-clamp-2 text-[11px] text-muted-foreground">{seller.tagline}</p>
+   523→                )}
+   524→                <span className="mt-auto inline-flex items-center gap-1 text-xs font-semibold text-primary">
+   525→                  Jelajahi Produk <ArrowRight className="size-3 transition-transform group-hover:translate-x-1" />
+   526→                </span>
+   527→              </button>
+   528→            </StaggerItem>
+   529→          ))}
+   530→        </Stagger>
+   531→      </section>
+   532→
+   533→      {/* ==================== NEW ARRIVALS ==================== */}
+   534→      <section className="bg-muted/30 py-10 md:py-14">
+   535→        <div className="container-page">
+   536→          <SectionHeader
+   537→            eyebrow="Produk Baru"
+   538→            eyebrowIcon={<Sparkles className="size-3 text-violet-500" />}
+   539→            title={<>New <span className="gradient-brand-text">Arrivals</span></>}
+   540→            subtitle="Produk terbaru yang baru saja masuk di marketplace kami."
+   541→            action={
+   542→              <Button variant="outline" size="sm" onClick={() => navigate('/shop?new=1')} className="gap-1.5">
+   543→                Lihat Semua <ArrowRight className="size-4" />
+   544→              </Button>
+   545→            }
+   546→            className="mb-8"
+   547→          />
+   548→
+   549→          {newProducts.length === 0 ? (
+   550→            <div className="rounded-2xl border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
+   551→              Memuat produk baru...
+   552→            </div>
+   553→          ) : (
+   554→            <ProductScrollRow products={newProducts} />
+   555→          )}
+   556→        </div>
+   557→      </section>
+   558→
+   559→      {/* ==================== BUNDLES ==================== */}
+   560→      {bundles.length > 0 && (
+   561→        <section className="container-page py-10 md:py-14">
+   562→          <SectionHeader
+   563→            eyebrow="Paket Hemat"
+   564→            eyebrowIcon={<Package className="size-3 text-amber-500" />}
+   565→            title={<>Bundling <span className="gradient-brand-text">Hemat</span></>}
+   566→            subtitle="Beli paket bundling dan hemat sampai 30%. Produk terkurasi sesuai kebutuhan."
+   567→            className="mb-8"
+   568→          />
+   569→
+   570→          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+   571→            {bundles.map((bundle, i) => (
+   572→              <Reveal key={bundle.title} delay={i * 0.08}>
+   573→                <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm transition-all hover:shadow-md">
+   574→                  <div className={`relative flex h-24 items-center justify-center bg-gradient-to-br ${bundle.gradient}`}>
+   575→                    <span className="text-4xl">{bundle.emoji}</span>
+   576→                    <span className="absolute right-2 top-2 rounded-md bg-white px-2 py-0.5 text-[10px] font-bold text-rose-600 shadow-sm">
+   577→                      {bundle.tag}
+   578→                    </span>
+   579→                  </div>
+   580→                  <div className="flex flex-1 flex-col p-3">
+   581→                    <h3 className="text-sm font-bold text-foreground">{bundle.title}</h3>
+   582→                    <p className="mt-1 text-[11px] text-muted-foreground">
+   583→                      {bundle.products.length} produk dalam paket
+   584→                    </p>
+   585→                    <div className="mt-2 flex items-baseline gap-1">
+   586→                      <span className="text-base font-bold text-primary">
+   587→                        {formatRupiah(bundle.bundlePrice)}
+   588→                      </span>
+   589→                      <span className="text-[11px] text-muted-foreground line-through">
+   590→                        {formatRupiah(bundle.totalPrice)}
+   591→                      </span>
+   592→                    </div>
+   593→                    <Button
+   594→                      size="sm"
+   595→                      className="mt-3 w-full gap-1.5"
+   596→                      onClick={() => handleAddBundle(bundle)}
+   597→                    >
+   598→                      <ShoppingCart className="size-3.5" /> Tambah Paket
+   599→                    </Button>
+   600→                  </div>
+   601→                </div>
+   602→              </Reveal>
+   603→            ))}
+   604→          </div>
+   605→        </section>
+   606→      )}
+   607→
+   608→      {/* ==================== VET SECTION ==================== */}
+   609→      <VetSection />
+   610→
+   611→      {/* ==================== TESTIMONIALS ==================== */}
+   612→      <section className="container-page py-10 md:py-14">
+   613→        <SectionHeader
+   614→          eyebrow="Kata Pelanggan"
+   615→          eyebrowIcon={<Heart className="size-3 text-rose-500" />}
+   616→          title={<>Apa Kata <span className="gradient-brand-text">Pelanggan</span> Kami</>}
+   617→          subtitle="Ribuan pelanggan telah mempercayakan kesehatan hewan peliharaan mereka pada kami."
+   618→          align="center"
+   619→          className="mb-10"
+   620→        />
+   621→
+   622→        <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+   623→          {testimonials.map((t) => (
+   624→            <StaggerItem key={t.id}>
+   625→              <div className="flex h-full flex-col gap-3 rounded-2xl border border-border/60 bg-card p-5">
+   626→                <div className="flex items-center gap-0.5">
+   627→                  {Array.from({ length: 5 }).map((_, i) => (
+   628→                    <Star
+   629→                      key={i}
+   630→                      className={`size-3.5 ${i < t.rating ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/30'}`}
+   631→                    />
+   632→                  ))}
+   633→                </div>
+   634→                <p className="flex-1 text-sm leading-relaxed text-foreground/90">
+   635→                  &ldquo;{t.message}&rdquo;
+   636→                </p>
+   637→                <div className="flex items-center gap-2 border-t border-border/60 pt-3">
+   638→                  <div className="flex size-9 items-center justify-center rounded-full gradient-brand text-xs font-bold text-white">
+   639→                    {t.name.charAt(0)}
+   640→                  </div>
+   641→                  <div>
+   642→                    <p className="text-xs font-semibold text-foreground">{t.name}</p>
+   643→                    <p className="text-[10px] text-muted-foreground">{t.petName} · {t.petType}</p>
+   644→                  </div>
+   645→                </div>
+   646→              </div>
+   647→            </StaggerItem>
+   648→          ))}
+   649→        </Stagger>
+   650→      </section>
+   651→
+   652→      {/* ==================== NEWSLETTER CTA ==================== */}
+   653→      <section className="container-page pb-12 md:pb-16">
+   654→        <div className="relative overflow-hidden rounded-3xl gradient-brand p-6 text-center text-white shadow-xl sm:p-10">
+   655→          <div className="pointer-events-none absolute -right-12 -top-12 size-64 rounded-full bg-white/10 blur-3xl" />
+   656→          <div className="pointer-events-none absolute -bottom-12 -left-12 size-64 rounded-full bg-amber-300/20 blur-3xl" />
+   657→
+   658→          <div className="relative mx-auto max-w-xl space-y-3">
+   659→            <Gift className="mx-auto size-10 text-amber-200" />
+   660→            <h2 className="text-balance text-2xl font-extrabold sm:text-3xl">
+   661→              Daftar Newsletter & Dapat Rp 25.000
+   662→            </h2>
+   663→            <p className="text-sm text-white/90 sm:text-base">
+   664→              Berlangganan newsletter kami untuk info promo, tips kesehatan hewan, dan voucher
+   665→              spesial. Voucher Rp 25.000 langsung dikirim ke email Anda.
+   666→            </p>
+   667→            <form onSubmit={handleNewsletter} className="mx-auto mt-4 flex max-w-md flex-col gap-2 sm:flex-row">
+   668→              <Input
+   669→                type="email"
+   670→                required
+   671→                placeholder="email@kamu.com"
+   672→                value={emailValue}
+   673→                onChange={(e) => setEmailValue(e.target.value)}
+   674→                className="border-white/30 bg-white/95 text-foreground placeholder:text-muted-foreground"
+   675→              />
+   676→              <Button
+   677→                type="submit"
+   678→                variant="secondary"
+   679→                className="gap-1.5 bg-white text-primary hover:bg-white/90"
+   680→              >
+   681→                <Mail className="size-4" /> Klaim Voucher
+   682→              </Button>
+   683→            </form>
+   684→            <p className="text-[11px] text-white/70">
+   685→              Dengan mendaftar, Anda menyetujui kebijakan privasi kami.
+   686→            </p>
+   687→          </div>
+   688→        </div>
+   689→      </section>
+   690→    </div>
+   691→  )
+   692→}
+   693→
+   694→/* ============== Helpers ============== */
+   695→
+   696→/** Horizontal scroll row of products with arrow controls (desktop) */
+   697→function ProductScrollRow({ products }: { products: Product[] }) {
+   698→  const scrollRef = useRef<HTMLDivElement>(null)
+   699→
+   700→  const scrollBy = (dir: 1 | -1) => {
+   701→    if (!scrollRef.current) return
+   702→    const amount = Math.min(scrollRef.current.clientWidth * 0.8, 600)
+   703→    scrollRef.current.scrollBy({ left: dir * amount, behavior: 'smooth' })
+   704→  }
+   705→
+   706→  return (
+   707→    <div className="relative">
+   708→      {/* Arrows (desktop only) */}
+   709→      <button
+   710→        onClick={() => scrollBy(-1)}
+   711→        className="absolute -left-3 top-1/2 z-10 hidden -translate-y-1/2 items-center justify-center rounded-full border border-border bg-card p-2 shadow-md transition-colors hover:bg-accent lg:flex"
+   712→        aria-label="Scroll left"
+   713→      >
+   714→        <ChevronLeft className="size-5" />
+   715→      </button>
+   716→      <button
+   717→        onClick={() => scrollBy(1)}
+   718→        className="absolute -right-3 top-1/2 z-10 hidden -translate-y-1/2 items-center justify-center rounded-full border border-border bg-card p-2 shadow-md transition-colors hover:bg-accent lg:flex"
+   719→        aria-label="Scroll right"
+   720→      >
+   721→        <ChevronRight className="size-5" />
+   722→      </button>
+   723→
+   724→      <div
+   725→        ref={scrollRef}
+   726→        className="flex gap-3 overflow-x-auto pb-4 [scrollbar-width:thin] sm:gap-4"
+   727→      >
+   728→        {products.map((p) => (
+   729→          <div key={p.id} className="w-36 shrink-0 sm:w-48 md:w-52">
+   730→            <ProductCard product={p} />
+   731→          </div>
+   732→        ))}
+   733→      </div>
+   734→    </div>
+   735→  )
+   736→}
+   737→
+   738→function sellerColor(slug: string, alt: boolean = false): string {
+   739→  const palette: Record<string, [string, string]> = {
+   740→    'zesty-paws': ['#F97316', '#FB923C'],
+   741→    'native-pet': ['#22C55E', '#10B981'],
+   742→    'vetri-science': ['#0EA5E9', '#06B6D4'],
+   743→    'pet-honesty': ['#EF4444', '#F43F5E'],
+   744→    'anima-companion': ['#7C3AED', '#A855F7'],
+   745→  }
+   746→  const pair = palette[slug] || ['#F97316', '#7C3AED']
+   747→  return alt ? pair[1] : pair[0]
+   748→}
+   749→
