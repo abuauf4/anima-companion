@@ -1,18 +1,19 @@
 'use client'
 
 import { useHashRouter } from '@/lib/router'
-import NextImage from 'next/image'
 
 /**
  * Anima Companion Logo
  *
- * Uses the official brand logo image (/anima-logo.jpg) — circular paw print
- * (4 purple toe pads + orange central pad) on white background with subtle
- * gray decorative lines.
+ * Uses SVG logo (/anima-logo.svg) — circular white background with paw print
+ * (4 purple toe pads + orange central pad with white heart cutout) + subtle
+ * decorative lines.
  *
- * The JPEG doesn't support transparency, so the container uses rounded-full
- * overflow-hidden to clip the square image into a circle — hiding the black
- * corners that would otherwise appear when the logo sits on a colored bg.
+ * SVG advantages over JPEG:
+ * - Scalable (no pixelation on Retina/4K displays)
+ * - Smaller file (~1.5K vs 10K JPEG)
+ * - Crisp at any size
+ * - No need for rounded-full overflow-hidden hack (SVG has transparency)
  *
  * Wordmark: "ANIMA COMPANION" — uppercase, bold, sans-serif.
  *   "ANIMA" in foreground color, "COMPANION" in purple.
@@ -26,16 +27,16 @@ export function Logo({ className = '', showTagline = false }: { className?: stri
       className={`group flex items-center gap-2.5 ${className}`}
       aria-label="Anima Companion — ke beranda"
     >
-      {/* Logo image — circular, no black container */}
-      <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm ring-1 ring-border/30 transition-transform group-hover:scale-105">
-        <NextImage
-          src="/anima-logo.jpg"
+      {/* Logo SVG — scalable, crisp, lightweight */}
+      <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-border/30 transition-transform group-hover:scale-105">
+        <img
+          src="/anima-logo.svg"
           alt="Anima Companion logo"
           width={40}
           height={40}
-          className="h-full w-full object-cover"
-          priority
-          unoptimized
+          className="h-full w-full"
+          // priority loading for above-the-fold logo
+          loading="eager"
         />
       </span>
 
