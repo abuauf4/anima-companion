@@ -5,8 +5,8 @@ import { useHashRouter } from '@/lib/router'
 import { useCartStore, useWishlistStore } from '@/lib/store'
 import { Logo } from './Logo'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { SearchAutocomplete } from '@/components/common/SearchAutocomplete'
 import {
   ShoppingCart, Search, User, X, Heart,
   ChevronDown, PawPrint, Shield,
@@ -57,12 +57,6 @@ export function Navbar() {
     }
   }, [route])
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    navigate(`/shop?search=${encodeURIComponent(searchValue)}`)
-    setSearchOpen(false)
-  }
-
   const goShop = (key: string, value: string) => {
     navigate(`/shop?${key}=${encodeURIComponent(value)}`)
   }
@@ -73,19 +67,18 @@ export function Navbar() {
       <div className="container-page flex h-16 items-center gap-4 md:gap-6">
         <Logo />
 
-        {/* Desktop search */}
-        <form onSubmit={handleSearch} className="hidden flex-1 max-w-md md:flex">
-          <div className="relative w-full">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Cari suplemen, vitamin, perawatan..."
-              value={searchValue}
-              onChange={(e) => setSearchValue(e.target.value)}
-              className="pl-9 bg-card"
-            />
-          </div>
-        </form>
+        {/* Desktop search with autocomplete */}
+        <div className="hidden flex-1 max-w-md md:flex">
+          <SearchAutocomplete
+            value={searchValue}
+            onChange={setSearchValue}
+            onSubmit={(q) => {
+              navigate(`/shop?search=${encodeURIComponent(q)}`)
+              setSearchOpen(false)
+            }}
+            variant="desktop"
+          />
+        </div>
 
         {/* Desktop nav with mega-menu */}
         <nav className="hidden items-center gap-1 md:flex">
@@ -268,19 +261,18 @@ export function Navbar() {
       {/* Mobile search sheet */}
       {searchOpen && (
         <div className="md:hidden border-t border-border bg-card">
-          <form onSubmit={handleSearch} className="container-page py-3">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Cari produk..."
-                value={searchValue}
-                onChange={(e) => setSearchValue(e.target.value)}
-                className="pl-9"
-                autoFocus
-              />
-            </div>
-          </form>
+          <div className="container-page py-3">
+            <SearchAutocomplete
+              value={searchValue}
+              onChange={setSearchValue}
+              onSubmit={(q) => {
+                navigate(`/shop?search=${encodeURIComponent(q)}`)
+                setSearchOpen(false)
+              }}
+              variant="mobile"
+              autoFocus
+            />
+          </div>
         </div>
       )}
     </header>
