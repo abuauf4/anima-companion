@@ -496,13 +496,13 @@ function PetTypeTiltCard({
   const x = useMotionValue(0)
   const y = useMotionValue(0)
 
-  // Derive rotation from mouse position — max ±8 degrees at the edges.
-  const rotateX = useTransform(y, [-50, 50], [8, -8])
-  const rotateY = useTransform(x, [-50, 50], [-8, 8])
+  // Derive rotation from mouse position — subtle max ±3 degrees (was ±8, too dramatic).
+  const rotateX = useTransform(y, [-50, 50], [3, -3])
+  const rotateY = useTransform(x, [-50, 50], [-3, 3])
 
-  // Paw print parallax — moves opposite to tilt (half magnitude) for depth.
-  const pawX = useTransform(x, [-50, 50], [10, -10])
-  const pawY = useTransform(y, [-50, 50], [10, -10])
+  // Paw print parallax — subtle, opposite direction (was ±10, now ±4).
+  const pawX = useTransform(x, [-50, 50], [4, -4])
+  const pawY = useTransform(y, [-50, 50], [4, -4])
 
   const handleMouseMove = (e: React.MouseEvent<HTMLButtonElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -828,8 +828,9 @@ function CarouselCard({
       // Normalised 0..1 — 1 at center, 0 at the container's edge
       const maxDistance = cRect.width / 2
       const ratio = Math.max(0, Math.min(1, 1 - distance / maxDistance))
-      scale.set(0.92 + 0.08 * ratio)
-      opacity.set(0.5 + 0.5 * ratio)
+      // Subtle scale/opacity — not over-the-top (user feedback: don't be too dramatic)
+      scale.set(0.97 + 0.03 * ratio)
+      opacity.set(0.85 + 0.15 * ratio)
     }
 
     const onScroll = () => {
