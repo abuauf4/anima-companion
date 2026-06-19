@@ -1,0 +1,590 @@
+     1→     1→'use client'
+     2→     2→import { useEffect, useState } from 'react'
+     3→     3→import { useHashRouter } from '@/lib/router'
+     4→     4→import { Button } from '@/components/ui/button'
+     5→     5→import { ProductCard } from '@/components/product/ProductCard'
+     6→     6→import { Image as OptImage } from '@/components/common/Image'
+     7→     7→import {
+     8→     8→  Shield, Utensils, Sparkles, Bone, Activity, Eye, Heart, Sun,
+     9→     9→  ArrowRight, MessageCircle, Star, ChevronRight, Truck, CheckCircle2,
+    10→    10→  Clock, PawPrint, Zap, Package, Stethoscope, Award, ShoppingCart,
+    11→    11→} from 'lucide-react'
+    12→    12→import { Product, Problem, Banner, Testimonial } from '@/hooks/use-fetch'
+    13→    13→import { whatsappAdminUrl } from '@/lib/config'
+    14→    14→import { VetSection } from '@/components/home/VetSection'
+    15→    15→import { motion } from 'framer-motion'
+    16→    16→import { useCartStore } from '@/lib/store'
+    17→    17→import { toast } from 'sonner'
+    18→    18→import { formatRupiah, effectivePrice } from '@/lib/format'
+    19→    19→
+    20→    20→const PROBLEM_ICONS: Record<string, any> = {
+    21→    21→  imunitas: Shield,
+    22→    22→  'nafsu-makan': Utensils,
+    23→    23→  'bulu-dan-kulit': Sparkles,
+    24→    24→  'tulang-dan-sendi': Bone,
+    25→    25→  pencernaan: Activity,
+    26→    26→  mata: Eye,
+    27→    27→  recovery: Heart,
+    28→    28→  harian: Sun,
+    29→    29→}
+    30→    30→
+    31→    31→// Map problem slug → bundle metadata (curated, on-brand)
+    32→    32→const BUNDLES: { problemSlug: string; title: string; tag: string; emoji: string; gradient: string }[] = [
+    33→    33→  { problemSlug: 'nafsu-makan', title: 'Paket Nafsu Makan', tag: 'HEMAT 25%', emoji: '🍗', gradient: 'from-orange-400 to-rose-400' },
+    34→    34→  { problemSlug: 'imunitas', title: 'Paket Imunitas', tag: 'HEMAT 30%', emoji: '🛡️', gradient: 'from-emerald-400 to-teal-500' },
+    35→    35→  { problemSlug: 'bulu-dan-kulit', title: 'Paket Bulu Sehat', tag: 'B2G1 FREE', emoji: '✨', gradient: 'from-pink-400 to-fuchsia-400' },
+    36→    36→  { problemSlug: 'recovery', title: 'Paket Recovery', tag: 'HEMAT 28%', emoji: '💖', gradient: 'from-sky-400 to-cyan-500' },
+    37→    37→]
+    38→    38→
+    39→    39→export function HomeView() {
+    40→    40→  const { navigate } = useHashRouter()
+    41→    41→  const addItem = useCartStore((s) => s.addItem)
+    42→    42→  const [banners, setBanners] = useState<Banner[]>([])
+    43→    43→  const [bestSellers, setBestSellers] = useState<Product[]>([])
+    44→    44→  const [newProducts, setNewProducts] = useState<Product[]>([])
+    45→    45→  const [problems, setProblems] = useState<Problem[]>([])
+    46→    46→  const [testimonials, setTestimonials] = useState<Testimonial[]>([])
+    47→    47→  const [flashSaleCountdown, setFlashSaleCountdown] = useState({ hours: 5, minutes: 32, seconds: 18 })
+    48→    48→
+    49→    49→  useEffect(() => {
+    50→    50→    fetch('/api/home')
+    51→    51→      .then((r) => r.json())
+    52→    52→      .then((data) => {
+    53→    53→        setBanners(data.banners || [])
+    54→    54→        setBestSellers(data.bestSellers || [])
+    55→    55→        setNewProducts(data.newProducts || [])
+    56→    56→        setProblems(data.problems || [])
+    57→    57→        setTestimonials(data.testimonials || [])
+    58→    58→      })
+    59→    59→      .catch((err) => console.error('Home fetch failed:', err))
+    60→    60→  }, [])
+    61→    61→
+    62→    62→  useEffect(() => {
+    63→    63→    const timer = setInterval(() => {
+    64→    64→      setFlashSaleCountdown((prev) => {
+    65→    65→        let { hours, minutes, seconds } = prev
+    66→    66→        seconds--
+    67→    67→        if (seconds < 0) { seconds = 59; minutes-- }
+    68→    68→        if (minutes < 0) { minutes = 59; hours-- }
+    69→    69→        if (hours < 0) { hours = 23 }
+    70→    70→        return { hours, minutes, seconds }
+    71→    71→      })
+    72→    72→    }, 1000)
+    73→    73→    return () => clearInterval(timer)
+    74→    74→  }, [])
+    75→    75→
+    76→    76→  const heroBanner = banners.find((b) => b.position === 'HOME' && b.order === 0) || banners[0]
+    77→    77→
+    78→    78→  // Build bundles from products grouped by problem
+    79→    79→  const bundles = BUNDLES.map((b) => {
+    80→    80→    const productsInBundle = bestSellers.filter((p) =>
+    81→    81→      p.problems?.some((pp) => pp.problem.slug === b.problemSlug)
+    82→    82→    ).slice(0, 3)
+    83→    83→    if (productsInBundle.length === 0) return null
+    84→    84→    const totalPrice = productsInBundle.reduce((sum, p) => sum + effectivePrice(p.price, p.salePrice), 0)
+    85→    85→    const bundlePrice = Math.round(totalPrice * 0.75) // 25% off
+    86→    86→    return { ...b, products: productsInBundle, totalPrice, bundlePrice }
+    87→    87→  }).filter(Boolean).slice(0, 4)
+    88→    88→
+    89→    89→  const handleAddBundle = (bundle: typeof bundles[number]) => {
+    90→    90→    if (!bundle) return
+    91→    91→    bundle.products.forEach((p: Product) => {
+    92→    92→      addItem({
+    93→    93→        productId: p.id,
+    94→    94→        slug: p.slug,
+    95→    95→        name: p.name,
+    96→    96→        price: p.price,
+    97→    97→        salePrice: p.salePrice,
+    98→    98→        image: p.images?.[0]?.url || '',
+    99→    99→        weight: p.weight,
+   100→   100→      })
+   101→   101→    })
+   102→   102→    toast.success(`${bundle.title} ditambahkan ke keranjang`, {
+   103→   103→      description: `${bundle.products.length} produk • Hemat ${formatRupiah(bundle.totalPrice - bundle.bundlePrice)}`,
+   104→   104→    })
+   105→   105→  }
+   106→   106→
+   107→   107→  return (
+   108→   108→    <div className="overflow-x-hidden">
+   109→   109→      {/* ==================== HERO — Premium clean layout ==================== */}
+   110→   110→      <section className="px-3 sm:px-4 pt-3 max-w-7xl mx-auto">
+   111→   111→        <div className="relative w-full overflow-hidden rounded-2xl shadow-lg bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50">
+   112→   112→          {/* Decorative orbs — softer, more premium */}
+   113→   113→          <div className="pointer-events-none absolute -right-16 -top-16 size-56 rounded-full bg-primary/15 blur-3xl" />
+   114→   114→          <div className="pointer-events-none absolute -bottom-20 -left-10 size-48 rounded-full bg-amber-300/20 blur-3xl" />
+   115→   115→          {/* Bottom accent strip */}
+   116→   116→          <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-primary via-orange-400 to-amber-400" />
+   117→   117→
+   118→   118→          <div className="relative grid items-center gap-3 p-4 sm:p-6 md:grid-cols-2 md:gap-6 md:p-8">
+   119→   119→            {/* LEFT: Copy + CTA */}
+   120→   120→            <motion.div
+   121→   121→              initial={{ opacity: 0, y: 16 }}
+   122→   122→              animate={{ opacity: 1, y: 0 }}
+   123→   123→              transition={{ duration: 0.5 }}
+   124→   124→              className="space-y-2.5 text-foreground sm:space-y-3"
+   125→   125→            >
+   126→   126→              {/* Eyebrow */}
+   127→   127→              <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-primary px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-primary-foreground shadow-sm">
+   128→   128→                <PawPrint className="size-3" /> Supplement Anabul Original
+   129→   129→              </span>
+   130→   130→
+   131→   131→              {/* Headline */}
+   132→   132→              <h1 className="text-balance text-2xl font-extrabold leading-[1.05] tracking-tight text-ink sm:text-4xl lg:text-5xl">
+   133→   133→                Sehatkan<br />
+   134→   134→                <span className="text-primary">Anabul Kesayangan</span><br />
+   135→   135→                Anda
+   136→   136→              </h1>
+   137→   137→
+   138→   138→              {/* Subhead */}
+   139→   139→              <p className="max-w-md text-pretty text-xs leading-relaxed text-muted-foreground sm:text-sm lg:text-base">
+   140→   140→                Vitamin & suplemen premium untuk kucing & anjing.
+   141→   141→                <span className="font-semibold text-ink"> Konsultasi dokter hewan GRATIS.</span>
+   142→   142→              </p>
+   143→   143→
+   144→   144→              {/* CTAs */}
+   145→   145→              <div className="flex flex-wrap items-center gap-2 pt-1.5 sm:gap-2.5 sm:pt-2">
+   146→   146→                <Button
+   147→   147→                  size="sm"
+   148→   148→                  onClick={() => navigate('/shop')}
+   149→   149→                  className="h-9 gap-1.5 bg-primary px-4 text-xs font-bold text-primary-foreground shadow-md hover:bg-primary/90 sm:h-11 sm:px-6 sm:text-sm"
+   150→   150→                >
+   151→   151→                  <Sparkles className="size-3.5" /> Belanja Sekarang
+   152→   152→                </Button>
+   153→   153→                <Button
+   154→   154→                  size="sm"
+   155→   155→                  variant="outline"
+   156→   156→                  onClick={() => navigate('/problem')}
+   157→   157→                  className="h-9 gap-1.5 border-primary/30 bg-white px-4 text-xs font-semibold text-primary backdrop-blur-md hover:bg-primary/5 hover:text-primary sm:h-11 sm:px-5 sm:text-sm"
+   158→   158→                >
+   159→   159→                  Shop by Problem
+   160→   160→                </Button>
+   161→   161→              </div>
+   162→   162→
+   163→   163→              {/* Social proof */}
+   164→   164→              <div className="flex items-center gap-3 pt-1.5 sm:pt-2">
+   165→   165→                <div className="flex items-center gap-0.5">
+   166→   166→                  {Array.from({ length: 5 }).map((_, i) => (
+   167→   167→                    <Star key={i} className="size-3 fill-amber-400 text-amber-400 sm:size-3.5" />
+   168→   168→                  ))}
+   169→   169→                </div>
+   170→   170→                <span className="text-[10px] font-medium text-muted-foreground sm:text-xs">
+   171→   171→                  <span className="font-bold text-ink">4.8/5</span> • 5.000+ anabul sehat
+   172→   172→                </span>
+   173→   173→              </div>
+   174→   174→            </motion.div>
+   175→   175→
+   176→   176→            {/* RIGHT: Product image */}
+   177→   177→            <motion.div
+   178→   178→              initial={{ opacity: 0, scale: 0.95 }}
+   179→   179→              animate={{ opacity: 1, scale: 1 }}
+   180→   180→              transition={{ duration: 0.6, delay: 0.1 }}
+   181→   181→              className="relative hidden h-48 md:block lg:h-64"
+   182→   182→            >
+   183→   183→              {heroBanner && (
+   184→   184→                <div className="relative h-full w-full overflow-hidden rounded-2xl shadow-2xl ring-4 ring-white/60">
+   185→   185→                  <OptImage
+   186→   186→                    src={heroBanner.imageUrl}
+   187→   187→                    alt="Anima Companion — healthy pets"
+   188→   188→                    fill
+   189→   189→                    priority
+   190→   190→                    sizes="(max-width: 768px) 0vw, 50vw"
+   191→   191→                    className="object-cover"
+   192→   192→                  />
+   193→   193→                  {/* Floating mini trust card */}
+   194→   194→                  <motion.div
+   195→   195→                    animate={{ y: [0, -8, 0] }}
+   196→   196→                    transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+   197→   197→                    className="absolute -bottom-3 -left-3 flex items-center gap-2 rounded-xl bg-white p-2 shadow-xl ring-1 ring-border/30"
+   198→   198→                  >
+   199→   199→                    <span className="text-2xl">🛡️</span>
+   200→   200→                    <div>
+   201→   201→                      <p className="text-[10px] font-bold text-foreground">BPOM Terdaftar</p>
+   202→   202→                      <p className="text-[9px] text-muted-foreground">100% Original</p>
+   203→   203→                    </div>
+   204→   204→                  </motion.div>
+   205→   205→                </div>
+   206→   206→              )}
+   207→   207→            </motion.div>
+   208→   208→
+   209→   209→            {/* Mobile image (compact, below copy) */}
+   210→   210→            {heroBanner && (
+   211→   211→              <motion.div
+   212→   212→                initial={{ opacity: 0 }}
+   213→   213→                animate={{ opacity: 1 }}
+   214→   214→                transition={{ duration: 0.5, delay: 0.2 }}
+   215→   215→                className="relative -mx-4 -mb-4 h-32 md:hidden"
+   216→   216→              >
+   217→   217→                <div className="relative h-full w-full">
+   218→   218→                  <OptImage
+   219→   219→                    src={heroBanner.imageUrl}
+   220→   220→                    alt="Anima Companion"
+   221→   221→                    fill
+   222→   222→                    priority
+   223→   223→                    sizes="100vw"
+   224→   224→                    className="object-cover"
+   225→   225→                  />
+   226→   226→                  <div className="absolute inset-0 bg-gradient-to-t from-primary/10 to-transparent" />
+   227→   227→                </div>
+   228→   228→              </motion.div>
+   229→   229→            )}
+   230→   230→          </div>
+   231→   231→        </div>
+   232→   232→      </section>
+   233→   233→
+   234→   234→      {/* ==================== TRUST BADGES — 4 prominent static ==================== */}
+   235→   235→      <section className="mt-3 max-w-7xl mx-auto px-3 sm:px-4">
+   236→   236→        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+   237→   237→          {[
+   238→   238→            { icon: Shield, label: 'BPOM Terdaftar', sub: 'Aman & teruji', color: 'text-emerald-600 bg-emerald-50' },
+   239→   239→            { icon: CheckCircle2, label: '100% Original', sub: 'Garansi uang kembali', color: 'text-sky-600 bg-sky-50' },
+   240→   240→            { icon: Truck, label: 'Pengiriman Cepat', sub: '1-4 hari seluruh Indonesia', color: 'text-amber-600 bg-amber-50' },
+   241→   241→            { icon: Stethoscope, label: 'Konsultasi Gratis', sub: 'Dokter hewan siap bantu', color: 'text-rose-600 bg-rose-50' },
+   242→   242→          ].map((b, i) => (
+   243→   243→            <motion.div
+   244→   244→              key={i}
+   245→   245→              initial={{ opacity: 0, y: 8 }}
+   246→   246→              whileInView={{ opacity: 1, y: 0 }}
+   247→   247→              viewport={{ once: true }}
+   248→   248→              transition={{ delay: i * 0.05 }}
+   249→   249→              className="flex items-center gap-2 rounded-xl border border-border/60 bg-card p-2 sm:p-2.5"
+   250→   250→            >
+   251→   251→              <div className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${b.color} sm:size-9`}>
+   252→   252→                <b.icon className="size-4 sm:size-4.5" />
+   253→   253→              </div>
+   254→   254→              <div className="min-w-0">
+   255→   255→                <p className="truncate text-[10px] font-bold leading-tight text-foreground sm:text-xs">{b.label}</p>
+   256→   256→                <p className="truncate text-[9px] text-muted-foreground sm:text-[10px]">{b.sub}</p>
+   257→   257→              </div>
+   258→   258→            </motion.div>
+   259→   259→          ))}
+   260→   260→        </div>
+   261→   261→      </section>
+   262→   262→
+   263→   263→      {/* ==================== SHOP BY PROBLEM — Premium card grid ==================== */}
+   264→   264→      <section className="py-5 mt-2">
+   265→   265→        <div className="px-3 sm:px-4 max-w-7xl mx-auto">
+   266→   266→          <div className="mb-3 flex items-end justify-between">
+   267→   267→            <div>
+   268→   268→              <p className="text-[10px] font-bold uppercase tracking-wider text-primary">Pilih Kebutuhan</p>
+   269→   269→              <h2 className="text-lg font-extrabold leading-tight sm:text-xl">Masalah Apa Anabulmu?</h2>
+   270→   270→            </div>
+   271→   271→            <Button variant="ghost" size="sm" onClick={() => navigate('/problem')} className="gap-1 text-xs h-7 px-2 shrink-0">
+   272→   272→              Lihat Semua <ChevronRight className="size-3" />
+   273→   273→            </Button>
+   274→   274→          </div>
+   275→   275→          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4">
+   276→   276→            {problems.slice(0, 8).map((problem, i) => {
+   277→   277→              const emojiMap: Record<string, string> = {
+   278→   278→                imunitas: '🛡️', 'nafsu-makan': '🍖', 'bulu-dan-kulit': '✨',
+   279→   279→                'tulang-dan-sendi': '🦴', pencernaan: '🌱', mata: '👁️',
+   280→   280→                recovery: '❤️', harian: '☀️',
+   281→   281→              }
+   282→   282→              const emoji = emojiMap[problem.slug] || '🐾'
+   283→   283→              const color = problem.color || '#888'
+   284→   284→              return (
+   285→   285→                <motion.button
+   286→   286→                  key={problem.id}
+   287→   287→                  initial={{ opacity: 0, y: 8 }}
+   288→   288→                  whileInView={{ opacity: 1, y: 0 }}
+   289→   289→                  viewport={{ once: true }}
+   290→   290→                  transition={{ delay: i * 0.04 }}
+   291→   291→                  whileHover={{ y: -3 }}
+   292→   292→                  whileTap={{ scale: 0.98 }}
+   293→   293→                  onClick={() => navigate(`/problem/${problem.slug}`)}
+   294→   294→                  className="group relative flex items-center gap-3 overflow-hidden rounded-2xl border border-border/60 bg-card p-3 text-left shadow-sm transition-shadow hover:shadow-md"
+   295→   295→                >
+   296→   296→                  {/* Color glow on hover */}
+   297→   297→                  <div
+   298→   298→                    className="pointer-events-none absolute -right-6 -top-6 size-20 rounded-full opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-30"
+   299→   299→                    style={{ background: color }}
+   300→   300→                  />
+   301→   301→                  <div
+   302→   302→                    className="flex size-12 shrink-0 items-center justify-center rounded-xl text-2xl shadow-sm transition-transform duration-300 group-hover:scale-110 sm:size-14 sm:text-3xl"
+   303→   303→                    style={{ background: `linear-gradient(135deg, ${color}22 0%, ${color}33 100%)` }}
+   304→   304→                  >
+   305→   305→                    <span className="drop-shadow-sm">{emoji}</span>
+   306→   306→                  </div>
+   307→   307→                  <div className="min-w-0 flex-1">
+   308→   308→                    <p className="truncate text-xs font-bold leading-tight text-foreground sm:text-sm">{problem.name}</p>
+   309→   309→                    <p className="truncate text-[10px] text-muted-foreground sm:text-[11px]">
+   310→   310→                      {problem._count?.products || 0} produk
+   311→   311→                    </p>
+   312→   312→                  </div>
+   313→   313→                  <ChevronRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+   314→   314→                </motion.button>
+   315→   315→              )
+   316→   316→            })}
+   317→   317→          </div>
+   318→   318→        </div>
+   319→   319→      </section>
+   320→   320→
+   321→   321→      {/* ==================== FLASH SALE ==================== */}
+   322→   322→      <section className="py-3 border-t border-border">
+   323→   323→        <div className="px-3 sm:px-4 max-w-7xl mx-auto">
+   324→   324→          <div className="flex items-center justify-between mb-2.5">
+   325→   325→            <div className="flex items-center gap-2">
+   326→   326→              <div className="flex items-center gap-1.5">
+   327→   327→                <Zap className="size-4 text-destructive fill-current" />
+   328→   328→                <h2 className="text-base font-bold">Flash Sale</h2>
+   329→   329→              </div>
+   330→   330→              <div className="flex items-center gap-0.5 text-xs font-semibold">
+   331→   331→                <span className="rounded bg-destructive px-1.5 py-0.5 text-destructive-foreground">{String(flashSaleCountdown.hours).padStart(2, '0')}</span>
+   332→   332→                <span className="text-destructive">:</span>
+   333→   333→                <span className="rounded bg-destructive px-1.5 py-0.5 text-destructive-foreground">{String(flashSaleCountdown.minutes).padStart(2, '0')}</span>
+   334→   334→                <span className="text-destructive">:</span>
+   335→   335→                <span className="rounded bg-destructive px-1.5 py-0.5 text-destructive-foreground">{String(flashSaleCountdown.seconds).padStart(2, '0')}</span>
+   336→   336→              </div>
+   337→   337→            </div>
+   338→   338→            <Button variant="ghost" size="sm" onClick={() => navigate('/shop')} className="gap-1 text-xs h-7 px-2">
+   339→   339→              Lihat Semua <ChevronRight className="size-3" />
+   340→   340→            </Button>
+   341→   341→          </div>
+   342→   342→          <div className="flex gap-2 overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0 pb-1" style={{ scrollbarWidth: 'none' }}>
+   343→   343→            {bestSellers.slice(0, 6).map((p) => (
+   344→   344→              <div key={p.id} className="shrink-0 w-32 sm:w-44"><ProductCard product={p} /></div>
+   345→   345→            ))}
+   346→   346→          </div>
+   347→   347→        </div>
+   348→   348→      </section>
+   349→   349→
+   350→   350→      {/* ==================== BUNDLE HEMAT — Premium bundle cards ==================== */}
+   351→   351→      {bundles.length > 0 && (
+   352→   352→        <section className="py-5 border-t border-border bg-gradient-to-b from-amber-50/40 via-background to-background">
+   353→   353→          <div className="px-3 sm:px-4 max-w-7xl mx-auto">
+   354→   354→            <div className="mb-3 flex items-end justify-between">
+   355→   355→              <div>
+   356→   356→                <p className="text-[10px] font-bold uppercase tracking-wider text-primary">Lebih Hemat</p>
+   357→   357→                <h2 className="flex items-center gap-1.5 text-lg font-extrabold leading-tight sm:text-xl">
+   358→   358→                  <Package className="size-5 text-primary" />
+   359→   359→                  Bundle Favorit
+   360→   360→                </h2>
+   361→   361→                <p className="mt-0.5 text-[11px] text-muted-foreground">
+   362→   362→                  Beli paket, hemat sampai 30%
+   363→   363→                </p>
+   364→   364→              </div>
+   365→   365→              <Button variant="ghost" size="sm" onClick={() => navigate('/shop')} className="gap-1 text-xs h-7 px-2 shrink-0">
+   366→   366→                Lihat Semua <ChevronRight className="size-3" />
+   367→   367→              </Button>
+   368→   368→            </div>
+   369→   369→            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+   370→   370→              {bundles.map((bundle, i) => bundle && (
+   371→   371→                <motion.div
+   372→   372→                  key={i}
+   373→   373→                  initial={{ opacity: 0, y: 10 }}
+   374→   374→                  whileInView={{ opacity: 1, y: 0 }}
+   375→   375→                  viewport={{ once: true }}
+   376→   376→                  transition={{ delay: i * 0.06 }}
+   377→   377→                  whileHover={{ y: -4 }}
+   378→   378→                  className="group relative flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm transition-shadow hover:shadow-lg"
+   379→   379→                >
+   380→   380→                  {/* Savings ribbon — top-right corner, prominent */}
+   381→   381→                  <div className="absolute right-0 top-0 z-10 rounded-bl-xl bg-rose-500 px-2.5 py-1 text-[10px] font-extrabold text-white shadow-md">
+   382→   382→                    HEMAT {formatRupiah(bundle.totalPrice - bundle.bundlePrice)}
+   383→   383→                  </div>
+   384→   384→
+   385→   385→                  {/* Header with gradient */}
+   386→   386→                  <div className={`relative flex items-center gap-2.5 bg-gradient-to-br ${bundle.gradient} px-3 py-3`}>
+   387→   387→                    <div className="pointer-events-none absolute -right-4 -top-4 size-20 rounded-full bg-white/15 blur-2xl" />
+   388→   388→                    <div className="relative flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/25 backdrop-blur text-2xl">
+   389→   389→                      {bundle.emoji}
+   390→   390→                    </div>
+   391→   391→                    <div className="relative min-w-0">
+   392→   392→                      <p className="text-[9px] font-bold uppercase tracking-wider text-white/80">Bundle {bundle.products.length} produk</p>
+   393→   393→                      <p className="truncate text-sm font-extrabold leading-tight text-white drop-shadow-sm">{bundle.title}</p>
+   394→   394→                    </div>
+   395→   395→                  </div>
+   396→   396→
+   397→   397→                  {/* Product previews + names */}
+   398→   398→                  <div className="flex flex-1 flex-col p-3">
+   399→   399→                    <div className="mb-2 flex -space-x-2">
+   400→   400→                      {bundle.products.map((p, idx) => (
+   401→   401→                        <div
+   402→   402→                          key={p.id}
+   403→   403→                          className="relative size-11 overflow-hidden rounded-lg border-2 border-background bg-muted"
+   404→   404→                          style={{ zIndex: 10 - idx }}
+   405→   405→                        >
+   406→   406→                          {p.images?.[0]?.url && (
+   407→   407→                            <OptImage
+   408→   408→                              src={p.images[0].url}
+   409→   409→                              alt={p.name}
+   410→   410→                              fill
+   411→   411→                              sizes="44px"
+   412→   412→                              className="object-cover"
+   413→   413→                            />
+   414→   414→                          )}
+   415→   415→                        </div>
+   416→   416→                      ))}
+   417→   417→                      {bundle.products.length > 3 && (
+   418→   418→                        <div className="flex size-11 items-center justify-center rounded-lg border-2 border-background bg-muted/60 text-[10px] font-bold text-muted-foreground">
+   419→   419→                          +{bundle.products.length - 3}
+   420→   420→                        </div>
+   421→   421→                      )}
+   422→   422→                    </div>
+   423→   423→
+   424→   424→                    {/* Product names list */}
+   425→   425→                    <ul className="mb-3 space-y-0.5">
+   426→   426→                      {bundle.products.slice(0, 3).map((p) => (
+   427→   427→                        <li key={p.id} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+   428→   428→                          <CheckCircle2 className="size-2.5 shrink-0 text-success" />
+   429→   429→                          <span className="truncate">{p.name}</span>
+   430→   430→                        </li>
+   431→   431→                      ))}
+   432→   432→                    </ul>
+   433→   433→
+   434→   434→                    {/* Price block */}
+   435→   435→                    <div className="mt-auto space-y-2">
+   436→   436→                      <div className="rounded-lg bg-amber-50 p-2">
+   437→   437→                        <div className="flex items-center justify-between">
+   438→   438→                          <span className="text-[10px] font-medium text-muted-foreground">Total</span>
+   439→   439→                          <span className="text-[10px] text-muted-foreground line-through">{formatRupiah(bundle.totalPrice)}</span>
+   440→   440→                        </div>
+   441→   441→                        <div className="flex items-center justify-between">
+   442→   442→                          <span className="text-[10px] font-bold text-foreground">Bundle</span>
+   443→   443→                          <span className="text-base font-extrabold text-primary">{formatRupiah(bundle.bundlePrice)}</span>
+   444→   444→                        </div>
+   445→   445→                      </div>
+   446→   446→                      <Button
+   447→   447→                        size="sm"
+   448→   448→                        onClick={() => handleAddBundle(bundle)}
+   449→   449→                        className="h-9 w-full gap-1.5 bg-primary text-xs font-bold text-primary-foreground shadow-sm hover:bg-primary/90"
+   450→   450→                      >
+   451→   451→                        <ShoppingCart className="size-3.5" /> Beli Bundle
+   452→   452→                      </Button>
+   453→   453→                    </div>
+   454→   454→                  </div>
+   455→   455→                </motion.div>
+   456→   456→              ))}
+   457→   457→            </div>
+   458→   458→          </div>
+   459→   459→        </section>
+   460→   460→      )}
+   461→   461→
+   462→   462→      {/* ==================== BEST SELLER ==================== */}
+   463→   463→      <section className="py-3 border-t border-border bg-card">
+   464→   464→        <div className="px-3 sm:px-4 max-w-7xl mx-auto">
+   465→   465→          <div className="flex items-center justify-between mb-2.5">
+   466→   466→            <div className="flex items-center gap-2">
+   467→   467→              <Award className="size-4 fill-amber-400 text-amber-400" />
+   468→   468→              <h2 className="text-base font-bold">Produk Best Seller</h2>
+   469→   469→            </div>
+   470→   470→            <Button variant="ghost" size="sm" onClick={() => navigate('/shop')} className="gap-1 text-xs h-7 px-2">
+   471→   471→              Lihat Semua <ChevronRight className="size-3" />
+   472→   472→            </Button>
+   473→   473→          </div>
+   474→   474→          <div className="grid grid-cols-2 gap-1.5 sm:gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
+   475→   475→            {bestSellers.slice(0, 10).map((p) => (<ProductCard key={p.id} product={p} />))}
+   476→   476→          </div>
+   477→   477→        </div>
+   478→   478→      </section>
+   479→   479→
+   480→   480→      {/* ==================== VET & RISET SECTION ==================== */}
+   481→   481→      <VetSection />
+   482→   482→
+   483→   483→            {/* ==================== NEW CUSTOMER BANNER ==================== */}
+   484→   484→      <section className="px-3 sm:px-4 max-w-7xl mx-auto py-3">
+   485→   485→        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary to-amber-500 p-5 text-white shadow-lg sm:p-6">
+   486→   486→          <div className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-white/15 blur-2xl" />
+   487→   487→          <div className="relative z-10 flex items-center gap-4">
+   488→   488→            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur"><Zap className="size-5 fill-current" /></div>
+   489→   489→            <div className="flex-1 min-w-0">
+   490→   490→              <h3 className="text-sm font-bold sm:text-base">Diskon 20% Buat Kamu yang Baru!</h3>
+   491→   491→              <p className="text-xs text-white/90 mt-0.5">Pakai kode <span className="font-mono font-bold bg-white/20 px-1.5 py-0.5 rounded">HELLO20</span> di checkout. Min belanja Rp 50.000.</p>
+   492→   492→            </div>
+   493→   493→            <Button size="sm" onClick={() => navigate('/shop')} className="h-9 px-4 bg-white text-primary hover:bg-white/95 shrink-0 font-bold">Belanja</Button>
+   494→   494→          </div>
+   495→   495→        </div>
+   496→   496→      </section>
+   497→   497→
+   498→   498→      {/* ==================== NEW PRODUCTS ==================== */}
+   499→   499→      {newProducts.length > 0 && (
+   500→   500→        <section className="py-3 border-t border-border">
+   501→   501→          <div className="px-3 sm:px-4 max-w-7xl mx-auto">
+   502→   502→            <div className="flex items-center justify-between mb-2.5">
+   503→   503→              <div className="flex items-center gap-2">
+   504→   504→                <Sparkles className="size-4 text-secondary" />
+   505→   505→                <h2 className="text-base font-bold">Produk Terbaru</h2>
+   506→   506→              </div>
+   507→   507→              <Button variant="ghost" size="sm" onClick={() => navigate('/shop?sort=newest')} className="gap-1 text-xs h-7 px-2">
+   508→   508→                Lihat Semua <ChevronRight className="size-3" />
+   509→   509→              </Button>
+   510→   510→            </div>
+   511→   511→            <div className="grid grid-cols-2 gap-1.5 sm:gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
+   512→   512→              {newProducts.slice(0, 10).map((p) => (<ProductCard key={p.id} product={p} />))}
+   513→   513→            </div>
+   514→   514→          </div>
+   515→   515→        </section>
+   516→   516→      )}
+   517→   517→
+   518→   518→      {/* ==================== KONSULTASI ==================== */}
+   519→   519→      <section className="relative overflow-hidden border-y border-success/20 bg-success/[0.03] py-6 mt-3">
+   520→   520→        <div className="pointer-events-none absolute -right-32 top-0 size-64 rounded-full bg-success/10 blur-3xl" />
+   521→   521→        <div className="px-3 sm:px-4 max-w-7xl mx-auto relative">
+   522→   522→          <div className="grid items-center gap-6 md:grid-cols-2">
+   523→   523→            <div>
+   524→   524→              <span className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-medium text-success"><MessageCircle className="size-3" />Konsultasi Gratis</span>
+   525→   525→              <h2 className="mt-2.5 text-2xl font-bold leading-tight md:text-3xl">Bingung Pilih Produk yang Tepat?</h2>
+   526→   526→              <p className="mt-2 text-sm text-muted-foreground">Chat langsung dengan tim kami via WhatsApp. Kami siap membantu memilihkan vitamin dan suplemen yang sesuai dengan kebutuhan hewan peliharaan Anda.</p>
+   527→   527→              <div className="mt-4 flex flex-wrap gap-2">
+   528→   528→                <a href={whatsappAdminUrl('Halo Anima Companion! Saya mau konsultasi tentang produk untuk hewan peliharaan saya 🐾')} target="_blank" rel="noopener noreferrer">
+   529→   529→                  <Button size="lg" className="h-11 gap-2 bg-success px-6 text-sm hover:bg-success/90 shadow-glow-success"><MessageCircle className="size-4" /> Chat WhatsApp</Button>
+   530→   530→                </a>
+   531→   531→                <Button size="lg" variant="outline" onClick={() => navigate('/kontak')} className="h-11 px-6 text-sm">Lihat Kontak</Button>
+   532→   532→              </div>
+   533→   533→            </div>
+   534→   534→            <div className="glass-card overflow-hidden rounded-2xl shadow-xl">
+   535→   535→              <div className="bg-success p-3 text-white">
+   536→   536→                <div className="flex items-center gap-2.5">
+   537→   537→                  <div className="flex size-9 items-center justify-center rounded-full bg-white/20 backdrop-blur"><MessageCircle className="size-4" /></div>
+   538→   538→                  <div><p className="text-sm font-semibold">Anima Companion</p><p className="text-[10px] text-white/80">Online sekarang</p></div>
+   539→   539→                </div>
+   540→   540→              </div>
+   541→   541→              <div className="space-y-2 bg-[#e5ddd5] p-3" style={{ minHeight: '180px' }}>
+   542→   542→                <div className="max-w-[80%] rounded-2xl rounded-tl-sm bg-white p-2.5 text-xs shadow-sm"><p>Halo! 👋 Kucing saya (Persia, 2 tahun) sering muntah. Ada rekomendasi?</p><p className="mt-0.5 text-[9px] text-gray-500">14:23</p></div>
+   543→   543→                <div className="ml-auto max-w-[80%] rounded-2xl rounded-tr-sm bg-[#dcf8c6] p-2.5 text-xs shadow-sm"><p>Halo! Untuk Persia muntah, rekomendasi <b>Probiotic Digest</b> 🐱</p><p className="mt-0.5 text-[9px] text-gray-500">14:24 ✓✓</p></div>
+   544→   544→                <div className="max-w-[80%] rounded-2xl rounded-tl-sm bg-white p-2.5 text-xs shadow-sm"><p>Mau saya bantu order? 😊</p><p className="mt-0.5 text-[9px] text-gray-500">14:24</p></div>
+   545→   545→              </div>
+   546→   546→            </div>
+   547→   547→          </div>
+   548→   548→        </div>
+   549→   549→      </section>
+   550→   550→
+   551→   551→      {/* ==================== TESTIMONIALS ==================== */}
+   552→   552→      {testimonials.length > 0 && (
+   553→   553→        <section className="py-6">
+   554→   554→          <div className="px-3 sm:px-4 max-w-7xl mx-auto">
+   555→   555→            <div className="mb-3 flex items-center gap-2">
+   556→   556→              <Heart className="size-4 fill-destructive text-destructive" />
+   557→   557→              <h2 className="text-base font-bold">Apa Kata Pelanggan</h2>
+   558→   558→            </div>
+   559→   559→            <div className="grid gap-2 sm:gap-3 md:grid-cols-2 lg:grid-cols-4">
+   560→   560→              {testimonials.map((t) => (
+   561→   561→                <div key={t.id} className="rounded-lg border border-border bg-card p-3">
+   562→   562→                  <div className="flex items-center gap-0.5 mb-1.5">{Array.from({ length: t.rating }).map((_, i) => <Star key={i} className="size-3 fill-amber-400 text-amber-400" />)}</div>
+   563→   563→                  <p className="text-xs leading-relaxed text-foreground/90 italic line-clamp-3">"{t.message}"</p>
+   564→   564→                  <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border">
+   565→   565→                    <div className="flex size-7 shrink-0 items-center justify-center rounded-full gradient-brand text-white text-[10px] font-bold">{t.name.charAt(0)}</div>
+   566→   566→                    <div className="min-w-0"><p className="truncate text-xs font-semibold">{t.name}</p><p className="truncate text-[10px] text-muted-foreground">{t.petName} • {t.petType}</p></div>
+   567→   567→                  </div>
+   568→   568→                </div>
+   569→   569→              ))}
+   570→   570→            </div>
+   571→   571→          </div>
+   572→   572→        </section>
+   573→   573→      )}
+   574→   574→
+   575→   575→      {/* ==================== CTA FINAL ==================== */}
+   576→   576→      <section className="px-3 sm:px-4 max-w-7xl mx-auto pb-6">
+   577→   577→        <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-6 text-center shadow-sm md:p-10">
+   578→   578→          <h2 className="mx-auto max-w-xl text-balance text-xl font-bold leading-tight md:text-2xl">Siap Sehatkan Hewan Kesayangan Anda?</h2>
+   579→   579→          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">Belanja sekarang dan rasakan pengalaman belanja kesehatan hewan peliharaan yang mudah, cepat, dan terpercaya.</p>
+   580→   580→          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+   581→   581→            <Button size="lg" onClick={() => navigate('/shop')} className="h-11 gap-2 px-6 text-sm shadow-glow">Mulai Belanja<ArrowRight className="size-4" /></Button>
+   582→   582→            <a href={whatsappAdminUrl('Halo Anima Companion! 🐾')} target="_blank" rel="noopener noreferrer"><Button size="lg" variant="outline" className="h-11 gap-2 px-6 text-sm"><MessageCircle className="size-4" /> Tanya via WhatsApp</Button></a>
+   583→   583→          </div>
+   584→   584→          <p className="mt-3 flex items-center justify-center gap-1.5 text-[10px] text-muted-foreground"><Clock className="size-3" /> Senin–Sabtu, 09.00–18.00 WIB</p>
+   585→   585→        </div>
+   586→   586→      </section>
+   587→   587→    </div>
+   588→   588→  )
+   589→   589→}
+   590→   590→
