@@ -100,22 +100,22 @@ export function HomeView() {
               </h2>
             </div>
 
-            {/* CTAs */}
-            <div className="flex flex-wrap items-center gap-2.5">
+            {/* CTAs — 1 baris, Anjing kiri Kucing kanan */}
+            <div className="flex items-center gap-2.5">
               <Button
                 size="lg"
                 onClick={() => navigate('/shop?pet=anjing')}
-                className="h-11 gap-2 bg-primary px-6 text-sm font-bold shadow-md hover:bg-primary/90"
+                className="h-11 flex-1 gap-2 bg-primary px-4 text-sm font-bold shadow-md hover:bg-primary/90"
               >
-                🐕 Belanja untuk Anjing
+                🐕 Anjing
               </Button>
               <Button
                 size="lg"
                 variant="outline"
                 onClick={() => navigate('/shop?pet=kucing')}
-                className="h-11 gap-2 border-secondary/30 bg-card px-6 text-sm font-semibold text-secondary hover:bg-secondary/5 hover:text-secondary"
+                className="h-11 flex-1 gap-2 border-secondary/30 bg-card px-4 text-sm font-semibold text-secondary hover:bg-secondary/5 hover:text-secondary"
               >
-                🐈 Belanja untuk Kucing
+                🐈 Kucing
               </Button>
             </div>
           </motion.div>

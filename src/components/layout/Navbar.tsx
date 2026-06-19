@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { SearchAutocomplete } from '@/components/common/SearchAutocomplete'
 import {
-  ShoppingCart, Search, User, X, Heart,
+  ShoppingCart, Search, User, X, Heart, SlidersHorizontal,
   ChevronDown, PawPrint, Shield,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
@@ -174,6 +174,18 @@ export function Navbar() {
 
         {/* Actions */}
         <div className="ml-auto flex items-center gap-1">
+          {/* Mobile: filter icon → navigate to shop */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate('/shop')}
+            className="md:hidden"
+            aria-label="Filter"
+          >
+            <SlidersHorizontal className="h-5 w-5" />
+          </Button>
+
+          {/* Mobile: search toggle */}
           <Button
             variant="ghost"
             size="icon"
@@ -184,10 +196,11 @@ export function Navbar() {
             {searchOpen ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
           </Button>
 
+          {/* Desktop: user dropdown (hidden on mobile — use bottom bar Akun) */}
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" aria-label="Akun">
+                <Button variant="ghost" size="icon" className="hidden md:inline-flex" aria-label="Akun">
                   <User className="h-5 w-5" />
                 </Button>
               </DropdownMenuTrigger>
@@ -220,7 +233,7 @@ export function Navbar() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Button variant="ghost" size="icon" onClick={() => navigate('/login')} aria-label="Masuk">
+            <Button variant="ghost" size="icon" className="hidden md:inline-flex" onClick={() => navigate('/login')} aria-label="Masuk">
               <User className="h-5 w-5" />
             </Button>
           )}
