@@ -70,7 +70,7 @@ export function Navbar() {
   useEffect(() => {
     if (route.segments[0] === 'shop') {
       const q = route.query.get('search') || ''
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setSearchValue(q)
     }
   }, [route])

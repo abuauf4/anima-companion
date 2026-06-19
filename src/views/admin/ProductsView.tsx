@@ -140,7 +140,7 @@ export function ProductsView() {
                       <div className="flex items-center gap-3">
                         <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
                           {p.images[0] && (
-                            // eslint-disable-next-line @next/next/no-img-element
+                             
                             <img src={p.images[0].url} alt={p.name} className="h-full w-full object-cover" />
                           )}
                         </div>

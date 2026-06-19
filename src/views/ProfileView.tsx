@@ -37,12 +37,6 @@ export function ProfileView() {
   const [editingPet, setEditingPet] = useState<PetProfile | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
 
-  if (loading) return <div className="container-page py-20 text-center text-muted-foreground">Memuat...</div>
-  if (!user) {
-    navigate('/login')
-    return null
-  }
-
   const loadPetProfiles = async () => {
     const [pRes, ptRes] = await Promise.all([
       fetch('/api/pet-profiles').then((r) => r.json()),
@@ -55,6 +49,12 @@ export function ProfileView() {
   useEffect(() => {
     loadPetProfiles()
   }, [])
+
+  if (loading) return <div className="container-page py-20 text-center text-muted-foreground">Memuat...</div>
+  if (!user) {
+    navigate('/login')
+    return null
+  }
 
   const openAddPet = () => {
     setEditingPet(null)

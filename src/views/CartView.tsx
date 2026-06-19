@@ -41,7 +41,7 @@ export function CartView() {
     } else if (items.length === 0) {
       setAppliedVoucher(null)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [items.length])
 
   const validateVoucher = async (code: string) => {
