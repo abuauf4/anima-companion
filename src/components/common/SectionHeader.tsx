@@ -6,8 +6,8 @@ import { ReactNode } from 'react'
 interface SectionHeaderProps {
   eyebrow?: string
   eyebrowIcon?: ReactNode
-  title: string
-  subtitle?: string
+  title: ReactNode
+  subtitle?: ReactNode
   align?: 'left' | 'center'
   action?: ReactNode
   className?: string

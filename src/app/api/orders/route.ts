@@ -41,8 +41,15 @@ export async function POST(req: NextRequest) {
     })
 
     let subtotal = 0
-    const orderItems = []
-    for (const item of items) {
+    const orderItems: {
+      productId: string
+      productName: string
+      productSku: string
+      price: number
+      quantity: number
+      subtotal: number
+    }[] = []
+    for (const item of items as Array<{ productId: string; quantity: number }>) {
       const product = products.find((p) => p.id === item.productId)
       if (!product) continue
       const price = product.salePrice ?? product.price
