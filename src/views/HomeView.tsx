@@ -10,17 +10,15 @@ import { Reveal, Stagger, StaggerItem } from '@/components/common/Reveal'
 import {
   Shield, Utensils, Sparkles, Bone, Activity, Eye, Heart, Sun,
   ArrowRight, MessageCircle, Star, ChevronRight, ChevronLeft,
-  PawPrint, Package,
-  Mail, Gift, ShoppingCart,
+  PawPrint,
+  Mail, Gift,
 } from 'lucide-react'
 import {
   Product, Problem, Banner, Testimonial, PetType,
 } from '@/hooks/use-fetch'
 import { VetSection } from '@/components/home/VetSection'
 import { motion } from 'framer-motion'
-import { useCartStore } from '@/lib/store'
 import { toast } from 'sonner'
-import { formatRupiah, effectivePrice } from '@/lib/format'
 
 const PROBLEM_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   imunitas: Shield,
@@ -33,17 +31,8 @@ const PROBLEM_ICONS: Record<string, React.ComponentType<{ className?: string }>>
   harian: Sun,
 }
 
-// Bundles — "Paket Hemat" curated bundles based on product problems
-const BUNDLES: { problemSlug: string; title: string; tag: string; emoji: string; gradient: string }[] = [
-  { problemSlug: 'nafsu-makan', title: 'Paket Nafsu Makan', tag: 'HEMAT 25%', emoji: '🍗', gradient: 'from-orange-400 to-rose-400' },
-  { problemSlug: 'imunitas', title: 'Paket Imunitas', tag: 'HEMAT 30%', emoji: '🛡️', gradient: 'from-emerald-400 to-teal-500' },
-  { problemSlug: 'bulu-dan-kulit', title: 'Paket Bulu Sehat', tag: 'B2G1 FREE', emoji: '✨', gradient: 'from-pink-400 to-fuchsia-400' },
-  { problemSlug: 'recovery', title: 'Paket Recovery', tag: 'HEMAT 28%', emoji: '💖', gradient: 'from-sky-400 to-cyan-500' },
-]
-
 export function HomeView() {
   const { navigate } = useHashRouter()
-  const addItem = useCartStore((s) => s.addItem)
 
   const [banners, setBanners] = useState<Banner[]>([])
   const [bestSellers, setBestSellers] = useState<Product[]>([])
@@ -67,46 +56,6 @@ export function HomeView() {
       })
       .catch((err) => console.error('Home fetch failed:', err))
   }, [])
-
-  // Bundles derived from bestSellers (grouped by problem)
-  const bundles = BUNDLES.map((b) => {
-    const productsInBundle = [...bestSellers, ...newProducts].filter((p) =>
-      p.problems?.some((pp) => pp.problem.slug === b.problemSlug)
-    ).slice(0, 3)
-    if (productsInBundle.length === 0) return null
-    const totalPrice = productsInBundle.reduce(
-      (sum, p) => sum + effectivePrice(p.price, p.salePrice),
-      0
-    )
-    const bundlePrice = Math.round(totalPrice * 0.75)
-    return { ...b, products: productsInBundle, totalPrice, bundlePrice }
-  }).filter(Boolean).slice(0, 4) as Array<{
-    problemSlug: string
-    title: string
-    tag: string
-    emoji: string
-    gradient: string
-    products: Product[]
-    totalPrice: number
-    bundlePrice: number
-  }>
-
-  const handleAddBundle = (bundle: typeof bundles[number]) => {
-    bundle.products.forEach((p) => {
-      addItem({
-        productId: p.id,
-        slug: p.slug,
-        name: p.name,
-        price: p.price,
-        salePrice: p.salePrice,
-        image: p.images?.[0]?.url || '',
-        weight: p.weight,
-      })
-    })
-    toast.success(`${bundle.title} ditambahkan ke keranjang`, {
-      description: `${bundle.products.length} produk • Hemat ${formatRupiah(bundle.totalPrice - bundle.bundlePrice)}`,
-    })
-  }
 
   const handleNewsletter = (e: React.FormEvent) => {
     e.preventDefault()
@@ -469,55 +418,6 @@ export function HomeView() {
           )}
         </div>
       </section>
-
-      {/* ==================== BUNDLES ==================== */}
-      {bundles.length > 0 && (
-        <section className="container-page py-10 md:py-14">
-          <SectionHeader
-            eyebrow="Paket Hemat"
-            eyebrowIcon={<Package className="size-3 text-amber-500" />}
-            title={<>Bundling <span className="gradient-brand-text">Hemat</span></>}
-            subtitle="Beli paket bundling dan hemat sampai 30%. Produk terkurasi sesuai kebutuhan."
-            className="mb-8"
-          />
-
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {bundles.map((bundle, i) => (
-              <Reveal key={bundle.title} delay={i * 0.08}>
-                <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm transition-all hover:shadow-md">
-                  <div className={`relative flex h-24 items-center justify-center bg-gradient-to-br ${bundle.gradient}`}>
-                    <span className="text-4xl">{bundle.emoji}</span>
-                    <span className="absolute right-2 top-2 rounded-md bg-white px-2 py-0.5 text-[10px] font-bold text-rose-600 shadow-sm">
-                      {bundle.tag}
-                    </span>
-                  </div>
-                  <div className="flex flex-1 flex-col p-3">
-                    <h3 className="text-sm font-bold text-foreground">{bundle.title}</h3>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      {bundle.products.length} produk dalam paket
-                    </p>
-                    <div className="mt-2 flex items-baseline gap-1">
-                      <span className="text-base font-bold text-primary">
-                        {formatRupiah(bundle.bundlePrice)}
-                      </span>
-                      <span className="text-[11px] text-muted-foreground line-through">
-                        {formatRupiah(bundle.totalPrice)}
-                      </span>
-                    </div>
-                    <Button
-                      size="sm"
-                      className="mt-3 w-full gap-1.5"
-                      onClick={() => handleAddBundle(bundle)}
-                    >
-                      <ShoppingCart className="size-3.5" /> Tambah Paket
-                    </Button>
-                  </div>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </section>
-      )}
 
       {/* ==================== VET SECTION ==================== */}
       <VetSection />
