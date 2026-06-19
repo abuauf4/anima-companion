@@ -5,7 +5,6 @@ import { Navbar } from '@/components/layout/Navbar'
 import { Footer } from '@/components/layout/Footer'
 import { HashRouter } from '@/components/layout/HashRouter'
 import { WhatsAppFloatingButton } from '@/components/layout/WhatsAppFloatingButton'
-import { PetProfileQuiz } from '@/components/home/PetProfileQuiz'
 
 export default function Home() {
   return (
@@ -17,7 +16,6 @@ export default function Home() {
       </main>
       <Footer />
       <WhatsAppFloatingButton />
-      <PetProfileQuiz />
     </div>
   )
 }
