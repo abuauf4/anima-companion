@@ -65,82 +65,19 @@ export function HomeView() {
 
   return (
     <div className="overflow-x-hidden">
-      {/* ==================== HERO — Zesty Paws-style split ==================== */}
-      <section className="relative overflow-hidden gradient-mesh-warm">
+      {/* ==================== HERO — split with trust badge overlay ==================== */}
+      <section className="relative overflow-hidden gradient-mesh-warm pb-20 md:pb-24">
         {/* Decorative blurred orbs */}
         <div className="pointer-events-none absolute -right-24 -top-24 size-96 rounded-full bg-primary/15 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 -left-24 size-96 rounded-full bg-secondary/15 blur-3xl" />
 
         <div className="container-page relative grid items-center gap-4 py-4 md:grid-cols-2 md:gap-6 md:py-12 lg:py-16">
-          {/* LEFT: Copy + CTA — compact on mobile, original on desktop */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="space-y-3 text-foreground md:space-y-4"
-          >
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
-              <PawPrint className="size-3" /> Suplemen Rekomendasi Dokter Hewan
-            </span>
-
-            <h1 className="text-balance text-3xl font-extrabold leading-[1.05] tracking-tight sm:text-4xl lg:text-5xl">
-              Elevating<br />
-              <span className="gradient-brand-text">Animal Health</span>
-            </h1>
-
-            <p className="max-w-md text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
-              Suplemen & vitamin hewan peliharaan premium dari <span className="font-semibold text-foreground">Anima Companion</span> — PT Sutan Vet Medika. Diformulasikan bersama dokter hewan, tersedia di <span className="font-semibold text-foreground">515+ klinik</span> seluruh Indonesia.
-            </p>
-
-            {/* Hashtag pill — hidden on mobile to save vertical space */}
-            <div className="hidden pt-1 sm:block">
-              <span className="inline-flex items-center gap-1 rounded-full bg-secondary/10 px-3 py-1 text-xs font-semibold text-secondary">
-                <Heart className="size-3" /> #PawrentHebatAnabulSehat
-              </span>
-            </div>
-
-            {/* CTAs */}
-            <div className="flex flex-wrap items-center gap-2.5 pt-1">
-              <Button
-                size="lg"
-                onClick={() => navigate('/shop?pet=anjing')}
-                className="h-11 gap-2 bg-primary px-6 text-sm font-bold shadow-md hover:bg-primary/90"
-              >
-                🐕 Belanja untuk Anjing
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                onClick={() => navigate('/shop?pet=kucing')}
-                className="h-11 gap-2 border-secondary/30 bg-card px-6 text-sm font-semibold text-secondary hover:bg-secondary/5 hover:text-secondary"
-              >
-                🐈 Belanja untuk Kucing
-              </Button>
-            </div>
-
-            {/* Trust stats below CTAs — hidden on mobile (saves vertical space,
-                stats appear in announcement bar + vet section anyway) */}
-            <div className="hidden grid-cols-2 gap-3 pt-4 sm:grid sm:grid-cols-4">
-              {[
-                { v: '50rb+', l: 'Pelanggan' },
-                { v: '515+', l: 'Klinik Resmi' },
-                { v: '4.9★', l: 'Rating' },
-                { v: '24/7', l: 'Konsul Vet' },
-              ].map((s) => (
-                <div key={s.l} className="text-center sm:text-left">
-                  <div className="text-lg font-extrabold gradient-brand-text sm:text-2xl">{s.v}</div>
-                  <div className="text-[10px] text-muted-foreground sm:text-xs">{s.l}</div>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-
-          {/* RIGHT: Hero image with floating cards — smaller on mobile */}
+          {/* IMAGE: top on mobile, right on desktop */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6, delay: 0.1 }}
-            className="relative h-44 sm:h-80 md:h-96"
+            className="relative order-first h-44 sm:h-80 md:order-none md:h-96"
           >
             <div className="relative h-full w-full overflow-hidden rounded-3xl shadow-2xl ring-4 ring-white/60">
               <OptImage
@@ -151,7 +88,6 @@ export function HomeView() {
                 sizes="(max-width: 768px) 100vw, 50vw"
                 className="object-cover"
               />
-              {/* Soft overlay gradient */}
               <div className="absolute inset-0 bg-gradient-to-tr from-primary/10 via-transparent to-secondary/10" />
             </div>
 
@@ -200,11 +136,84 @@ export function HomeView() {
               </div>
             </motion.div>
           </motion.div>
+
+          {/* CONTENT: bottom on mobile, left on desktop */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="space-y-3 text-foreground md:space-y-4"
+          >
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
+              <PawPrint className="size-3" /> Suplemen Rekomendasi Dokter Hewan
+            </span>
+
+            <h1 className="text-balance text-3xl font-extrabold leading-[1.05] tracking-tight sm:text-4xl lg:text-5xl">
+              Elevating<br />
+              <span className="gradient-brand-text">Animal Health</span>
+            </h1>
+
+            <p className="max-w-md text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
+              Suplemen & vitamin hewan peliharaan premium dari <span className="font-semibold text-foreground">Anima Companion</span> — PT Sutan Vet Medika. Diformulasikan bersama dokter hewan, tersedia di <span className="font-semibold text-foreground">515+ klinik</span> seluruh Indonesia.
+            </p>
+
+            {/* Hashtag pill */}
+            <div className="pt-1">
+              <span className="inline-flex items-center gap-1 rounded-full bg-secondary/10 px-3 py-1 text-xs font-semibold text-secondary">
+                <Heart className="size-3" /> #PawrentHebatAnabulSehat
+              </span>
+            </div>
+
+            {/* Hook text before CTAs */}
+            <div className="pt-1">
+              <p className="text-base font-bold text-foreground sm:text-lg">
+                Belanja sesuai hewan peliharaanmu 🐾
+              </p>
+            </div>
+
+            {/* CTAs */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              <Button
+                size="lg"
+                onClick={() => navigate('/shop?pet=anjing')}
+                className="h-11 gap-2 bg-primary px-6 text-sm font-bold shadow-md hover:bg-primary/90"
+              >
+                🐕 Belanja untuk Anjing
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={() => navigate('/shop?pet=kucing')}
+                className="h-11 gap-2 border-secondary/30 bg-card px-6 text-sm font-semibold text-secondary hover:bg-secondary/5 hover:text-secondary"
+              >
+                🐈 Belanja untuk Kucing
+              </Button>
+            </div>
+          </motion.div>
+        </div>
+
+        {/* Trust badge overlay — ngegantung setengah di hero, setengah keluar */}
+        <div className="absolute bottom-0 left-0 right-0 translate-y-1/2">
+          <div className="container-page">
+            <div className="grid grid-cols-2 gap-3 rounded-2xl border border-border bg-card p-4 shadow-xl sm:grid-cols-4 md:gap-4 md:p-6">
+              {[
+                { v: '50rb+', l: 'Pelanggan' },
+                { v: '515+', l: 'Klinik Resmi' },
+                { v: '4.9★', l: 'Rating' },
+                { v: '24/7', l: 'Konsul Vet' },
+              ].map((s) => (
+                <div key={s.l} className="text-center">
+                  <div className="text-lg font-extrabold gradient-brand-text sm:text-2xl md:text-3xl">{s.v}</div>
+                  <div className="text-[10px] text-muted-foreground sm:text-xs md:text-sm">{s.l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
       {/* ==================== SHOP BY PET TYPE ==================== */}
-      <section className="container-page py-10 md:py-14">
+      <section className="container-page pt-14 md:pt-20">
         <SectionHeader
           eyebrow="Belanja Berdasarkan Hewan"
           eyebrowIcon={<PawPrint className="size-3" />}
