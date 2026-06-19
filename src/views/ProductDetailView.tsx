@@ -27,12 +27,19 @@ export function ProductDetailView({ slug }: { slug: string }) {
   const { navigate } = useHashRouter()
   const addItem = useCartStore((s) => s.addItem)
   const toggleWishlist = useWishlistStore((s) => s.toggleItem)
-  const isWishlisted = useWishlistStore((s) => s.items.some((i) => i.productId === (data?.product?.id || '')))
   const [data, setData] = useState<{ product: Product; related: Product[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [quantity, setQuantity] = useState(1)
   const [activeImage, setActiveImage] = useState(0)
   const [added, setAdded] = useState(false)
+
+  // Derive productId BEFORE useWishlistStore — avoids TDZ error
+  // (selector runs immediately via useSyncExternalStore, so it can't
+  // reference `data` which is declared above but in TDZ at call time)
+  const productId = data?.product?.id || ''
+  const isWishlisted = useWishlistStore((s) =>
+    s.items.some((item) => item.productId === productId)
+  )
 
   useEffect(() => {
     setLoading(true)
