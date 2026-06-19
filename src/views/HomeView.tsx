@@ -19,6 +19,7 @@ import {
 import { VetSection } from '@/components/home/VetSection'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
+import { formatRupiah } from '@/lib/format'
 
 const PROBLEM_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   imunitas: Shield,
@@ -393,8 +394,8 @@ export function HomeView() {
         </div>
       </section>
 
-      {/* ==================== NEW ARRIVALS ==================== */}
-      <section className="bg-muted/30 py-10 md:py-14">
+      {/* ==================== NEW ARRIVALS — Bento Poster Grid ==================== */}
+      <section className="py-10 md:py-14">
         <div className="container-page">
           <SectionHeader
             eyebrow="Produk Baru"
@@ -408,15 +409,17 @@ export function HomeView() {
             }
             className="mb-8"
           />
+        </div>
 
-          {newProducts.length === 0 ? (
+        {newProducts.length === 0 ? (
+          <div className="container-page">
             <div className="rounded-2xl border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
               Memuat produk baru...
             </div>
-          ) : (
-            <ProductScrollRow products={newProducts} />
-          )}
-        </div>
+          </div>
+        ) : (
+          <NewArrivalPosters products={newProducts} />
+        )}
       </section>
 
       {/* ==================== VET SECTION ==================== */}
@@ -501,6 +504,153 @@ export function HomeView() {
           </div>
         </div>
       </section>
+    </div>
+  )
+}
+
+/* ============== New Arrival Poster Bento ============== */
+
+/** Visual config per product slug — gradient, emoji, tagline */
+const POSTER_CONFIG: Record<string, { gradient: string; emoji: string; tagline: string }> = {
+  'sioren-booster-plus': {
+    gradient: 'from-emerald-500 via-green-500 to-teal-600',
+    emoji: '⚡',
+    tagline: 'Pemulihan cepat & nafsu makan naik drastis',
+  },
+  'sioren-skin-coat': {
+    gradient: 'from-pink-500 via-rose-500 to-fuchsia-600',
+    emoji: '✨',
+    tagline: 'Bulu lebat, mengilap, bebas gatal & ketombe',
+  },
+  'forevet-stress-manajemen': {
+    gradient: 'from-violet-500 via-purple-500 to-indigo-600',
+    emoji: '💖',
+    tagline: 'Tenang saat ditinggal, perjalanan, atau ke dokter',
+  },
+}
+
+const FALLBACK_POSTER = {
+  gradient: 'from-orange-500 via-amber-500 to-rose-500',
+  emoji: '🐾',
+  tagline: 'Suplemen premium rekomendasi dokter hewan',
+}
+
+/**
+ * Bento-style poster grid for New Arrivals.
+ *
+ * Layout:
+ * - Mobile (<md): stacked vertical — big poster on top, 2 small below (side-by-side)
+ * - Desktop (md+): 1 big poster left (spans 2 rows) + 2 small posters right (stacked)
+ *
+ * No gap between posters — seamless collage look.
+ * Posters are clickable → navigate to product detail.
+ */
+function NewArrivalPosters({ products }: { products: Product[] }) {
+  const { navigate } = useHashRouter()
+  const big = products[0]
+  const small1 = products[1]
+  const small2 = products[2]
+
+  if (!big) return null
+
+  const renderPoster = (
+    product: Product,
+    opts: { size: 'big' | 'small' }
+  ) => {
+    const cfg = POSTER_CONFIG[product.slug] || FALLBACK_POSTER
+    const isBig = opts.size === 'big'
+
+    return (
+      <button
+        onClick={() => navigate(`/product/${product.slug}`)}
+        className={`group relative flex h-full w-full flex-col justify-end overflow-hidden bg-gradient-to-br ${cfg.gradient} text-left text-white transition-all duration-500 hover:brightness-110`}
+        aria-label={`Lihat detail ${product.name}`}
+      >
+        {/* Decorative big emoji (faded, top-right) — scales on hover */}
+        <span
+          className={`pointer-events-none absolute -right-6 -top-6 select-none transition-transform duration-700 group-hover:scale-110 group-hover:rotate-6 ${
+            isBig ? 'text-[180px] sm:text-[240px] md:text-[280px]' : 'text-[120px] sm:text-[140px]'
+          }`}
+          style={{ opacity: 0.18, lineHeight: 1 }}
+          aria-hidden="true"
+        >
+          {cfg.emoji}
+        </span>
+
+        {/* Decorative paw pattern (faded, bottom-right) */}
+        <svg
+          viewBox="0 0 100 100"
+          className="pointer-events-none absolute -bottom-8 -left-8 size-40 text-white/10 transition-transform duration-700 group-hover:scale-125 sm:size-56"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <ellipse cx="30" cy="32" rx="9" ry="12" />
+          <ellipse cx="48" cy="22" rx="9" ry="12" />
+          <ellipse cx="66" cy="22" rx="9" ry="12" />
+          <ellipse cx="78" cy="32" rx="9" ry="12" />
+          <path d="M54 44c-12 0-22 9-22 21 0 9 6 15 12 15 3.6 0 6-1.2 8-2.4 2-1.2 3.2-1.2 5.2 0 2 1.2 4.4 2.4 8 2.4 6 0 12-6 12-15 0-12-11-21-23-21z" />
+        </svg>
+
+        {/* Dark gradient overlay for text contrast */}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+
+        {/* Content (bottom-left) */}
+        <div className={`relative z-10 ${isBig ? 'p-8 sm:p-10 md:p-12' : 'p-5 sm:p-6'}`}>
+          {/* BARU badge */}
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/25 px-3 py-1 text-[10px] font-bold uppercase tracking-widest backdrop-blur-sm">
+            <Sparkles className="size-3" /> Baru
+          </span>
+
+          {/* Product name */}
+          <h3 className={`mt-3 font-extrabold leading-tight tracking-tight drop-shadow-sm ${
+            isBig ? 'text-2xl sm:text-3xl md:text-4xl' : 'text-base sm:text-lg'
+          }`}>
+            {product.name}
+          </h3>
+
+          {/* Tagline */}
+          <p className={`mt-2 max-w-[85%] font-medium text-white/90 ${
+            isBig ? 'text-sm sm:text-base' : 'text-[11px] sm:text-xs'
+          }`}>
+            {cfg.tagline}
+          </p>
+
+          {/* Price + CTA */}
+          <div className="mt-4 flex items-center gap-3">
+            <span className={`font-bold drop-shadow-sm ${
+              isBig ? 'text-xl sm:text-2xl' : 'text-sm sm:text-base'
+            }`}>
+              {formatRupiah(product.price)}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-[11px] font-bold text-foreground transition-transform duration-300 group-hover:translate-x-1">
+              Lihat Produk <ArrowRight className="size-3" />
+            </span>
+          </div>
+        </div>
+      </button>
+    )
+  }
+
+  return (
+    <div className="grid grid-cols-2 gap-0 md:grid-cols-3 md:grid-rows-2 md:h-[560px]">
+      {/* Big poster — full-width on mobile (col-span-2), left 2x2 on desktop */}
+      <div className="col-span-2 h-[360px] md:col-span-2 md:row-span-2 md:h-full">
+        {renderPoster(big, { size: 'big' })}
+      </div>
+
+      {/* Small poster 1 — bottom-left on mobile (col-span-1), top-right on desktop */}
+      {small1 && (
+        <div className="col-span-1 h-[280px] md:col-span-1 md:row-span-1 md:h-full">
+          {renderPoster(small1, { size: 'small' })}
+        </div>
+      )}
+
+      {/* Small poster 2 — bottom-right on mobile (col-span-1), bottom-right on desktop */}
+      {small2 && (
+        <div className="col-span-1 h-[280px] md:col-span-1 md:row-span-1 md:h-full">
+          {renderPoster(small2, { size: 'small' })}
+        </div>
+      )}
     </div>
   )
 }
