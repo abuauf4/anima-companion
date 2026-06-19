@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
 import {
-  ShoppingCart, Menu, Search, User, X, MessageCircle,
+  ShoppingCart, Menu, Search, User, X,
   ChevronDown, PawPrint, Shield, Store,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
@@ -88,28 +88,6 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border/60 glass shadow-sm">
-      {/* Top bar */}
-      <div className="bg-gradient-to-r from-primary to-amber-500 text-white text-xs">
-        <div className="container-page flex h-9 items-center justify-between">
-          <p className="hidden sm:block font-medium drop-shadow-sm">
-            🚚 Gratis ongkir untuk pembelian min Rp 150.000
-          </p>
-          <p className="sm:hidden font-medium drop-shadow-sm">Gratis ongkir min Rp 150.000 🚚</p>
-          <div className="flex items-center gap-3">
-            <span className="hidden sm:inline font-medium drop-shadow-sm">Senin–Sabtu, 09.00–18.00</span>
-            <span className="hidden sm:inline opacity-40">|</span>
-            <a
-              href={`https://wa.me/${'6281234567890'}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2 py-0.5 font-semibold backdrop-blur-sm transition-colors hover:bg-white/35"
-            >
-              <MessageCircle className="h-3 w-3" /> Chat WhatsApp
-            </a>
-          </div>
-        </div>
-      </div>
-
       {/* Main nav */}
       <div className="container-page flex h-16 items-center gap-4 md:gap-6">
         <Sheet open={mobileOpen} onOpenChange={(v) => { setMobileOpen(v); if (!v) setMobileSection('main') }}>
