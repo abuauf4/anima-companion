@@ -2,7 +2,7 @@
 import { motion } from 'framer-motion'
 import { Shield, Stethoscope, Heart, Award, Star } from 'lucide-react'
 import { SectionHeader } from '@/components/common/SectionHeader'
-import { Reveal } from '@/components/common/Reveal'
+import { Reveal, Stagger, StaggerItem } from '@/components/common/Reveal'
 
 const VETS = [
   {
@@ -51,11 +51,11 @@ export function VetSection() {
         />
 
         {/* Stats grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mt-14 mb-16">
-          {STATS.map((stat, i) => {
+        <Stagger className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mt-14 mb-16">
+          {STATS.map((stat) => {
             const Icon = stat.icon
             return (
-              <Reveal key={stat.label} delay={i * 0.1}>
+              <StaggerItem key={stat.label}>
                 <div className="relative p-6 md:p-8 rounded-2xl bg-card border border-border/60 shadow-sm hover:shadow-card-hover transition-all duration-300 text-center">
                   <div className="inline-flex items-center justify-center w-12 h-12 md:w-14 md:h-14 rounded-xl gradient-brand-soft mb-4">
                     <Icon className="w-6 h-6 md:w-7 md:h-7 text-primary" />
@@ -67,10 +67,10 @@ export function VetSection() {
                     {stat.label}
                   </div>
                 </div>
-              </Reveal>
+              </StaggerItem>
             )
           })}
-        </div>
+        </Stagger>
 
         {/* Vet cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
