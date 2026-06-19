@@ -4,7 +4,8 @@ import bcrypt from 'bcryptjs'
 async function main() {
   console.log('🌱 Seeding Anima Companion — Zesty Paws Marketplace Edition...')
 
-  // ==================== CLEAN UP ====================
+  // ==================== CLEAN UP (correct FK order) ====================
+  await db.petProfile.deleteMany()   // FK to PetType + User
   await db.fAQ.deleteMany()
   await db.testimonial.deleteMany()
   await db.banner.deleteMany()
@@ -17,13 +18,12 @@ async function main() {
   await db.productPetType.deleteMany()
   await db.productProblem.deleteMany()
   await db.productImage.deleteMany()
-  await db.product.deleteMany()
+  await db.product.deleteMany()      // FK to Seller (nullable, OK)
+  await db.seller.deleteMany()
   await db.category.deleteMany()
   await db.petType.deleteMany()
   await db.problem.deleteMany()
   await db.voucher.deleteMany()
-  await db.petProfile.deleteMany()
-  await db.seller.deleteMany()
   await db.user.deleteMany()
 
   // ==================== ADMIN USER ====================
