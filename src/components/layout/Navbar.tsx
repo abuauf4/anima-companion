@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import { useHashRouter } from '@/lib/router'
-import { useCartStore } from '@/lib/store'
+import { useCartStore, useWishlistStore } from '@/lib/store'
 import { Logo } from './Logo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import {
-  ShoppingCart, Search, User, X,
+  ShoppingCart, Search, User, X, Heart,
   ChevronDown, PawPrint, Shield,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
@@ -46,6 +46,7 @@ export function Navbar() {
   const { user, logout } = useAuth()
   const items = useCartStore((s) => s.items)
   const cartCount = items.reduce((sum, i) => sum + i.quantity, 0)
+  const wishlistCount = useWishlistStore((s) => s.items.length)
 
   // Sync search from URL
   useEffect(() => {
@@ -230,6 +231,22 @@ export function Navbar() {
               <User className="h-5 w-5" />
             </Button>
           )}
+
+          {/* Wishlist — desktop only, with count badge */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative hidden md:inline-flex"
+            onClick={() => navigate('/wishlist')}
+            aria-label="Wishlist"
+          >
+            <Heart className="h-5 w-5" />
+            {wishlistCount > 0 && (
+              <Badge className="absolute -right-1 -top-1 h-5 min-w-[20px] px-1.5 text-[10px] bg-rose-500 text-white">
+                {wishlistCount > 99 ? '99+' : wishlistCount}
+              </Badge>
+            )}
+          </Button>
 
           <Button
             variant="ghost"
