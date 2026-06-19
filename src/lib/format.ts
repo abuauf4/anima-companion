@@ -57,11 +57,8 @@ export const ORDER_STATUS: Record<string, { label: string; color: string }> = {
   CANCELLED: { label: 'Dibatalkan', color: 'red' },
 }
 
-/** Indonesian pet type labels (matching seed data) */
+/** Indonesian pet type labels — Anima Companion only sells cat & dog supplements */
 export const PET_TYPE_LABELS: Record<string, string> = {
   kucing: 'Kucing',
   anjing: 'Anjing',
-  burung: 'Burung',
-  ikan: 'Ikan',
-  'hewan-kecil': 'Hewan Kecil',
 }
