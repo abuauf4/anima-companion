@@ -6,16 +6,9 @@ import { useCartStore } from '@/lib/store'
 import { Logo } from './Logo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
 import {
-  ShoppingCart, Menu, Search, User, X,
+  ShoppingCart, Search, User, X,
   ChevronDown, PawPrint, Shield,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
@@ -50,8 +43,6 @@ export function Navbar() {
   const { route, navigate } = useHashRouter()
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchValue, setSearchValue] = useState('')
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const [mobileSection, setMobileSection] = useState<'main' | 'pets' | 'benefits'>('main')
   const { user, logout } = useAuth()
   const items = useCartStore((s) => s.items)
   const cartCount = items.reduce((sum, i) => sum + i.quantity, 0)
@@ -69,7 +60,6 @@ export function Navbar() {
     e.preventDefault()
     navigate(`/shop?search=${encodeURIComponent(searchValue)}`)
     setSearchOpen(false)
-    setMobileOpen(false)
   }
 
   const goShop = (key: string, value: string) => {
@@ -80,130 +70,6 @@ export function Navbar() {
     <header className="sticky top-0 z-40 w-full border-b border-border/60 glass shadow-sm">
       {/* Main nav */}
       <div className="container-page flex h-16 items-center gap-4 md:gap-6">
-        <Sheet open={mobileOpen} onOpenChange={(v) => { setMobileOpen(v); if (!v) setMobileSection('main') }}>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" className="md:hidden" aria-label="Menu">
-              <Menu className="h-5 w-5" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-80 overflow-y-auto">
-            <SheetHeader>
-              <SheetTitle>
-                <Logo />
-              </SheetTitle>
-            </SheetHeader>
-            <nav className="mt-6 flex flex-col gap-1">
-              {mobileSection === 'main' && (
-                <>
-                  <button
-                    onClick={() => { navigate('/'); setMobileOpen(false) }}
-                    className="flex w-full items-center justify-start rounded-lg px-3 py-2.5 text-left text-sm font-medium hover:bg-accent"
-                  >
-                    Beranda
-                  </button>
-                  <button
-                    onClick={() => setMobileSection('pets')}
-                    className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium hover:bg-accent"
-                  >
-                    <span className="flex items-center gap-2"><PawPrint className="size-4 text-primary" /> Belanja by Hewan</span>
-                    <ChevronDown className="size-4 -rotate-90" />
-                  </button>
-                  <button
-                    onClick={() => setMobileSection('benefits')}
-                    className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium hover:bg-accent"
-                  >
-                    <span className="flex items-center gap-2"><Shield className="size-4 text-primary" /> Belanja by Manfaat</span>
-                    <ChevronDown className="size-4 -rotate-90" />
-                  </button>
-                  <button
-                    onClick={() => { navigate('/shop'); setMobileOpen(false) }}
-                    className="flex w-full items-center justify-start rounded-lg px-3 py-2.5 text-left text-sm font-medium hover:bg-accent"
-                  >
-                    Semua Produk
-                  </button>
-                  <button
-                    onClick={() => { navigate('/problem'); setMobileOpen(false) }}
-                    className="flex w-full items-center justify-start rounded-lg px-3 py-2.5 text-left text-sm font-medium hover:bg-accent"
-                  >
-                    Shop by Problem
-                  </button>
-                  <button
-                    onClick={() => { navigate('/kontak'); setMobileOpen(false) }}
-                    className="flex w-full items-center justify-start rounded-lg px-3 py-2.5 text-left text-sm font-medium hover:bg-accent"
-                  >
-                    Konsultasi
-                  </button>
-                  {user && (
-                    <>
-                      <div className="my-2 h-px bg-border" />
-                      <button
-                        onClick={() => { navigate('/profile'); setMobileOpen(false) }}
-                        className="flex w-full items-center justify-start rounded-lg px-3 py-2.5 text-left text-sm font-medium hover:bg-accent"
-                      >
-                        Profil Saya
-                      </button>
-                      <button
-                        onClick={() => { navigate('/orders'); setMobileOpen(false) }}
-                        className="flex w-full items-center justify-start rounded-lg px-3 py-2.5 text-left text-sm font-medium hover:bg-accent"
-                      >
-                        Riwayat Pesanan
-                      </button>
-                      {user.role === 'ADMIN' && (
-                        <button
-                          onClick={() => { navigate('/admin'); setMobileOpen(false) }}
-                          className="flex w-full items-center justify-start rounded-lg px-3 py-2.5 text-left text-sm font-medium text-primary hover:bg-accent"
-                        >
-                          Dashboard Admin
-                        </button>
-                      )}
-                      <button
-                        onClick={() => { logout(); setMobileOpen(false) }}
-                        className="flex w-full items-center justify-start rounded-lg px-3 py-2.5 text-left text-sm font-medium text-destructive hover:bg-accent"
-                      >
-                        Keluar
-                      </button>
-                    </>
-                  )}
-                  {!user && (
-                    <>
-                      <div className="my-2 h-px bg-border" />
-                      <button
-                        onClick={() => { navigate('/login'); setMobileOpen(false) }}
-                        className="flex w-full items-center justify-start rounded-lg px-3 py-2.5 text-left text-sm font-medium hover:bg-accent"
-                      >
-                        Masuk
-                      </button>
-                      <button
-                        onClick={() => { navigate('/register'); setMobileOpen(false) }}
-                        className="flex w-full items-center justify-start rounded-lg bg-primary px-3 py-2.5 text-left text-sm font-medium text-primary-foreground"
-                      >
-                        Daftar
-                      </button>
-                    </>
-                  )}
-                </>
-              )}
-
-              {mobileSection === 'pets' && (
-                <MobileSubmenu
-                  title="Belanja by Hewan"
-                  onBack={() => setMobileSection('main')}
-                  items={PET_TYPES_MENU.map((p) => ({ name: `${p.emoji} ${p.name}`, slug: p.slug }))}
-                  onNavigate={(slug) => { goShop('pet', slug); setMobileOpen(false) }}
-                />
-              )}
-              {mobileSection === 'benefits' && (
-                <MobileSubmenu
-                  title="Belanja by Manfaat"
-                  onBack={() => setMobileSection('main')}
-                  items={BENEFITS_MENU.map((p) => ({ name: `${p.emoji} ${p.name}`, slug: p.slug }))}
-                  onNavigate={(slug) => { goShop('problem', slug); setMobileOpen(false) }}
-                />
-              )}
-            </nav>
-          </SheetContent>
-        </Sheet>
-
         <Logo />
 
         {/* Desktop search */}
@@ -401,42 +267,6 @@ export function Navbar() {
         </div>
       )}
     </header>
-  )
-}
-
-/* ============== Mobile submenu (back navigation) ============== */
-function MobileSubmenu({
-  title,
-  onBack,
-  items,
-  onNavigate,
-}: {
-  title: string
-  onBack: () => void
-  items: { name: string; slug: string }[]
-  onNavigate: (slug: string) => void
-}) {
-  return (
-    <>
-      <button
-        onClick={onBack}
-        className="mb-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-accent"
-      >
-        ← Kembali
-      </button>
-      <div className="mb-2 px-3 text-xs font-bold uppercase tracking-wide text-primary">
-        {title}
-      </div>
-      {items.map((item) => (
-        <button
-          key={item.slug}
-          onClick={() => onNavigate(item.slug)}
-          className="flex w-full items-center justify-start rounded-lg px-3 py-2.5 text-left text-sm font-medium hover:bg-accent"
-        >
-          {item.name}
-        </button>
-      ))}
-    </>
   )
 }
 
