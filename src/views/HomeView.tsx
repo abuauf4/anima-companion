@@ -78,13 +78,13 @@ export function HomeView() {
         <div className="pointer-events-none absolute -right-24 -top-24 size-96 rounded-full bg-primary/15 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 -left-24 size-96 rounded-full bg-secondary/15 blur-3xl" />
 
-        <div className="container-page relative grid items-center gap-6 py-8 md:grid-cols-2 md:py-12 lg:py-16">
-          {/* LEFT: Copy + CTA */}
+        <div className="container-page relative grid items-center gap-4 py-4 md:grid-cols-2 md:gap-6 md:py-12 lg:py-16">
+          {/* LEFT: Copy + CTA — compact on mobile, original on desktop */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="space-y-4 text-foreground"
+            className="space-y-3 text-foreground md:space-y-4"
           >
             <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
               <PawPrint className="size-3" /> Suplemen Rekomendasi Dokter Hewan
@@ -99,8 +99,8 @@ export function HomeView() {
               Suplemen & vitamin hewan peliharaan premium dari <span className="font-semibold text-foreground">Anima Companion</span> — PT Sutan Vet Medika. Diformulasikan bersama dokter hewan, tersedia di <span className="font-semibold text-foreground">515+ klinik</span> seluruh Indonesia.
             </p>
 
-            {/* Hashtag pill */}
-            <div className="pt-1">
+            {/* Hashtag pill — hidden on mobile to save vertical space */}
+            <div className="hidden pt-1 sm:block">
               <span className="inline-flex items-center gap-1 rounded-full bg-secondary/10 px-3 py-1 text-xs font-semibold text-secondary">
                 <Heart className="size-3" /> #PawrentHebatAnabulSehat
               </span>
@@ -125,8 +125,9 @@ export function HomeView() {
               </Button>
             </div>
 
-            {/* Trust stats below CTAs */}
-            <div className="grid grid-cols-2 gap-3 pt-4 sm:grid-cols-4">
+            {/* Trust stats below CTAs — hidden on mobile (saves vertical space,
+                stats appear in announcement bar + vet section anyway) */}
+            <div className="hidden grid-cols-2 gap-3 pt-4 sm:grid sm:grid-cols-4">
               {[
                 { v: '50rb+', l: 'Pelanggan' },
                 { v: '515+', l: 'Klinik Resmi' },
@@ -141,12 +142,12 @@ export function HomeView() {
             </div>
           </motion.div>
 
-          {/* RIGHT: Hero image with floating cards */}
+          {/* RIGHT: Hero image with floating cards — smaller on mobile */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6, delay: 0.1 }}
-            className="relative h-64 sm:h-80 md:h-96"
+            className="relative h-44 sm:h-80 md:h-96"
           >
             <div className="relative h-full w-full overflow-hidden rounded-3xl shadow-2xl ring-4 ring-white/60">
               <OptImage
