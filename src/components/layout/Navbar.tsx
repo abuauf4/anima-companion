@@ -29,12 +29,10 @@ import {
 } from '@/components/ui/dropdown-menu'
 
 // Static mega-menu data — kept inline for fast load & no extra fetch
+// Anima Companion only sells cat & dog supplements
 const PET_TYPES_MENU = [
   { name: 'Kucing', slug: 'kucing', emoji: '🐈' },
   { name: 'Anjing', slug: 'anjing', emoji: '🐕' },
-  { name: 'Burung', slug: 'burung', emoji: '🐦' },
-  { name: 'Ikan', slug: 'ikan', emoji: '🐟' },
-  { name: 'Hewan Kecil', slug: 'hewan-kecil', emoji: '🐰' },
 ]
 
 const BENEFITS_MENU = [

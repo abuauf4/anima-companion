@@ -75,12 +75,10 @@ async function main() {
   console.log('✅ Categories created:', categories.length)
 
   // ==================== PET TYPES ====================
+  // Anima Companion only sells cat & dog supplements
   const petTypes = await db.$transaction([
     db.petType.create({ data: { name: 'Kucing', slug: 'kucing', icon: 'cat' } }),
     db.petType.create({ data: { name: 'Anjing', slug: 'anjing', icon: 'dog' } }),
-    db.petType.create({ data: { name: 'Burung', slug: 'burung', icon: 'bird' } }),
-    db.petType.create({ data: { name: 'Ikan', slug: 'ikan', icon: 'fish' } }),
-    db.petType.create({ data: { name: 'Hewan Kecil', slug: 'hewan-kecil', icon: 'rabbit' } }),
   ])
   console.log('✅ Pet types created:', petTypes.length)
 

@@ -117,20 +117,8 @@ export function HomeView() {
     setEmailValue('')
   }
 
-  // Big pet-type cards (Kucing + Anjing) + small row (Burung, Ikan, Hewan Kecil)
+  // Only Kucing & Anjing — Anima Companion only sells cat & dog supplements
   const mainPetTypes = petTypes.filter((p) => ['kucing', 'anjing'].includes(p.slug))
-  const otherPetTypes = petTypes.filter((p) => !['kucing', 'anjing'].includes(p.slug))
-
-  const petEmoji: Record<string, string> = {
-    kucing: '🐈', anjing: '🐕', burung: '🐦', ikan: '🐟', 'hewan-kecil': '🐰',
-  }
-  const petGradient: Record<string, string> = {
-    kucing: 'from-orange-100 to-rose-100',
-    anjing: 'from-violet-100 to-sky-100',
-    burung: 'from-amber-100 to-yellow-100',
-    ikan: 'from-cyan-100 to-blue-100',
-    'hewan-kecil': 'from-emerald-100 to-teal-100',
-  }
 
   return (
     <div className="overflow-x-hidden">
@@ -277,55 +265,108 @@ export function HomeView() {
           eyebrow="Belanja Berdasarkan Hewan"
           eyebrowIcon={<PawPrint className="size-3" />}
           title={<>Pilih <span className="gradient-brand-text">Hewan Peliharaanmu</span></>}
-          subtitle="Kami punya suplemen khusus untuk setiap jenis hewan — formula disesuaikan kebutuhan nutrisi masing-masing."
+          subtitle="Suplemen khusus untuk kucing dan anjing — formula disesuaikan kebutuhan nutrisi masing-masing."
           className="mb-8"
         />
 
-        {/* Big cards: Kucing & Anjing */}
-        <div className="grid gap-4 sm:grid-cols-2">
-          {mainPetTypes.map((pet, i) => (
-            <Reveal key={pet.id} delay={i * 0.1}>
-              <button
-                onClick={() => navigate(`/shop?pet=${pet.slug}`)}
-                className={`group relative flex w-full items-center overflow-hidden rounded-3xl bg-gradient-to-br ${petGradient[pet.slug]} p-6 text-left transition-all hover:shadow-lg sm:p-8`}
+        {/* Two unique asymmetric cards: Kucing & Anjing */}
+        <div className="grid gap-5 md:grid-cols-2">
+          {/* =============== CARD: KUCING =============== */}
+          <Reveal delay={0}>
+            <button
+              onClick={() => navigate('/shop?pet=kucing')}
+              className="group relative flex h-72 w-full flex-col justify-end overflow-hidden rounded-3xl bg-gradient-to-br from-orange-50 via-amber-50 to-rose-50 p-6 text-left transition-all duration-300 hover:shadow-xl hover:shadow-orange-200/50 sm:h-80 sm:p-8"
+            >
+              {/* Decorative paw print SVG (large, top-right, faded) */}
+              <svg
+                viewBox="0 0 100 100"
+                className="pointer-events-none absolute -right-8 -top-8 size-48 text-orange-200/60 transition-transform duration-500 group-hover:scale-110 group-hover:rotate-6 sm:size-64"
+                fill="currentColor"
+                aria-hidden="true"
               >
-                <div className="relative z-10 flex-1">
-                  <span className="text-4xl sm:text-5xl">{petEmoji[pet.slug]}</span>
-                  <h3 className="mt-3 text-xl font-bold text-foreground sm:text-2xl">
-                    Untuk {pet.name}
-                  </h3>
-                  <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
-                    {pet._count?.products || 0} produk tersedia
-                  </p>
-                  <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary">
-                    Jelajahi Produk <ArrowRight className="size-3 transition-transform group-hover:translate-x-1" />
+                <ellipse cx="30" cy="32" rx="9" ry="12" />
+                <ellipse cx="48" cy="22" rx="9" ry="12" />
+                <ellipse cx="66" cy="22" rx="9" ry="12" />
+                <ellipse cx="78" cy="32" rx="9" ry="12" />
+                <path d="M54 44c-12 0-22 9-22 21 0 9 6 15 12 15 3.6 0 6-1.2 8-2.4 2-1.2 3.2-1.2 5.2 0 2 1.2 4.4 2.4 8 2.4 6 0 12-6 12-15 0-12-11-21-23-21z" />
+              </svg>
+
+              {/* Floating emoji badge */}
+              <span className="absolute right-5 top-5 flex size-14 items-center justify-center rounded-2xl bg-white/80 text-3xl shadow-lg backdrop-blur-sm transition-transform duration-300 group-hover:scale-110 sm:right-7 sm:top-7 sm:size-16 sm:text-4xl">
+                🐈
+              </span>
+
+              {/* Content (bottom-left) */}
+              <div className="relative z-10">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-orange-600">
+                  Untuk Kucing
+                </span>
+                <h3 className="mt-3 text-2xl font-extrabold text-foreground sm:text-3xl">
+                  Felcover+, Sioren &<br />Forevet untuk Kucing
+                </h3>
+                <p className="mt-2 max-w-[80%] text-sm text-muted-foreground">
+                  Imun booster, nafsu makan, fish oil, skin & coat, flu support, dan stress management.
+                </p>
+                <div className="mt-4 flex items-center gap-4">
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background transition-transform group-hover:translate-x-1">
+                    Jelajahi <ArrowRight className="size-4" />
+                  </span>
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {mainPetTypes.find(p => p.slug === 'kucing')?._count?.products || 0} produk tersedia
                   </span>
                 </div>
-                <span className="pointer-events-none absolute -right-4 -top-4 text-[120px] opacity-20 transition-transform group-hover:scale-110 sm:text-[180px]">
-                  {petEmoji[pet.slug]}
-                </span>
-              </button>
-            </Reveal>
-          ))}
-        </div>
+              </div>
+            </button>
+          </Reveal>
 
-        {/* Small row: Burung, Ikan, Hewan Kecil */}
-        {otherPetTypes.length > 0 && (
-          <div className="mt-4 grid grid-cols-3 gap-3 sm:gap-4">
-            {otherPetTypes.map((pet, i) => (
-              <Reveal key={pet.id} delay={0.1 + i * 0.05}>
-                <button
-                  onClick={() => navigate(`/shop?pet=${pet.slug}`)}
-                  className={`group flex w-full flex-col items-center gap-2 rounded-2xl bg-gradient-to-br ${petGradient[pet.slug]} p-3 text-center transition-all hover:shadow-md sm:p-4`}
-                >
-                  <span className="text-2xl sm:text-3xl">{petEmoji[pet.slug]}</span>
-                  <span className="text-xs font-semibold text-foreground sm:text-sm">{pet.name}</span>
-                  <span className="text-[10px] text-muted-foreground">{pet._count?.products || 0} produk</span>
-                </button>
-              </Reveal>
-            ))}
-          </div>
-        )}
+          {/* =============== CARD: ANJING =============== */}
+          <Reveal delay={0.1}>
+            <button
+              onClick={() => navigate('/shop?pet=anjing')}
+              className="group relative flex h-72 w-full flex-col justify-end overflow-hidden rounded-3xl bg-gradient-to-br from-violet-50 via-purple-50 to-fuchsia-50 p-6 text-left transition-all duration-300 hover:shadow-xl hover:shadow-violet-200/50 sm:h-80 sm:p-8"
+            >
+              {/* Decorative paw print SVG (large, top-left, faded, mirrored) */}
+              <svg
+                viewBox="0 0 100 100"
+                className="pointer-events-none absolute -left-8 -top-8 size-48 rotate-12 text-violet-200/60 transition-transform duration-500 group-hover:-rotate-3 group-hover:scale-110 sm:size-64"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <ellipse cx="30" cy="32" rx="9" ry="12" />
+                <ellipse cx="48" cy="22" rx="9" ry="12" />
+                <ellipse cx="66" cy="22" rx="9" ry="12" />
+                <ellipse cx="78" cy="32" rx="9" ry="12" />
+                <path d="M54 44c-12 0-22 9-22 21 0 9 6 15 12 15 3.6 0 6-1.2 8-2.4 2-1.2 3.2-1.2 5.2 0 2 1.2 4.4 2.4 8 2.4 6 0 12-6 12-15 0-12-11-21-23-21z" />
+              </svg>
+
+              {/* Floating emoji badge (top-right, opposite side) */}
+              <span className="absolute right-5 top-5 flex size-14 items-center justify-center rounded-2xl bg-white/80 text-3xl shadow-lg backdrop-blur-sm transition-transform duration-300 group-hover:scale-110 sm:right-7 sm:top-7 sm:size-16 sm:text-4xl">
+                🐕
+              </span>
+
+              {/* Content (bottom-left, aligned with Kucing card) */}
+              <div className="relative z-10">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-violet-600">
+                  Untuk Anjing
+                </span>
+                <h3 className="mt-3 text-2xl font-extrabold text-foreground sm:text-3xl">
+                  Felcover+, Sioren &<br />Forevet untuk Anjing
+                </h3>
+                <p className="mt-2 max-w-[80%] text-sm text-muted-foreground">
+                  Imun booster, nafsu makan, fish oil, skin & coat, flu support, dan stress management.
+                </p>
+                <div className="mt-4 flex items-center gap-4">
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background transition-transform group-hover:translate-x-1">
+                    Jelajahi <ArrowRight className="size-4" />
+                  </span>
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {mainPetTypes.find(p => p.slug === 'anjing')?._count?.products || 0} produk tersedia
+                  </span>
+                </div>
+              </div>
+            </button>
+          </Reveal>
+        </div>
       </section>
 
       {/* ==================== BEST SELLERS ==================== */}
