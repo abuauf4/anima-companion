@@ -64,14 +64,6 @@ export default function RootLayout({
           as="image"
           href="/_next/image?url=%2Fhero-pets.webp&w=640&q=75"
         />
-        {/* Preload homepage API response — kicks off fetch in parallel with
-            JS bundle download, so data is ready when HomeView mounts. */}
-        <link
-          rel="preload"
-          as="fetch"
-          href="/api/home"
-          crossOrigin="anonymous"
-        />
       </head>
       <body
         className={`${jakarta.variable} font-sans antialiased bg-background text-foreground min-h-screen flex flex-col`}
