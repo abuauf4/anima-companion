@@ -91,8 +91,10 @@ export async function GET() {
       }
     }).sort((a, b) => b.revenue - a.revenue)
 
-    const revenueGrowth = prevMonthRevenue._sum.total
-      ? ((monthlyRevenue._sum.total - prevMonthRevenue._sum.total) / prevMonthRevenue._sum.total) * 100
+    const currentTotal = monthlyRevenue._sum.total ?? 0
+    const prevTotal = prevMonthRevenue._sum.total ?? 0
+    const revenueGrowth = prevTotal
+      ? ((currentTotal - prevTotal) / prevTotal) * 100
       : 0
 
     return NextResponse.json({
