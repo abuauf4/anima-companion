@@ -1,6 +1,6 @@
 'use client'
 import { motion } from 'framer-motion'
-import { Shield, Stethoscope, Microscope, Heart, Award, ChevronRight } from 'lucide-react'
+import { Shield, Stethoscope, Heart, Award, Star } from 'lucide-react'
 import { SectionHeader } from '@/components/common/SectionHeader'
 import { Reveal } from '@/components/common/Reveal'
 
@@ -10,29 +10,29 @@ const VETS = [
     role: 'Internal Medicine',
     specialty: 'Spesialis Penyakit Dalam & Imunologi',
     avatar: '/team/drh-1.webp',
-    quote: 'Pendekatan berbasis riset IPB membuat Anima Companion jadi pilihan utama saya untuk rekomendasi klien.',
+    quote: 'Saya merekomendasikan Felcover+ dan Sioren Booster+ untuk klien dengan anabul yang butuh dukungan imunitas. Formulasi terstandar dan terdaftar BPOM.',
   },
   {
     name: 'drh. Bayu Pratama',
     role: 'Clinical Nutrition',
     specialty: 'Spesialis Nutrisi & Gizi Hewan',
     avatar: '/team/drh-2.webp',
-    quote: 'Formula Anima sudah melalui uji klinis. Bukan sekedar vitamin, tapi terapi pendukung nyata.',
+    quote: 'Untuk anabul yang susah makan, Sioren Nafsu Makan jadi pilihan pertama saya. Aman untuk pemakaian harian dan terbukti meningkatkan nafsu makan.',
   },
   {
-    name: 'drh. Rina Kusuma, Ph.D',
-    role: 'Research & Development',
-    specialty: 'Peneliti BRIN, Spesialis Formulasi',
+    name: 'drh. Rina Kusuma',
+    role: 'Dermatology & Coat',
+    specialty: 'Spesialis Kulit & Bulu Hewan',
     avatar: '/team/drh-3.webp',
-    quote: 'Setiap batch kami uji di lab BRIN. Konsistensi kualitas adalah prioritas utama kami.',
+    quote: 'Sioren Skin & Coat dan Sioren Fish Oil adalah kombinasi favorit saya untuk pasien dengan masalah bulu kusam dan kulit gatal.',
   },
 ];
 
 const STATS = [
-  { value: '2,100+', label: 'Dokter Hewan Mempercayai', icon: Stethoscope },
-  { value: '500+', label: 'Klinik Hewan Mitra Reseller', icon: Heart },
-  { value: '100%', label: 'Riset IPB\n& BRIN', icon: Microscope },
-  { value: '8+', label: 'Produk Teruji\nKlinis', icon: Award },
+  { value: '515+', label: 'Klinik Resmi', icon: Stethoscope },
+  { value: '100%', label: 'Rekomendasi drh.', icon: Heart },
+  { value: '8', label: 'Produk Tervalidasi', icon: Award },
+  { value: '4.9★', label: 'Rating Pelanggan', icon: Star },
 ];
 
 export function VetSection() {
@@ -44,9 +44,9 @@ export function VetSection() {
 
       <div className="container-page relative">
         <SectionHeader
-          eyebrow="Kredibilitas & Riset"
-          title={<>Didukung <span className="gradient-brand-text">Riset IPB & BRIN</span></>}
-          subtitle="Bukan sekedar brand supplement — setiap formula Anima Companion lahir dari laboratorium riset dan diuji klinis oleh dokter hewan bersertifikat."
+          eyebrow="Kredibilitas & Rekomendasi"
+          title={<>Rekomendasi <span className="gradient-brand-text">Dokter Hewan</span></>}
+          subtitle="Setiap produk Anima Companion direkomendasikan oleh dokter hewan bersertifikat. Tersedia di 515+ klinik hewan seluruh Indonesia sebagai bagian dari standar perawatan anabul."
           align="center"
         />
 
@@ -117,25 +117,16 @@ export function VetSection() {
         <Reveal delay={0.3}>
           <div className="mt-14 flex flex-col items-center gap-6">
             <p className="text-xs uppercase tracking-widest text-muted-foreground font-medium">
-              Riset & Validasi Bersama
+              Dipercaya & Direkomendasikan Oleh
             </p>
             <div className="flex flex-wrap items-center justify-center gap-4 md:gap-8">
               <div className="flex items-center gap-3 px-6 py-3 rounded-2xl bg-card border border-border/60 shadow-sm">
                 <div className="w-10 h-10 rounded-xl gradient-brand flex items-center justify-center text-white font-bold text-sm">
-                  IPB
+                  AC
                 </div>
                 <div className="text-left">
-                  <div className="text-sm font-semibold">IPB University</div>
-                  <div className="text-xs text-muted-foreground">Faculty of Veterinary Medicine</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 px-6 py-3 rounded-2xl bg-card border border-border/60 shadow-sm">
-                <div className="w-10 h-10 rounded-xl gradient-brand flex items-center justify-center text-white font-bold text-sm">
-                  BRIN
-                </div>
-                <div className="text-left">
-                  <div className="text-sm font-semibold">Badan Riset & Inovasi Nasional</div>
-                  <div className="text-xs text-muted-foreground">Laboratorium Uji Klinis</div>
+                  <div className="text-sm font-semibold">Anima Companion</div>
+                  <div className="text-xs text-muted-foreground">Elevating Animal Health</div>
                 </div>
               </div>
               <div className="flex items-center gap-3 px-6 py-3 rounded-2xl bg-card border border-border/60 shadow-sm">
@@ -145,6 +136,15 @@ export function VetSection() {
                 <div className="text-left">
                   <div className="text-sm font-semibold">BPOM Terdaftar</div>
                   <div className="text-xs text-muted-foreground">Standar Keamanan Pangan</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 px-6 py-3 rounded-2xl bg-card border border-border/60 shadow-sm">
+                <div className="w-10 h-10 rounded-xl gradient-brand flex items-center justify-center">
+                  <Stethoscope className="w-5 h-5 text-white" />
+                </div>
+                <div className="text-left">
+                  <div className="text-sm font-semibold">515+ Klinik Hewan</div>
+                  <div className="text-xs text-muted-foreground">Distributor resmi seluruh Indonesia</div>
                 </div>
               </div>
             </div>

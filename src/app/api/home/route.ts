@@ -13,9 +13,9 @@ const PRODUCT_INCLUDE = {
 /**
  * GET /api/home
  * Single bundled endpoint for homepage — returns all data needed
- * (banners, bestSellers, newProducts, subscribeProducts, problems,
- *  testimonials, sellers/brands, petTypes, saleCountdown)
- * in ONE round trip to Supabase instead of many.
+ * (banners, bestSellers, newProducts, problems,
+ *  testimonials, petTypes, saleCountdown)
+ * in ONE round trip to the database instead of many.
  *
  * Cached for 60s to absorb traffic spikes and reduce pool usage.
  */
@@ -39,10 +39,8 @@ export async function GET() {
         banners,
         bestSellers,
         newProducts,
-        subscribeProducts,
         problems,
         testimonials,
-        sellers,
         petTypes,
       ] = await Promise.all([
         db.banner.findMany({
@@ -61,12 +59,6 @@ export async function GET() {
           take: 8,
           include: PRODUCT_INCLUDE,
         }),
-        db.product.findMany({
-          where: { isActive: true, isSubscribeEligible: true },
-          orderBy: { createdAt: 'desc' },
-          take: 8,
-          include: PRODUCT_INCLUDE,
-        }),
         db.problem.findMany({
           orderBy: { name: 'asc' },
           include: { _count: { select: { products: true } } },
@@ -75,14 +67,6 @@ export async function GET() {
           where: { isActive: true },
           orderBy: { createdAt: 'desc' },
           take: 4,
-        }),
-        db.seller.findMany({
-          where: { isActive: true },
-          orderBy: { totalSales: 'desc' },
-          take: 5,
-          include: {
-            _count: { select: { products: { where: { isActive: true } } } },
-          },
         }),
         db.petType.findMany({
           orderBy: { name: 'asc' },
@@ -103,10 +87,8 @@ export async function GET() {
         banners,
         bestSellers,
         newProducts,
-        subscribeProducts,
         problems,
         testimonials,
-        sellers,
         petTypes,
         saleCountdown,
       }

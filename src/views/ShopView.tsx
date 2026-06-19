@@ -3,12 +3,11 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useHashRouter } from '@/lib/router'
 import { ProductCard } from '@/components/product/ProductCard'
-import { Product, Category, PetType, Problem, Seller } from '@/hooks/use-fetch'
+import { Product, Category, PetType, Problem } from '@/hooks/use-fetch'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -23,7 +22,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet'
-import { ChevronLeft, ChevronRight, SlidersHorizontal, X, Search, Store, BadgeCheck } from 'lucide-react'
+import { ChevronLeft, ChevronRight, SlidersHorizontal, X, Search } from 'lucide-react'
 
 interface ShopFilters {
   search: string
@@ -36,7 +35,6 @@ interface ShopFilters {
 }
 
 interface FilterPanelProps {
-  sellers: Seller[]
   categories: Category[]
   problems: Problem[]
   petTypes: PetType[]
@@ -44,38 +42,9 @@ interface FilterPanelProps {
   updateFilter: (key: string, value: string) => void
 }
 
-function FilterPanel({ sellers, categories, problems, petTypes, filters, updateFilter }: FilterPanelProps) {
+function FilterPanel({ categories, problems, petTypes, filters, updateFilter }: FilterPanelProps) {
   return (
     <div className="space-y-6">
-      {/* Brand */}
-      <div>
-        <h3 className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          <Store className="size-3.5" /> Brand
-        </h3>
-        <div className="space-y-2">
-          {sellers.map((s) => (
-            <label
-              key={s.id}
-              className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-1 text-sm hover:bg-accent"
-            >
-              <Checkbox
-                checked={filters.brand === s.slug}
-                onCheckedChange={(checked) => {
-                  updateFilter('brand', checked ? s.slug : '')
-                }}
-              />
-              <span className="flex items-center gap-1 text-foreground">
-                {s.isVerified && <BadgeCheck className="size-3.5 text-sky-500" />}
-                {s.name}
-              </span>
-              {s._count && (
-                <span className="ml-auto text-xs text-muted-foreground">{s._count.products}</span>
-              )}
-            </label>
-          ))}
-        </div>
-      </div>
-
       {/* Categories */}
       <div>
         <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Kategori</h3>
@@ -165,7 +134,6 @@ export function ShopView() {
   const [categories, setCategories] = useState<Category[]>([])
   const [petTypes, setPetTypes] = useState<PetType[]>([])
   const [problems, setProblems] = useState<Problem[]>([])
-  const [sellers, setSellers] = useState<Seller[]>([])
   const [loading, setLoading] = useState(true)
   const [localSearch, setLocalSearch] = useState('')
 
@@ -195,12 +163,10 @@ export function ShopView() {
       fetch('/api/categories').then((r) => r.json()),
       fetch('/api/pet-types').then((r) => r.json()),
       fetch('/api/problems').then((r) => r.json()),
-      fetch('/api/home').then((r) => r.json()),
-    ]).then(([c, pt, p, home]) => {
+    ]).then(([c, pt, p]) => {
       setCategories(c.categories || [])
       setPetTypes(pt.petTypes || [])
       setProblems(p.problems || [])
-      setSellers(home.sellers || [])
     })
   }, [])
 
@@ -238,16 +204,11 @@ export function ShopView() {
     filters.category,
     filters.problem,
     filters.petType,
-    filters.brand,
     filters.search,
   ].filter(Boolean).length
 
   // Compute display title
   const displayTitle = useMemo(() => {
-    if (filters.brand) {
-      const s = sellers.find((x) => x.slug === filters.brand)
-      return s ? `Produk ${s.name}` : 'Belanja by Brand'
-    }
     if (filters.problem) {
       const p = problems.find((x) => x.slug === filters.problem)
       return p ? `Produk untuk ${p.name}` : 'Belanja by Manfaat'
@@ -261,8 +222,8 @@ export function ShopView() {
       return c ? c.name : 'Belanja'
     }
     if (filters.search) return `Hasil pencarian: "${filters.search}"`
-    return 'Semua Produk'
-  }, [filters, sellers, problems, petTypes, categories])
+    return 'Semua Produk Anima Companion'
+  }, [filters, problems, petTypes, categories])
 
   return (
     <div className="container-page py-8">
@@ -279,7 +240,6 @@ export function ShopView() {
         <aside className="hidden w-64 shrink-0 lg:block">
           <div className="sticky top-28 max-h-[calc(100vh-8rem)] overflow-y-auto pr-1 [scrollbar-width:thin]">
             <FilterPanel
-              sellers={sellers}
               categories={categories}
               problems={problems}
               petTypes={petTypes}
@@ -319,7 +279,6 @@ export function ShopView() {
                 </SheetHeader>
                 <div className="mt-6">
                   <FilterPanel
-                    sellers={sellers}
                     categories={categories}
                     problems={problems}
                     petTypes={petTypes}
@@ -378,12 +337,6 @@ export function ShopView() {
                 <Badge variant="secondary" className="gap-1">
                   &quot;{filters.search}&quot;
                   <button onClick={() => updateFilter('search', '')}><X className="h-3 w-3" /></button>
-                </Badge>
-              )}
-              {filters.brand && (
-                <Badge variant="secondary" className="gap-1">
-                  {sellers.find((s) => s.slug === filters.brand)?.name || filters.brand}
-                  <button onClick={() => updateFilter('brand', '')}><X className="h-3 w-3" /></button>
                 </Badge>
               )}
               {filters.category && (
