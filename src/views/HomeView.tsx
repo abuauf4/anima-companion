@@ -41,14 +41,6 @@ const BUNDLES: { problemSlug: string; title: string; tag: string; emoji: string;
   { problemSlug: 'recovery', title: 'Paket Recovery', tag: 'HEMAT 28%', emoji: '💖', gradient: 'from-sky-400 to-cyan-500' },
 ]
 
-// Announcement bar messages (rotates every 4s)
-const ANNOUNCEMENTS = [
-  '🚚 Gratis ongkir min Rp 150.000',
-  '⏰ Flash Sale 20% — berakhir segera!',
-  '🎁 Subscribe & Save hemat 15% setiap pesanan',
-  '🩺 Konsultasi vet gratis 24/7 via WhatsApp',
-]
-
 export function HomeView() {
   const { navigate } = useHashRouter()
   const addItem = useCartStore((s) => s.addItem)
@@ -61,10 +53,7 @@ export function HomeView() {
   const [testimonials, setTestimonials] = useState<Testimonial[]>([])
   const [sellers, setSellers] = useState<Seller[]>([])
   const [petTypes, setPetTypes] = useState<PetType[]>([])
-  const [saleEndsAt, setSaleEndsAt] = useState<string | null>(null)
 
-  const [announcementIdx, setAnnouncementIdx] = useState(0)
-  const [countdown, setCountdown] = useState({ days: 3, hours: 0, minutes: 0, seconds: 0 })
   const [emailValue, setEmailValue] = useState('')
 
   useEffect(() => {
@@ -79,34 +68,9 @@ export function HomeView() {
         setTestimonials(data.testimonials || [])
         setSellers(data.sellers || [])
         setPetTypes(data.petTypes || [])
-        setSaleEndsAt(data.saleCountdown?.endsAt || null)
       })
       .catch((err) => console.error('Home fetch failed:', err))
   }, [])
-
-  // Announcement rotation
-  useEffect(() => {
-    const t = setInterval(() => {
-      setAnnouncementIdx((i) => (i + 1) % ANNOUNCEMENTS.length)
-    }, 4000)
-    return () => clearInterval(t)
-  }, [])
-
-  // Sale countdown
-  useEffect(() => {
-    if (!saleEndsAt) return
-    const tick = () => {
-      const diff = Math.max(0, new Date(saleEndsAt).getTime() - Date.now())
-      const days = Math.floor(diff / 86400000)
-      const hours = Math.floor((diff % 86400000) / 3600000)
-      const minutes = Math.floor((diff % 3600000) / 60000)
-      const seconds = Math.floor((diff % 60000) / 1000)
-      setCountdown({ days, hours, minutes, seconds })
-    }
-    tick()
-    const t = setInterval(tick, 1000)
-    return () => clearInterval(t)
-  }, [saleEndsAt])
 
   // Bundles derived from bestSellers (grouped by problem)
   const bundles = BUNDLES.map((b) => {
@@ -174,27 +138,6 @@ export function HomeView() {
 
   return (
     <div className="overflow-x-hidden">
-      {/* ==================== ANNOUNCEMENT BAR ==================== */}
-      <div className="bg-gradient-to-r from-primary via-orange-500 to-amber-500 text-white">
-        <div className="container-page flex h-9 items-center justify-center gap-3 text-center text-xs font-medium">
-          <motion.span
-            key={announcementIdx}
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
-            transition={{ duration: 0.3 }}
-            className="flex items-center gap-2"
-          >
-            {ANNOUNCEMENTS[announcementIdx]}
-            {announcementIdx === 1 && saleEndsAt && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-white/25 px-2 py-0.5 font-mono text-[10px] font-bold">
-                {countdown.days}d {String(countdown.hours).padStart(2, '0')}h {String(countdown.minutes).padStart(2, '0')}m {String(countdown.seconds).padStart(2, '0')}s
-              </span>
-            )}
-          </motion.span>
-        </div>
-      </div>
-
       {/* ==================== HERO — Zesty Paws-style split ==================== */}
       <section className="relative overflow-hidden gradient-mesh-warm">
         {/* Decorative blurred orbs */}
