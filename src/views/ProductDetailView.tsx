@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useHashRouter } from '@/lib/router'
-import { useCartStore } from '@/lib/store'
+import { useCartStore, useWishlistStore } from '@/lib/store'
 import { Product } from '@/hooks/use-fetch'
 import { ProductCard } from '@/components/product/ProductCard'
 import { Image as OptImage } from '@/components/common/Image'
@@ -26,6 +26,8 @@ import { Leaf, Bone, Eye, Sun, Activity, Droplet } from 'lucide-react'
 export function ProductDetailView({ slug }: { slug: string }) {
   const { navigate } = useHashRouter()
   const addItem = useCartStore((s) => s.addItem)
+  const toggleWishlist = useWishlistStore((s) => s.toggleItem)
+  const isWishlisted = useWishlistStore((s) => s.items.some((i) => i.productId === (data?.product?.id || '')))
   const [data, setData] = useState<{ product: Product; related: Product[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [quantity, setQuantity] = useState(1)
@@ -104,6 +106,61 @@ export function ProductDetailView({ slug }: { slug: string }) {
   const handleBuyNow = () => {
     handleAddToCart()
     setTimeout(() => navigate('/cart'), 300)
+  }
+
+  const handleWishlist = () => {
+    if (!data?.product) return
+    const product = data.product
+    toggleWishlist({
+      productId: product.id,
+      slug: product.slug,
+      name: product.name,
+      brand: product.brand,
+      price: product.price,
+      salePrice: product.salePrice,
+      image: product.images?.[0]?.url || '',
+      weight: product.weight,
+    })
+    toast.success(
+      isWishlisted ? `${product.name} dihapus dari wishlist` : `${product.name} ditambahkan ke wishlist`,
+      { description: isWishlisted ? undefined : 'Lihat di halaman Wishlist' }
+    )
+  }
+
+  const handleShare = async () => {
+    if (!data?.product) return
+    const product = data.product
+    const shareUrl = `${window.location.origin}/#/product/${product.slug}`
+    const shareText = `${product.name} — ${formatRupiah(product.price)} di Anima Companion`
+
+    // Try Web Share API first (mobile + desktop browsers that support it)
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: product.name,
+          text: shareText,
+          url: shareUrl,
+        })
+        return
+      } catch (err) {
+        // User cancelled — silently ignore
+        if (err instanceof Error && err.name === 'AbortError') return
+        // Fall through to clipboard fallback
+      }
+    }
+
+    // Fallback: copy to clipboard
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      toast.success('Link produk disalin ke clipboard', {
+        description: shareUrl,
+      })
+    } catch {
+      // Last resort: select-then-prompt
+      toast.error('Gagal menyalin link', {
+        description: `Salin manual: ${shareUrl}`,
+      })
+    }
   }
 
   return (
@@ -200,10 +257,23 @@ export function ProductDetailView({ slug }: { slug: string }) {
               )}
             </div>
             <div className="flex gap-1">
-              <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Wishlist">
-                <Heart className="h-4 w-4" />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9"
+                onClick={handleWishlist}
+                aria-label={isWishlisted ? `Hapus ${data?.product?.name} dari wishlist` : `Tambah ${data?.product?.name} ke wishlist`}
+                aria-pressed={isWishlisted}
+              >
+                <Heart className={`h-4 w-4 transition-colors ${isWishlisted ? 'fill-rose-500 text-rose-500' : ''}`} />
               </Button>
-              <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Share">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9"
+                onClick={handleShare}
+                aria-label="Bagikan produk"
+              >
                 <Share2 className="h-4 w-4" />
               </Button>
             </div>
