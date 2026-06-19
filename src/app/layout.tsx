@@ -9,35 +9,39 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Anima Companion — Healthy Pets, Happy Companions",
+  title: "Anima Companion — Elevating Animal Health",
   description:
-    "Anima Companion adalah platform e-commerce vitamin, suplemen, dan kebutuhan kesehatan hewan peliharaan. Belanja mudah, cepat, dan terpercaya untuk kucing, anjing, burung, ikan, dan hewan kecil lainnya.",
+    "Anima Companion (PT Sutan Vet Medika) — suplemen & vitamin hewan peliharaan rekomendasi dokter hewan. Produk Felcover+, Sioren, dan Forevet. Tersedia di 515+ klinik hewan seluruh Indonesia.",
   keywords: [
-    "vitamin hewan",
+    "anima companion",
+    "felcover",
+    "felcover plus",
+    "sioren",
+    "forevet",
     "suplemen kucing",
     "suplemen anjing",
+    "imun booster hewan",
+    "vitamin hewan",
     "kesehatan hewan peliharaan",
-    "pet health",
-    "anima companion",
-    "obat kucing",
-    "perawatan hewan",
+    "PT Sutan Vet Medika",
+    "PawrentHebatAnabulSehat",
   ],
-  authors: [{ name: "Anima Companion" }],
+  authors: [{ name: "PT Sutan Vet Medika — Anima Companion" }],
   icons: {
     icon: "/logo.svg",
   },
   openGraph: {
-    title: "Anima Companion — Healthy Pets, Happy Companions",
+    title: "Anima Companion — Elevating Animal Health",
     description:
-      "Vitamin, suplemen, dan kebutuhan kesehatan hewan peliharaan. Belanja mudah via WhatsApp.",
+      "Suplemen & vitamin hewan peliharaan rekomendasi dokter hewan. Produk Felcover+, Sioren, dan Forevet. Tersedia di 515+ klinik hewan seluruh Indonesia.",
     siteName: "Anima Companion",
     type: "website",
     locale: "id_ID",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Anima Companion",
-    description: "Vitamin & suplemen kesehatan hewan peliharaan.",
+    title: "Anima Companion — Elevating Animal Health",
+    description: "Suplemen rekomendasi dokter hewan untuk kucing & anjing.",
   },
 };
 
