@@ -123,15 +123,15 @@ export function VetSection() {
           ))}
         </div>
 
-        {/* Institutional badges */}
+        {/* Institutional badges — full-width cards on mobile, 3-col on desktop */}
         <Reveal delay={0.2}>
           <div className="mt-12 flex flex-col items-center gap-5">
             <p className="text-xs uppercase tracking-widest text-muted-foreground font-medium">
               Dipercaya & Direkomendasikan Oleh
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-3 md:gap-6">
-              <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-card border border-border/60 shadow-sm">
-                <div className="w-10 h-10 rounded-xl gradient-brand flex items-center justify-center text-white font-bold text-sm">
+            <div className="grid w-full grid-cols-1 gap-3 md:grid-cols-3 md:gap-6">
+              <div className="flex items-center gap-3 rounded-2xl bg-card border border-border/60 px-4 py-3 shadow-sm md:px-5">
+                <div className="size-10 shrink-0 rounded-xl gradient-brand flex items-center justify-center text-white font-bold text-sm">
                   AC
                 </div>
                 <div className="text-left">
@@ -139,18 +139,18 @@ export function VetSection() {
                   <div className="text-xs text-muted-foreground">Elevating Animal Health</div>
                 </div>
               </div>
-              <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-card border border-border/60 shadow-sm">
-                <div className="w-10 h-10 rounded-xl gradient-brand flex items-center justify-center">
-                  <Shield className="w-5 h-5 text-white" />
+              <div className="flex items-center gap-3 rounded-2xl bg-card border border-border/60 px-4 py-3 shadow-sm md:px-5">
+                <div className="size-10 shrink-0 rounded-xl gradient-brand flex items-center justify-center">
+                  <Shield className="size-5 text-white" />
                 </div>
                 <div className="text-left">
                   <div className="text-sm font-semibold">BPOM Terdaftar</div>
                   <div className="text-xs text-muted-foreground">Standar Keamanan Pangan</div>
                 </div>
               </div>
-              <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-card border border-border/60 shadow-sm">
-                <div className="w-10 h-10 rounded-xl gradient-brand flex items-center justify-center">
-                  <Stethoscope className="w-5 h-5 text-white" />
+              <div className="flex items-center gap-3 rounded-2xl bg-card border border-border/60 px-4 py-3 shadow-sm md:px-5">
+                <div className="size-10 shrink-0 rounded-xl gradient-brand flex items-center justify-center">
+                  <Stethoscope className="size-5 text-white" />
                 </div>
                 <div className="text-left">
                   <div className="text-sm font-semibold">515+ Klinik Hewan</div>
