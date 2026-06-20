@@ -137,7 +137,7 @@ export function IngredientsReveal() {
         <div
           ref={scrollRef}
           onScroll={handleScroll}
-          className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {INGREDIENTS.map((ing, i) => (
             <motion.button
@@ -148,7 +148,7 @@ export function IngredientsReveal() {
               transition={{ duration: 0.4, delay: Math.min(i, 3) * 0.05 }}
               onClick={() => navigate(`/product/${ing.slug}`)}
               whileHover={{ y: -4 }}
-              className={`group relative flex shrink-0 snap-start flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br ${ing.color} p-5 text-left text-white shadow-sm transition-shadow hover:shadow-lg md:p-6 w-[calc(100vw-2.5rem)] md:w-[calc(33.333%-0.667rem)]`}
+              className={`group relative flex shrink-0 snap-start flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br ${ing.color} p-5 text-left text-white shadow-sm transition-shadow hover:shadow-lg md:p-6 w-full md:w-[calc(33.333%-0.667rem)]`}
               style={{ minHeight: '340px' }}
               aria-label={`Lihat produk ${ing.product}`}
             >
