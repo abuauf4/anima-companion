@@ -41,6 +41,10 @@ export function MobileBottomBar() {
     { label: 'Wishlist', path: '/wishlist', icon: Heart, badge: wishlistCount },
   ]
 
+  // Hide bottom bar on product detail — sticky CTA bar handles checkout there
+  const isProductDetail = route.segments[0] === 'product'
+  if (isProductDetail) return null
+
   return (
     <>
       {/* Sidebar (opened by Menu button in bottom bar) */}
