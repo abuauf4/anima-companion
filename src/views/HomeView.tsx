@@ -296,37 +296,8 @@ export function HomeView() {
       {/* ==================== INGREDIENTS REVEAL — Bahan Aktif Pilihan ==================== */}
       <IngredientsReveal />
 
-      {/* ==================== NEW ARRIVALS — Bento Poster Grid ==================== */}
-      <section className="py-10 md:py-14">
-        <div className="container-page">
-          <SectionHeader
-            eyebrow="Produk Baru"
-            eyebrowIcon={<Sparkles className="size-3 text-violet-500" />}
-            title={<>New <span className="gradient-brand-text">Arrivals</span></>}
-            subtitle="Produk terbaru dari Anima Companion yang baru saja diluncurkan."
-            action={
-              <Button variant="outline" size="sm" onClick={() => navigate('/shop?new=1')} className="gap-1.5">
-                Lihat Semua <ArrowRight className="size-4" />
-              </Button>
-            }
-            className="mb-8"
-          />
-        </div>
-
-        {newProducts.length === 0 ? (
-          <div className="container-page">
-            <div className="grid gap-0 md:grid-cols-3 md:grid-rows-2 md:h-[560px]">
-              <div className="h-[360px] animate-pulse rounded-2xl bg-muted md:col-span-2 md:row-span-2 md:h-full" />
-              <div className="hidden h-[280px] animate-pulse bg-muted md:block" />
-              <div className="hidden h-[280px] animate-pulse bg-muted md:block" />
-            </div>
-          </div>
-        ) : (
-          <div className="container-page">
-            <NewArrivalPosters products={newProducts} />
-          </div>
-        )}
-      </section>
+      {/* ==================== NEW ARRIVALS — Hidden for now (will re-enable later) ==================== */}
+      {/* <section className="py-10 md:py-14"> ... </section> */}
 
       {/* ==================== VET SECTION ==================== */}
       <VetSection />

@@ -77,8 +77,8 @@ export function VetSection() {
           })}
         </Stagger>
 
-        {/* Vet testimonial cards — NO PHOTOS, clean quote-card design */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 lg:gap-6">
+        {/* Vet testimonial cards — equal height, clean quote-card design */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 lg:gap-6 items-stretch">
           {VETS.map((vet, i) => (
             <motion.div
               key={vet.name}
@@ -86,7 +86,7 @@ export function VetSection() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: '-50px' }}
               transition={{ duration: 0.4, delay: i * 0.1 }}
-              className="group relative flex flex-col rounded-2xl bg-card border border-border/60 p-6 shadow-sm hover:shadow-md transition-all duration-300"
+              className="group relative flex flex-col rounded-2xl bg-card border border-border/60 p-6 shadow-sm hover:shadow-md transition-all duration-300 min-h-[260px]"
             >
               {/* Quote icon with gradient — top-left corner */}
               <div className={`mb-4 inline-flex size-10 items-center justify-center rounded-xl bg-gradient-to-br ${vet.color} text-white shadow-sm`}>
