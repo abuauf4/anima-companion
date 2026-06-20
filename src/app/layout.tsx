@@ -31,6 +31,8 @@ export const metadata: Metadata = {
   authors: [{ name: "PT Sutan Vet Medika — Anima Companion" }],
   icons: {
     icon: "/logo.svg",
+    apple: "/logo.svg",
+    shortcut: "/logo.svg",
   },
   openGraph: {
     title: "Anima Companion — Elevating Animal Health",
@@ -39,11 +41,20 @@ export const metadata: Metadata = {
     siteName: "Anima Companion",
     type: "website",
     locale: "id_ID",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Anima Companion — Elevating Animal Health",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "Anima Companion — Elevating Animal Health",
     description: "Suplemen rekomendasi dokter hewan untuk kucing & anjing.",
+    images: ["/og-image.png"],
   },
 };
 
