@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import {
   ShoppingCart, Check, Minus, Plus, Star, Truck, Shield, MessageCircle,
-  ChevronRight, Heart, Share2, Sparkles,
+  ChevronRight, ChevronLeft, Heart, Share2, Sparkles,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatRupiah, effectivePrice, discountPercent } from '@/lib/format'
@@ -189,7 +189,7 @@ export function ProductDetailView({ slug }: { slug: string }) {
       </nav>
 
       <div className="grid gap-4 md:grid-cols-2 md:gap-8 lg:gap-12">
-        {/* ==================== Gallery ==================== */}
+        {/* ==================== Gallery with slide arrows ==================== */}
         <div>
           <div className="relative aspect-square overflow-hidden rounded-xl md:rounded-2xl border border-border bg-muted">
             {images[activeImage] ? (
@@ -220,6 +220,31 @@ export function ProductDetailView({ slug }: { slug: string }) {
               <div className="absolute right-2 top-2 md:right-3 md:top-3">
                 <Badge className="bg-destructive text-destructive-foreground text-[10px] shadow-sm">-{discount}%</Badge>
               </div>
+            )}
+
+            {/* Slide arrows — only show if more than 1 image */}
+            {images.length > 1 && (
+              <>
+                <button
+                  onClick={() => setActiveImage((prev) => (prev === 0 ? images.length - 1 : prev - 1))}
+                  className="absolute left-2 top-1/2 z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-card/90 shadow-md ring-1 ring-border/30 backdrop-blur-sm transition-all hover:bg-card hover:scale-105 active:scale-95 md:size-10"
+                  aria-label="Gambar sebelumnya"
+                >
+                  <ChevronLeft className="size-5" />
+                </button>
+                <button
+                  onClick={() => setActiveImage((prev) => (prev === images.length - 1 ? 0 : prev + 1))}
+                  className="absolute right-2 top-1/2 z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-card/90 shadow-md ring-1 ring-border/30 backdrop-blur-sm transition-all hover:bg-card hover:scale-105 active:scale-95 md:size-10"
+                  aria-label="Gambar berikutnya"
+                >
+                  <ChevronRight className="size-5" />
+                </button>
+
+                {/* Image counter badge — bottom center */}
+                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-[10px] font-medium text-white backdrop-blur-sm md:bottom-3 md:text-xs">
+                  {activeImage + 1} / {images.length}
+                </div>
+              </>
             )}
           </div>
 
