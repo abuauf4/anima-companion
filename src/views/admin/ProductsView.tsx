@@ -232,7 +232,7 @@ function ProductDialog({
     name: '', sku: '', brand: 'Anima', price: '', salePrice: '', stock: '',
     weight: '', description: '', benefit: '', usage: '', ingredients: '',
     bpomNumber: '', isBestSeller: false, isNew: false, isActive: true,
-    categoryId: '', imageUrl: '',
+    categoryId: '', imageUrls: [] as string[],
   })
   const [saving, setSaving] = useState(false)
 
@@ -255,14 +255,14 @@ function ProductDialog({
         isNew: editing.isNew,
         isActive: editing.isActive,
         categoryId: editing.categoryId,
-        imageUrl: editing.images[0]?.url || '',
+        imageUrls: editing.images?.map((img) => img.url) || [],
       })
     } else {
       setForm({
         name: '', sku: '', brand: 'Anima', price: '', salePrice: '', stock: '',
         weight: '', description: '', benefit: '', usage: '', ingredients: '',
         bpomNumber: '', isBestSeller: false, isNew: false, isActive: true,
-        categoryId: categories[0]?.id || '', imageUrl: '',
+        categoryId: categories[0]?.id || '', imageUrls: [],
       })
     }
   }, [editing, open, categories])
@@ -279,7 +279,7 @@ function ProductDialog({
         price: parseInt(form.price),
         salePrice: form.salePrice ? parseInt(form.salePrice) : null,
         stock: parseInt(form.stock) || 0,
-        images: form.imageUrl ? [form.imageUrl] : [],
+        images: form.imageUrls.filter(Boolean),
       }
       const url = editing ? `/api/admin/products/${editing.id}` : '/api/admin/products'
       const method = editing ? 'PUT' : 'POST'
@@ -352,9 +352,47 @@ function ProductDialog({
               <Input type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} className="mt-1.5" />
             </div>
             <div className="col-span-2">
-              <Label>URL Gambar</Label>
-              <Input value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} placeholder="https://..." className="mt-1.5" />
-              <p className="mt-1 text-xs text-muted-foreground">Tip: gunakan https://placehold.co/600x600 untuk placeholder</p>
+              <Label>URL Gambar Produk (Cloudinary/dll)</Label>
+              <div className="mt-1.5 space-y-2">
+                {form.imageUrls.map((url, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Input
+                      value={url}
+                      onChange={(e) => {
+                        const newUrls = [...form.imageUrls]
+                        newUrls[idx] = e.target.value
+                        setForm({ ...form, imageUrls: newUrls })
+                      }}
+                      placeholder="https://res.cloudinary.com/..."
+                      className="flex-1"
+                    />
+                    {form.imageUrls.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="shrink-0 text-destructive"
+                        onClick={() => {
+                          const newUrls = form.imageUrls.filter((_, i) => i !== idx)
+                          setForm({ ...form, imageUrls: newUrls })
+                        }}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setForm({ ...form, imageUrls: [...form.imageUrls, ''] })}
+                >
+                  <Plus className="size-4" /> Tambah Gambar
+                </Button>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">Gambar pertama = gambar utama di product card. Tambah multiple untuk gallery di detail produk.</p>
             </div>
             <div className="col-span-2">
               <Label>No. BPOM</Label>
