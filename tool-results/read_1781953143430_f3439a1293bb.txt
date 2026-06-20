@@ -1,0 +1,890 @@
+     1→     1→'use client'
+     2→     2→import { useEffect, useState, useRef } from 'react'
+     3→     3→import { useHashRouter } from '@/lib/router'
+     4→     4→import { Button } from '@/components/ui/button'
+     5→     5→import { Input } from '@/components/ui/input'
+     6→     6→import { ProductCard } from '@/components/product/ProductCard'
+     7→     7→import { Image as OptImage } from '@/components/common/Image'
+     8→     8→import { SectionHeader } from '@/components/common/SectionHeader'
+     9→     9→import { Reveal, Stagger, StaggerItem } from '@/components/common/Reveal'
+    10→    10→import {
+    11→    11→  Shield, Utensils, Sparkles, Bone, Activity, Eye, Heart, Sun,
+    12→    12→  ArrowRight, MessageCircle, Star, ChevronRight, ChevronLeft,
+    13→    13→  PawPrint,
+    14→    14→  Mail, Gift,
+    15→    15→} from 'lucide-react'
+    16→    16→import {
+    17→    17→  Product, PetType,
+    18→    18→} from '@/hooks/use-fetch'
+    19→    19→import { useHomeData } from '@/hooks/use-home-data'
+    20→    20→import { VetSection } from '@/components/home/VetSection'
+    21→    21→import { IngredientsReveal } from '@/components/home/IngredientsReveal'
+    22→    22→import { motion, useMotionValue, useTransform } from 'framer-motion'
+    23→    23→import { toast } from 'sonner'
+    24→    24→import { formatRupiah } from '@/lib/format'
+    25→    25→
+    26→    26→const PROBLEM_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+    27→    27→  imunitas: Shield,
+    28→    28→  'nafsu-makan': Utensils,
+    29→    29→  'bulu-dan-kulit': Sparkles,
+    30→    30→  'tulang-dan-sendi': Bone,
+    31→    31→  pencernaan: Activity,
+    32→    32→  mata: Eye,
+    33→    33→  recovery: Heart,
+    34→    34→  harian: Sun,
+    35→    35→}
+    36→    36→
+    37→    37→export function HomeView() {
+    38→    38→  const { navigate } = useHashRouter()
+    39→    39→  // Stale-while-revalidate: instantly render cached data from sessionStorage,
+    40→    40→  // refresh in background. isLoading=true only on truly first visit.
+    41→    41→  const {
+    42→    42→    isLoading,
+    43→    43→    isStale,
+    44→    44→    banners,
+    45→    45→    bestSellers,
+    46→    46→    newProducts,
+    47→    47→    problems,
+    48→    48→    testimonials,
+    49→    49→    petTypes,
+    50→    50→  } = useHomeData()
+    51→    51→
+    52→    52→  const [emailValue, setEmailValue] = useState('')
+    53→    53→
+    54→    54→  const handleNewsletter = (e: React.FormEvent) => {
+    55→    55→    e.preventDefault()
+    56→    56→    if (!emailValue) return
+    57→    57→    toast.success('Berhasil daftar newsletter! 🎁', {
+    58→    58→      description: 'Voucher Rp 25.000 akan dikirim ke email Anda.',
+    59→    59→    })
+    60→    60→    setEmailValue('')
+    61→    61→  }
+    62→    62→
+    63→    63→  // Only Kucing & Anjing — Anima Companion only sells cat & dog supplements
+    64→    64→  const mainPetTypes = petTypes.filter((p) => ['kucing', 'anjing'].includes(p.slug))
+    65→    65→
+    66→    66→  return (
+    67→    67→    <div className="overflow-x-hidden">
+    68→    68→      {/* ==================== HERO — split with trust badge overlay ==================== */}
+    69→    69→      <section className="relative overflow-hidden gradient-mesh-warm pb-8 md:pb-12">
+    70→    70→        {/* Decorative blurred orbs */}
+    71→    71→        <div className="pointer-events-none absolute -right-24 -top-24 size-96 rounded-full bg-primary/15 blur-3xl" />
+    72→    72→        <div className="pointer-events-none absolute -bottom-24 -left-24 size-96 rounded-full bg-secondary/15 blur-3xl" />
+    73→    73→
+    74→    74→        <div className="container-page relative grid items-center gap-4 py-4 md:grid-cols-2 md:gap-6 md:py-12 lg:py-16">
+    75→    75→          {/* CONTENT: bottom on mobile, LEFT on desktop */}
+    76→    76→          <motion.div
+    77→    77→            initial={{ opacity: 0, y: 16 }}
+    78→    78→            animate={{ opacity: 1, y: 0 }}
+    79→    79→            transition={{ duration: 0.5 }}
+    80→    80→            className="space-y-3 text-foreground md:space-y-4"
+    81→    81→          >
+    82→    82→            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
+    83→    83→              <PawPrint className="size-3" /> Suplemen Rekomendasi Dokter Hewan
+    84→    84→            </span>
+    85→    85→
+    86→    86→            <h1 className="text-balance text-3xl font-extrabold leading-[1.05] tracking-tight sm:text-4xl lg:text-5xl">
+    87→    87→              Elevating<br />
+    88→    88→              <span className="gradient-brand-text">Animal Health</span>
+    89→    89→            </h1>
+    90→    90→
+    91→    91→            <p className="max-w-md text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
+    92→    92→              Suplemen & vitamin hewan peliharaan premium dari <span className="font-semibold text-foreground">Anima Companion</span> — PT Sutan Vet Medika. Diformulasikan bersama dokter hewan, tersedia di <span className="font-semibold text-foreground">515+ klinik</span> seluruh Indonesia.
+    93→    93→            </p>
+    94→    94→
+    95→    95→            {/* Hook text before CTAs — same typography as H1 */}
+    96→    96→            <div className="pt-1">
+    97→    97→              <h2 className="text-balance text-3xl font-extrabold leading-[1.05] tracking-tight sm:text-4xl lg:text-5xl">
+    98→    98→                Belanja sesuai<br />
+    99→    99→                <span className="gradient-brand-text">hewan peliharaanmu</span>
+   100→   100→              </h2>
+   101→   101→            </div>
+   102→   102→
+   103→   103→            {/* CTAs — 1 baris, Anjing kiri Kucing kanan */}
+   104→   104→            <div className="flex items-center gap-2.5">
+   105→   105→              <Button
+   106→   106→                size="lg"
+   107→   107→                onClick={() => navigate('/shop?pet=anjing')}
+   108→   108→                className="h-11 flex-1 gap-2 bg-primary px-4 text-sm font-bold shadow-md hover:bg-primary/90"
+   109→   109→              >
+   110→   110→                🐕 Anjing
+   111→   111→              </Button>
+   112→   112→              <Button
+   113→   113→                size="lg"
+   114→   114→                variant="outline"
+   115→   115→                onClick={() => navigate('/shop?pet=kucing')}
+   116→   116→                className="h-11 flex-1 gap-2 border-secondary/30 bg-card px-4 text-sm font-semibold text-secondary hover:bg-secondary/5 hover:text-secondary"
+   117→   117→              >
+   118→   118→                🐈 Kucing
+   119→   119→              </Button>
+   120→   120→            </div>
+   121→   121→          </motion.div>
+   122→   122→
+   123→   123→          {/* IMAGE: top on mobile, RIGHT on desktop */}
+   124→   124→          <motion.div
+   125→   125→            initial={{ opacity: 0, scale: 0.95 }}
+   126→   126→            animate={{ opacity: 1, scale: 1 }}
+   127→   127→            transition={{ duration: 0.6, delay: 0.1 }}
+   128→   128→            className="relative order-first h-44 sm:h-80 md:order-last md:h-96"
+   129→   129→          >
+   130→   130→            <div className="relative h-full w-full overflow-hidden rounded-3xl shadow-2xl ring-4 ring-white/60">
+   131→   131→              <OptImage
+   132→   132→                src="/hero-pets.webp"
+   133→   133→                alt="Anima Companion — Elevating Animal Health"
+   134→   134→                fill
+   135→   135→                priority
+   136→   136→                sizes="(max-width: 768px) 100vw, 50vw"
+   137→   137→                className="object-cover"
+   138→   138→              />
+   139→   139→              <div className="absolute inset-0 bg-gradient-to-tr from-primary/10 via-transparent to-secondary/10" />
+   140→   140→            </div>
+   141→   141→
+   142→   142→            {/* Floating card — top-right: rating (desktop only) */}
+   143→   143→            <motion.div
+   144→   144→              animate={{ y: [0, -8, 0] }}
+   145→   145→              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+   146→   146→              className="absolute -right-2 top-4 hidden items-center gap-2 rounded-2xl bg-card/95 p-2.5 shadow-xl ring-1 ring-border/30 backdrop-blur-sm sm:flex sm:-right-4 sm:top-6"
+   147→   147→            >
+   148→   148→              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100">
+   149→   149→                <Star className="size-5 fill-amber-400 text-amber-400" />
+   150→   150→              </div>
+   151→   151→              <div>
+   152→   152→                <p className="text-xs font-bold text-foreground">4.9★ 12rb+ ulasan</p>
+   153→   153→                <p className="text-[10px] text-muted-foreground">Rating pelanggan</p>
+   154→   154→              </div>
+   155→   155→            </motion.div>
+   156→   156→
+   157→   157→            {/* Floating card — bottom-left: BPOM (desktop only) */}
+   158→   158→            <motion.div
+   159→   159→              animate={{ y: [0, 8, 0] }}
+   160→   160→              transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
+   161→   161→              className="absolute -left-2 bottom-4 hidden items-center gap-2 rounded-2xl bg-card/95 p-2.5 shadow-xl ring-1 ring-border/30 backdrop-blur-sm sm:flex sm:-left-4 sm:bottom-8"
+   162→   162→            >
+   163→   163→              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100">
+   164→   164→                <Shield className="size-5 text-emerald-600" />
+   165→   165→              </div>
+   166→   166→              <div>
+   167→   167→                <p className="text-xs font-bold text-foreground">BPOM Terdaftar</p>
+   168→   168→                <p className="text-[10px] text-muted-foreground">100% Original</p>
+   169→   169→              </div>
+   170→   170→            </motion.div>
+   171→   171→
+   172→   172→            {/* Floating card — top-left small: vet */}
+   173→   173→            <motion.div
+   174→   174→              animate={{ y: [0, -6, 0] }}
+   175→   175→              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+   176→   176→              className="absolute left-4 top-4 hidden items-center gap-2 rounded-2xl bg-card/95 p-2.5 shadow-xl ring-1 ring-border/30 backdrop-blur-sm sm:flex"
+   177→   177→            >
+   178→   178→              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/10">
+   179→   179→                <MessageCircle className="size-5 text-secondary" />
+   180→   180→              </div>
+   181→   181→              <div>
+   182→   182→                <p className="text-xs font-bold text-foreground">Gratis Konsul Vet</p>
+   183→   183→                <p className="text-[10px] text-muted-foreground">Chat WhatsApp</p>
+   184→   184→              </div>
+   185→   185→            </motion.div>
+   186→   186→          </motion.div>
+   187→   187→        </div>
+   188→   188→
+   189→   189→        {/* Trust badge — full inside hero, transparent container */}
+   190→   190→        <div className="container-page relative">
+   191→   191→          <div className="grid grid-cols-2 gap-3 rounded-2xl border border-border/40 bg-card/40 p-4 backdrop-blur-sm sm:grid-cols-4 md:gap-4 md:p-6">
+   192→   192→            {[
+   193→   193→              { v: '50rb+', l: 'Pelanggan' },
+   194→   194→              { v: '515+', l: 'Klinik Resmi' },
+   195→   195→              { v: '4.9★', l: 'Rating' },
+   196→   196→              { v: '24/7', l: 'Konsul Vet' },
+   197→   197→            ].map((s) => (
+   198→   198→              <div key={s.l} className="text-center">
+   199→   199→                <div className="text-lg font-extrabold gradient-brand-text sm:text-2xl md:text-3xl">{s.v}</div>
+   200→   200→                <div className="text-[10px] text-muted-foreground sm:text-xs md:text-sm">{s.l}</div>
+   201→   201→              </div>
+   202→   202→            ))}
+   203→   203→          </div>
+   204→   204→        </div>
+   205→   205→      </section>
+   206→   206→
+   207→   207→      {/* ==================== PET TYPE CARDS — no section header, directly after hero ==================== */}
+   208→   208→      <section className="container-page py-8 md:py-10">
+   209→   209→        <div className="grid gap-5 md:grid-cols-2">
+   210→   210→          <PetTypeTiltCard config={PET_CARDS[0]} productCount={mainPetTypes.find(p => p.slug === 'kucing')?._count?.products || 0} delay={0} />
+   211→   211→          <PetTypeTiltCard config={PET_CARDS[1]} productCount={mainPetTypes.find(p => p.slug === 'anjing')?._count?.products || 0} delay={0.05} />
+   212→   212→        </div>
+   213→   213→      </section>
+   214→   214→
+   215→   215→      {/* ==================== BEST SELLERS ==================== */}
+   216→   216→      <section className="container-page py-10 md:py-14">
+   217→   217→        <SectionHeader
+   218→   218→          eyebrow="Paling Dicari"
+   219→   219→          eyebrowIcon={<Star className="size-3 fill-amber-400 text-amber-400" />}
+   220→   220→          title={<>Best <span className="gradient-brand-text">Seller</span> Bulan Ini</>}
+   221→   221→          subtitle="Produk yang paling banyak dibeli dan diulas positif oleh pelanggan kami."
+   222→   222→          action={
+   223→   223→            <Button variant="outline" size="sm" onClick={() => navigate('/shop?bestSeller=1')} className="gap-1.5">
+   224→   224→              Lihat Semua <ArrowRight className="size-4" />
+   225→   225→            </Button>
+   226→   226→          }
+   227→   227→          className="mb-8"
+   228→   228→        />
+   229→   229→
+   230→   230→        {bestSellers.length === 0 ? (
+   231→   231→          <BestSellerSkeleton />
+   232→   232→        ) : (
+   233→   233→          <BestSellerCarousel products={bestSellers} />
+   234→   234→        )}
+   235→   235→      </section>
+   236→   236→
+   237→   237→      {/* ==================== SHOP BY BENEFIT (PROBLEM) ==================== */}
+   238→   238→      <section className="bg-muted/30 py-10 md:py-14">
+   239→   239→        <div className="container-page">
+   240→   240→          <SectionHeader
+   241→   241→            eyebrow="Belanja Berdasarkan Manfaat"
+   242→   242→            eyebrowIcon={<Heart className="size-3 text-rose-500" />}
+   243→   243→            title={<>Shop by <span className="gradient-brand-text">Benefit</span></>}
+   244→   244→            subtitle="Pilih produk sesuai kebutuhan kesehatan hewan peliharaanmu."
+   245→   245→            action={
+   246→   246→              <Button variant="outline" size="sm" onClick={() => navigate('/problem')} className="gap-1.5">
+   247→   247→                Semua Kategori <ArrowRight className="size-4" />
+   248→   248→              </Button>
+   249→   249→            }
+   250→   250→            className="mb-8"
+   251→   251→          />
+   252→   252→
+   253→   253→          {problems.length === 0 ? (
+   254→   254→            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+   255→   255→              {Array.from({ length: 8 }).map((_, i) => (
+   256→   256→                <div key={i} className="h-24 animate-pulse rounded-2xl bg-muted" />
+   257→   257→              ))}
+   258→   258→            </div>
+   259→   259→          ) : (
+   260→   260→            <Stagger className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4">
+   261→   261→              {problems.map((problem) => {
+   262→   262→                const Icon = PROBLEM_ICONS[problem.slug] || Shield
+   263→   263→                const color = problem.color || '#F97316'
+   264→   264→                return (
+   265→   265→                  <StaggerItem key={problem.id}>
+   266→   266→                    <button
+   267→   267→                      onClick={() => navigate(`/shop?problem=${problem.slug}`)}
+   268→   268→                      className="group relative flex w-full flex-col items-start gap-2 overflow-hidden rounded-2xl border border-border/60 bg-card p-4 text-left transition-all hover:shadow-md hover:border-border"
+   269→   269→                    >
+   270→   270→                      {/* Radial color glow */}
+   271→   271→                      <div
+   272→   272→                        className="pointer-events-none absolute -right-8 -top-8 size-24 rounded-full opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-30"
+   273→   273→                      style={{ background: color }}
+   274→   274→                    />
+   275→   275→                    <div
+   276→   276→                      className="flex size-10 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-110"
+   277→   277→                      style={{ backgroundColor: `${color}1a`, color }}
+   278→   278→                    >
+   279→   279→                      <Icon className="size-5" />
+   280→   280→                    </div>
+   281→   281→                    <div>
+   282→   282→                      <h3 className="text-sm font-semibold text-foreground">{problem.name}</h3>
+   283→   283→                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+   284→   284→                        {problem._count?.products || 0} produk
+   285→   285→                      </p>
+   286→   286→                    </div>
+   287→   287→                  </button>
+   288→   288→                </StaggerItem>
+   289→   289→              )
+   290→   290→            })}
+   291→   291→            </Stagger>
+   292→   292→          )}
+   293→   293→        </div>
+   294→   294→      </section>
+   295→   295→
+   296→   296→      {/* ==================== INGREDIENTS REVEAL — Bahan Aktif Pilihan ==================== */}
+   297→   297→      <IngredientsReveal />
+   298→   298→
+   299→   299→      {/* ==================== NEW ARRIVALS — Hidden for now (will re-enable later) ==================== */}
+   300→   300→      {/* <section className="py-10 md:py-14"> ... </section> */}
+   301→   301→
+   302→   302→      {/* ==================== VET SECTION ==================== */}
+   303→   303→      <VetSection />
+   304→   304→
+   305→   305→      {/* ==================== TESTIMONIALS ==================== */}
+   306→   306→      <section className="container-page py-10 md:py-14">
+   307→   307→        <SectionHeader
+   308→   308→          eyebrow="Kata Pelanggan"
+   309→   309→          eyebrowIcon={<Heart className="size-3 text-rose-500" />}
+   310→   310→          title={<>Apa Kata <span className="gradient-brand-text">Pelanggan</span> Kami</>}
+   311→   311→          subtitle="Ribuan pelanggan telah mempercayakan kesehatan hewan peliharaan mereka pada kami."
+   312→   312→          align="center"
+   313→   313→          className="mb-10"
+   314→   314→        />
+   315→   315→
+   316→   316→        <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+   317→   317→          {testimonials.map((t) => (
+   318→   318→            <StaggerItem key={t.id}>
+   319→   319→              <div className="flex h-full flex-col gap-3 rounded-2xl border border-border/60 bg-card p-5">
+   320→   320→                <div className="flex items-center gap-0.5">
+   321→   321→                  {Array.from({ length: 5 }).map((_, i) => (
+   322→   322→                    <Star
+   323→   323→                      key={i}
+   324→   324→                      className={`size-3.5 ${i < t.rating ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/30'}`}
+   325→   325→                    />
+   326→   326→                  ))}
+   327→   327→                </div>
+   328→   328→                <p className="flex-1 text-sm leading-relaxed text-foreground/90">
+   329→   329→                  &ldquo;{t.message}&rdquo;
+   330→   330→                </p>
+   331→   331→                <div className="flex items-center gap-2 border-t border-border/60 pt-3">
+   332→   332→                  <div className="flex size-9 items-center justify-center rounded-full gradient-brand text-xs font-bold text-white">
+   333→   333→                    {t.name.charAt(0)}
+   334→   334→                  </div>
+   335→   335→                  <div>
+   336→   336→                    <p className="text-xs font-semibold text-foreground">{t.name}</p>
+   337→   337→                    <p className="text-[10px] text-muted-foreground">{t.petName} · {t.petType}</p>
+   338→   338→                  </div>
+   339→   339→                </div>
+   340→   340→              </div>
+   341→   341→            </StaggerItem>
+   342→   342→          ))}
+   343→   343→        </Stagger>
+   344→   344→      </section>
+   345→   345→
+   346→   346→      {/* ==================== NEWSLETTER CTA ==================== */}
+   347→   347→      <section className="container-page pb-12 md:pb-16">
+   348→   348→        <div className="relative overflow-hidden rounded-3xl gradient-brand p-6 text-center text-white shadow-xl sm:p-10">
+   349→   349→          <div className="pointer-events-none absolute -right-12 -top-12 size-64 rounded-full bg-white/10 blur-3xl" />
+   350→   350→          <div className="pointer-events-none absolute -bottom-12 -left-12 size-64 rounded-full bg-amber-300/20 blur-3xl" />
+   351→   351→
+   352→   352→          <div className="relative mx-auto max-w-xl space-y-3">
+   353→   353→            <Gift className="mx-auto size-10 text-amber-200" />
+   354→   354→            <h2 className="text-balance text-2xl font-extrabold sm:text-3xl">
+   355→   355→              Daftar & Dapat Voucher Rp 25.000
+   356→   356→            </h2>
+   357→   357→            <p className="text-sm text-white/90 sm:text-base">
+   358→   358→              Berlangganan newsletter kami untuk info promo, tips kesehatan hewan, dan voucher
+   359→   359→              spesial. Voucher Rp 25.000 langsung dikirim ke email Anda.
+   360→   360→            </p>
+   361→   361→            <form onSubmit={handleNewsletter} className="mx-auto mt-4 flex max-w-md flex-col gap-2 sm:flex-row">
+   362→   362→              <Input
+   363→   363→                type="email"
+   364→   364→                required
+   365→   365→                placeholder="email@kamu.com"
+   366→   366→                value={emailValue}
+   367→   367→                onChange={(e) => setEmailValue(e.target.value)}
+   368→   368→                className="border-white/30 bg-white/95 text-foreground placeholder:text-muted-foreground"
+   369→   369→              />
+   370→   370→              <Button
+   371→   371→                type="submit"
+   372→   372→                variant="secondary"
+   373→   373→                className="gap-1.5 bg-white text-primary hover:bg-white/90"
+   374→   374→              >
+   375→   375→                <Mail className="size-4" /> Klaim Voucher
+   376→   376→              </Button>
+   377→   377→            </form>
+   378→   378→            <p className="text-[11px] text-white/70">
+   379→   379→              Dengan mendaftar, Anda menyetujui kebijakan privasi kami.
+   380→   380→            </p>
+   381→   381→          </div>
+   382→   382→        </div>
+   383→   383→      </section>
+   384→   384→    </div>
+   385→   385→  )
+   386→   386→}
+   387→   387→
+   388→   388→/* ============== Pet Type Cards (3D tilt) ============== */
+   389→   389→
+   390→   390→interface PetCardConfig {
+   391→   391→  slug: 'kucing' | 'anjing'
+   392→   392→  emoji: string
+   393→   393→  badgeText: string
+   394→   394→  title: string
+   395→   395→  description: string
+   396→   396→  cardClass: string
+   397→   397→  badgeClass: string
+   398→   398→  pawColor: string
+   399→   399→  pawHoverClass: string
+   400→   400→  emojiBadgeClass: string
+   401→   401→}
+   402→   402→
+   403→   403→/**
+   404→   404→ * Visual config for the two main pet-type cards (Kucing & Anjing).
+   405→   405→ * The Kucing card uses warm orange tones; the Anjing card uses cool violet tones.
+   406→   406→ */
+   407→   407→const PET_CARDS: PetCardConfig[] = [
+   408→   408→  {
+   409→   409→    slug: 'kucing',
+   410→   410→    emoji: '🐈',
+   411→   411→    badgeText: 'Untuk Kucing',
+   412→   412→    title: 'Felcover+, Sioren &\nForevet untuk Kucing',
+   413→   413→    description:
+   414→   414→      'Imun booster, nafsu makan, fish oil, skin & coat, flu support, dan stress management.',
+   415→   415→    cardClass:
+   416→   416→      'bg-gradient-to-br from-orange-50 via-amber-50 to-rose-50 hover:shadow-orange-200/50',
+   417→   417→    badgeClass: 'bg-orange-500/10 text-orange-600',
+   418→   418→    pawColor: 'text-orange-200/60',
+   419→   419→    pawHoverClass: 'group-hover:scale-110 group-hover:rotate-6',
+   420→   420→    emojiBadgeClass: '',
+   421→   421→  },
+   422→   422→  {
+   423→   423→    slug: 'anjing',
+   424→   424→    emoji: '🐕',
+   425→   425→    badgeText: 'Untuk Anjing',
+   426→   426→    title: 'Felcover+, Sioren &\nForevet untuk Anjing',
+   427→   427→    description:
+   428→   428→      'Imun booster, nafsu makan, fish oil, skin & coat, flu support, dan stress management.',
+   429→   429→    cardClass:
+   430→   430→      'bg-gradient-to-br from-violet-50 via-purple-50 to-fuchsia-50 hover:shadow-violet-200/50',
+   431→   431→    badgeClass: 'bg-violet-500/10 text-violet-600',
+   432→   432→    pawColor: 'text-violet-200/60',
+   433→   433→    pawHoverClass: 'group-hover:-rotate-3 group-hover:scale-110',
+   434→   434→    emojiBadgeClass: '',
+   435→   435→  },
+   436→   436→]
+   437→   437→
+   438→   438→/**
+   439→   439→ * Pet Type card with a subtle 3D tilt on hover (desktop only — touch devices
+   440→   440→ * don't fire mousemove, so the card stays flat on mobile, which is fine).
+   441→   441→ *
+   442→   442→ * The card rotates around X and Y axes based on the cursor's position over
+   443→   443→ * the card. A decorative paw print inside parallaxes in the opposite
+   444→   444→ * direction for a layered, depth feel. On mouse leave, the card springs
+   445→   445→ * back to flat.
+   446→   446→ */
+   447→   447→function PetTypeTiltCard({
+   448→   448→  config,
+   449→   449→  productCount,
+   450→   450→  delay,
+   451→   451→}: {
+   452→   452→  config: PetCardConfig
+   453→   453→  productCount: number
+   454→   454→  delay: number
+   455→   455→}) {
+   456→   456→  const { navigate } = useHashRouter()
+   457→   457→
+   458→   458→  // Mouse position relative to card center, in pixels (-half..+half).
+   459→   459→  const x = useMotionValue(0)
+   460→   460→  const y = useMotionValue(0)
+   461→   461→
+   462→   462→  // Derive rotation from mouse position — subtle max ±3 degrees (was ±8, too dramatic).
+   463→   463→  const rotateX = useTransform(y, [-50, 50], [3, -3])
+   464→   464→  const rotateY = useTransform(x, [-50, 50], [-3, 3])
+   465→   465→
+   466→   466→  // Paw print parallax — subtle, opposite direction (was ±10, now ±4).
+   467→   467→  const pawX = useTransform(x, [-50, 50], [4, -4])
+   468→   468→  const pawY = useTransform(y, [-50, 50], [4, -4])
+   469→   469→
+   470→   470→  const handleMouseMove = (e: React.MouseEvent<HTMLButtonElement>) => {
+   471→   471→    const rect = e.currentTarget.getBoundingClientRect()
+   472→   472→    const xPct = e.clientX - rect.left - rect.width / 2
+   473→   473→    const yPct = e.clientY - rect.top - rect.height / 2
+   474→   474→    x.set(xPct)
+   475→   475→    y.set(yPct)
+   476→   476→  }
+   477→   477→
+   478→   478→  const handleMouseLeave = () => {
+   479→   479→    x.set(0)
+   480→   480→    y.set(0)
+   481→   481→  }
+   482→   482→
+   483→   483→  // Split title on "\n" so each line breaks naturally (preserves the
+   484→   484→  // existing visual layout with the line break between brand list & pet type).
+   485→   485→  const titleLines = config.title.split('\n')
+   486→   486→
+   487→   487→  return (
+   488→   488→    <Reveal delay={delay}>
+   489→   489→      <motion.button
+   490→   490→        onClick={() => navigate(`/shop?pet=${config.slug}`)}
+   491→   491→        onMouseMove={handleMouseMove}
+   492→   492→        onMouseLeave={handleMouseLeave}
+   493→   493→        style={{ rotateX, rotateY, transformPerspective: 900 }}
+   494→   494→        // Spring transition so the tilt eases in/out smoothly
+   495→   495→        transition={{ type: 'spring', stiffness: 200, damping: 18 }}
+   496→   496→        className={`group relative flex h-72 w-full flex-col justify-end overflow-hidden rounded-3xl p-6 text-left shadow-sm transition-shadow duration-300 hover:shadow-xl sm:h-80 sm:p-8 ${config.cardClass}`}
+   497→   497→        aria-label={`Belanja untuk ${config.badgeText.replace('Untuk ', '')}`}
+   498→   498→      >
+   499→   499→        {/* Decorative paw print SVG (large, top-right, faded) — parallaxes on tilt */}
+   500→   500→        <motion.div
+   501→   501→          style={{ x: pawX, y: pawY }}
+   502→   502→          aria-hidden="true"
+   503→   503→          className="pointer-events-none absolute -right-8 -top-8"
+   504→   504→        >
+   505→   505→          <svg
+   506→   506→            viewBox="0 0 100 100"
+   507→   507→            className={`size-48 transition-transform duration-500 sm:size-64 ${config.pawColor} ${config.pawHoverClass}`}
+   508→   508→            fill="currentColor"
+   509→   509→          >
+   510→   510→            <ellipse cx="30" cy="32" rx="9" ry="12" />
+   511→   511→            <ellipse cx="48" cy="22" rx="9" ry="12" />
+   512→   512→            <ellipse cx="66" cy="22" rx="9" ry="12" />
+   513→   513→            <ellipse cx="78" cy="32" rx="9" ry="12" />
+   514→   514→            <path d="M54 44c-12 0-22 9-22 21 0 9 6 15 12 15 3.6 0 6-1.2 8-2.4 2-1.2 3.2-1.2 5.2 0 2 1.2 4.4 2.4 8 2.4 6 0 12-6 12-15 0-12-11-21-23-21z" />
+   515→   515→          </svg>
+   516→   516→        </motion.div>
+   517→   517→
+   518→   518→        {/* Floating emoji badge (top-right) */}
+   519→   519→        <span className="absolute right-5 top-5 z-10 flex size-14 items-center justify-center rounded-2xl bg-white/80 text-3xl shadow-lg backdrop-blur-sm transition-transform duration-300 group-hover:scale-110 sm:right-7 sm:top-7 sm:size-16 sm:text-4xl">
+   520→   520→          {config.emoji}
+   521→   521→        </span>
+   522→   522→
+   523→   523→        {/* Content (bottom-left) */}
+   524→   524→        <div className="relative z-10">
+   525→   525→          <span
+   526→   526→            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${config.badgeClass}`}
+   527→   527→          >
+   528→   528→            {config.badgeText}
+   529→   529→          </span>
+   530→   530→          <h3 className="mt-3 text-2xl font-extrabold leading-[1.1] tracking-tight text-foreground sm:text-3xl">
+   531→   531→            {titleLines.map((line, i) => (
+   532→   532→              <span key={i} className="block">
+   533→   533→                {line}
+   534→   534→              </span>
+   535→   535→            ))}
+   536→   536→          </h3>
+   537→   537→          <p className="mt-2 max-w-[80%] text-sm text-muted-foreground">
+   538→   538→            {config.description}
+   539→   539→          </p>
+   540→   540→          <div className="mt-4 flex items-center gap-4">
+   541→   541→            <span className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background transition-transform group-hover:translate-x-1">
+   542→   542→              Jelajahi <ArrowRight className="size-4" />
+   543→   543→            </span>
+   544→   544→            <span className="text-xs font-medium text-muted-foreground">
+   545→   545→              {productCount} produk tersedia
+   546→   546→            </span>
+   547→   547→          </div>
+   548→   548→        </div>
+   549→   549→      </motion.button>
+   550→   550→    </Reveal>
+   551→   551→  )
+   552→   552→}
+   553→   553→
+   554→   554→/* ============== New Arrival Poster Bento ============== */
+   555→   555→
+   556→   556→/** Visual config per product slug — gradient, emoji, tagline */
+   557→   557→const POSTER_CONFIG: Record<string, { gradient: string; emoji: string; tagline: string }> = {
+   558→   558→  'sioren-booster-plus': {
+   559→   559→    gradient: 'from-emerald-500 via-green-500 to-teal-600',
+   560→   560→    emoji: '⚡',
+   561→   561→    tagline: 'Pemulihan cepat & nafsu makan naik drastis',
+   562→   562→  },
+   563→   563→  'sioren-skin-coat': {
+   564→   564→    gradient: 'from-pink-500 via-rose-500 to-fuchsia-600',
+   565→   565→    emoji: '✨',
+   566→   566→    tagline: 'Bulu lebat, mengilap, bebas gatal & ketombe',
+   567→   567→  },
+   568→   568→  'forevet-stress-manajemen': {
+   569→   569→    gradient: 'from-violet-500 via-purple-500 to-indigo-600',
+   570→   570→    emoji: '💖',
+   571→   571→    tagline: 'Tenang saat ditinggal, perjalanan, atau ke dokter',
+   572→   572→  },
+   573→   573→}
+   574→   574→
+   575→   575→const FALLBACK_POSTER = {
+   576→   576→  gradient: 'from-orange-500 via-amber-500 to-rose-500',
+   577→   577→  emoji: '🐾',
+   578→   578→  tagline: 'Suplemen premium rekomendasi dokter hewan',
+   579→   579→}
+   580→   580→
+   581→   581→/**
+   582→   582→ * Bento-style poster grid for New Arrivals.
+   583→   583→ *
+   584→   584→ * Layout:
+   585→   585→ * - Mobile (<md): stacked vertical — big poster on top, 2 small below (side-by-side)
+   586→   586→ * - Desktop (md+): 1 big poster left (spans 2 rows) + 2 small posters right (stacked)
+   587→   587→ *
+   588→   588→ * No gap between posters — seamless collage look.
+   589→   589→ * Posters are clickable → navigate to product detail.
+   590→   590→ */
+   591→   591→function NewArrivalPosters({ products }: { products: Product[] }) {
+   592→   592→  const { navigate } = useHashRouter()
+   593→   593→  const big = products[0]
+   594→   594→  const small1 = products[1]
+   595→   595→  const small2 = products[2]
+   596→   596→
+   597→   597→  if (!big) return null
+   598→   598→
+   599→   599→  const renderPoster = (
+   600→   600→    product: Product,
+   601→   601→    opts: { size: 'big' | 'small' }
+   602→   602→  ) => {
+   603→   603→    const cfg = POSTER_CONFIG[product.slug] || FALLBACK_POSTER
+   604→   604→    const isBig = opts.size === 'big'
+   605→   605→
+   606→   606→    return (
+   607→   607→      <button
+   608→   608→        onClick={() => navigate(`/product/${product.slug}`)}
+   609→   609→        className={`group relative flex h-full w-full flex-col justify-end overflow-hidden bg-gradient-to-br ${cfg.gradient} text-left text-white transition-all duration-500 hover:brightness-110`}
+   610→   610→        aria-label={`Lihat detail ${product.name}`}
+   611→   611→      >
+   612→   612→        {/* Decorative big emoji (faded, top-right) — scales on hover */}
+   613→   613→        <span
+   614→   614→          className={`pointer-events-none absolute -right-6 -top-6 select-none transition-transform duration-700 group-hover:scale-110 group-hover:rotate-6 ${
+   615→   615→            isBig ? 'text-[180px] sm:text-[240px] md:text-[280px]' : 'text-[120px] sm:text-[140px]'
+   616→   616→          }`}
+   617→   617→          style={{ opacity: 0.18, lineHeight: 1 }}
+   618→   618→          aria-hidden="true"
+   619→   619→        >
+   620→   620→          {cfg.emoji}
+   621→   621→        </span>
+   622→   622→
+   623→   623→        {/* Decorative paw pattern (faded, bottom-right) */}
+   624→   624→        <svg
+   625→   625→          viewBox="0 0 100 100"
+   626→   626→          className="pointer-events-none absolute -bottom-8 -left-8 size-40 text-white/10 transition-transform duration-700 group-hover:scale-125 sm:size-56"
+   627→   627→          fill="currentColor"
+   628→   628→          aria-hidden="true"
+   629→   629→        >
+   630→   630→          <ellipse cx="30" cy="32" rx="9" ry="12" />
+   631→   631→          <ellipse cx="48" cy="22" rx="9" ry="12" />
+   632→   632→          <ellipse cx="66" cy="22" rx="9" ry="12" />
+   633→   633→          <ellipse cx="78" cy="32" rx="9" ry="12" />
+   634→   634→          <path d="M54 44c-12 0-22 9-22 21 0 9 6 15 12 15 3.6 0 6-1.2 8-2.4 2-1.2 3.2-1.2 5.2 0 2 1.2 4.4 2.4 8 2.4 6 0 12-6 12-15 0-12-11-21-23-21z" />
+   635→   635→        </svg>
+   636→   636→
+   637→   637→        {/* Dark gradient overlay for text contrast */}
+   638→   638→        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+   639→   639→
+   640→   640→        {/* Content (bottom-left) */}
+   641→   641→        <div className={`relative z-10 ${isBig ? 'p-8 sm:p-10 md:p-12' : 'p-5 sm:p-6'}`}>
+   642→   642→          {/* BARU badge */}
+   643→   643→          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/25 px-3 py-1 text-[10px] font-bold uppercase tracking-widest backdrop-blur-sm">
+   644→   644→            <Sparkles className="size-3" /> Baru
+   645→   645→          </span>
+   646→   646→
+   647→   647→          {/* Product name */}
+   648→   648→          <h3 className={`mt-3 font-extrabold leading-tight tracking-tight drop-shadow-sm ${
+   649→   649→            isBig ? 'text-2xl sm:text-3xl md:text-4xl' : 'text-base sm:text-lg'
+   650→   650→          }`}>
+   651→   651→            {product.name}
+   652→   652→          </h3>
+   653→   653→
+   654→   654→          {/* Tagline */}
+   655→   655→          <p className={`mt-2 max-w-[85%] font-medium text-white/90 ${
+   656→   656→            isBig ? 'text-sm sm:text-base' : 'text-[11px] sm:text-xs'
+   657→   657→          }`}>
+   658→   658→            {cfg.tagline}
+   659→   659→          </p>
+   660→   660→
+   661→   661→          {/* Price + CTA */}
+   662→   662→          <div className="mt-4 flex items-center gap-3">
+   663→   663→            <span className={`font-bold drop-shadow-sm ${
+   664→   664→              isBig ? 'text-xl sm:text-2xl' : 'text-sm sm:text-base'
+   665→   665→            }`}>
+   666→   666→              {formatRupiah(product.price)}
+   667→   667→            </span>
+   668→   668→            <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-[11px] font-bold text-foreground transition-transform duration-300 group-hover:translate-x-1">
+   669→   669→              Lihat Produk <ArrowRight className="size-3" />
+   670→   670→            </span>
+   671→   671→          </div>
+   672→   672→        </div>
+   673→   673→      </button>
+   674→   674→    )
+   675→   675→  }
+   676→   676→
+   677→   677→  return (
+   678→   678→    <Stagger className="grid grid-cols-2 gap-0 md:grid-cols-3 md:grid-rows-2 md:h-[560px]">
+   679→   679→      {/* Big poster — full-width on mobile (col-span-2), left 2x2 on desktop */}
+   680→   680→      <StaggerItem className="col-span-2 h-[360px] md:col-span-2 md:row-span-2 md:h-full">
+   681→   681→        {renderPoster(big, { size: 'big' })}
+   682→   682→      </StaggerItem>
+   683→   683→
+   684→   684→      {/* Small poster 1 — bottom-left on mobile (col-span-1), top-right on desktop */}
+   685→   685→      {small1 && (
+   686→   686→        <StaggerItem className="col-span-1 h-[280px] md:col-span-1 md:row-span-1 md:h-full">
+   687→   687→          {renderPoster(small1, { size: 'small' })}
+   688→   688→        </StaggerItem>
+   689→   689→      )}
+   690→   690→
+   691→   691→      {/* Small poster 2 — bottom-right on mobile (col-span-1), bottom-right on desktop */}
+   692→   692→      {small2 && (
+   693→   693→        <StaggerItem className="col-span-1 h-[280px] md:col-span-1 md:row-span-1 md:h-full">
+   694→   694→          {renderPoster(small2, { size: 'small' })}
+   695→   695→        </StaggerItem>
+   696→   696→      )}
+   697→   697→    </Stagger>
+   698→   698→  )
+   699→   699→}
+   700→   700→
+   701→   701→/* ============== Helpers ============== */
+   702→   702→
+   703→   703→/**
+   704→   704→ * Skeleton placeholder for Best Sellers section while data loads.
+   705→   705→ * Matches the 3-card desktop layout (and 1-card mobile) so the
+   706→   706→ * layout doesn't jump when real data arrives.
+   707→   707→ */
+   708→   708→function BestSellerSkeleton() {
+   709→   709→  return (
+   710→   710→    <div className="flex gap-4 overflow-hidden">
+   711→   711→      {/* Mobile: 1 card, Desktop: 3 cards */}
+   712→   712→      <div className="w-full shrink-0 lg:w-[calc((100%-2rem)/3)]">
+   713→   713→        <div className="aspect-[3/4] animate-pulse rounded-lg bg-muted" />
+   714→   714→      </div>
+   715→   715→      <div className="hidden w-[calc((100%-2rem)/3)] shrink-0 lg:block">
+   716→   716→        <div className="aspect-[3/4] animate-pulse rounded-lg bg-muted" />
+   717→   717→      </div>
+   718→   718→      <div className="hidden w-[calc((100%-2rem)/3)] shrink-0 lg:block">
+   719→   719→        <div className="aspect-[3/4] animate-pulse rounded-lg bg-muted" />
+   720→   720→      </div>
+   721→   721→    </div>
+   722→   722→  )
+   723→   723→}
+   724→   724→
+   725→   725→/**
+   726→   726→ * Best Seller Carousel
+   727→   727→ * - Mobile: 1 card per view (full-width, snap)
+   728→   728→ * - Desktop (lg+): 3 cards per view (snap)
+   729→   729→ * - Arrow buttons scroll exactly 1 card width.
+   730→   730→ * - Per-card motion: as the user scrolls horizontally, cards scale up & reach
+   731→   731→ *   full opacity as they near the container's center; cards near the edges
+   732→   732→ *   scale down to 0.92 and dim to 0.5 opacity (Task 4).
+   733→   733→ */
+   734→   734→function BestSellerCarousel({ products }: { products: Product[] }) {
+   735→   735→  const scrollRef = useRef<HTMLDivElement>(null)
+   736→   736→
+   737→   737→  const scrollBy = (dir: 1 | -1) => {
+   738→   738→    if (!scrollRef.current) return
+   739→   739→    const container = scrollRef.current
+   740→   740→    const isDesktop = window.matchMedia('(min-width: 1024px)').matches
+   741→   741→    // On desktop: 3 cards + 2 gaps (gap-4 = 16px) → card width = (clientWidth - 32) / 3
+   742→   742→    // Scroll 1 card = cardWidth + gap
+   743→   743→    // On mobile: 1 card per view, scroll = clientWidth
+   744→   744→    const cardPlusGap = isDesktop
+   745→   745→      ? (container.clientWidth - 32) / 3 + 16
+   746→   746→      : container.clientWidth
+   747→   747→    container.scrollBy({ left: dir * cardPlusGap, behavior: 'smooth' })
+   748→   748→  }
+   749→   749→
+   750→   750→  return (
+   751→   751→    <div className="relative">
+   752→   752→      {/* Arrow controls — visible on all sizes (mobile + desktop) */}
+   753→   753→      <button
+   754→   754→        onClick={() => scrollBy(-1)}
+   755→   755→        className="absolute -left-2 top-1/2 z-20 flex -translate-y-1/2 size-10 items-center justify-center rounded-full border border-border bg-card shadow-md transition-all hover:bg-accent hover:scale-105 active:scale-95 sm:-left-3 sm:size-11"
+   756→   756→        aria-label="Sebelumnya"
+   757→   757→      >
+   758→   758→        <ChevronLeft className="size-5" />
+   759→   759→      </button>
+   760→   760→      <button
+   761→   761→        onClick={() => scrollBy(1)}
+   762→   762→        className="absolute -right-2 top-1/2 z-20 flex -translate-y-1/2 size-10 items-center justify-center rounded-full border border-border bg-card shadow-md transition-all hover:bg-accent hover:scale-105 active:scale-95 sm:-right-3 sm:size-11"
+   763→   763→        aria-label="Berikutnya"
+   764→   764→      >
+   765→   765→        <ChevronRight className="size-5" />
+   766→   766→      </button>
+   767→   767→
+   768→   768→      <div
+   769→   769→        ref={scrollRef}
+   770→   770→        className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory [scrollbar-width:thin] [scrollbar-color:var(--border)_transparent]"
+   771→   771→      >
+   772→   772→        {products.map((p) => (
+   773→   773→          <CarouselCard key={p.id} product={p} containerRef={scrollRef} />
+   774→   774→        ))}
+   775→   775→      </div>
+   776→   776→    </div>
+   777→   777→  )
+   778→   778→}
+   779→   779→
+   780→   780→/**
+   781→   781→ * Single carousel card with scroll-position-driven scale/opacity.
+   782→   782→ *
+   783→   783→ * The card listens to its container's scroll events and computes a
+   784→   784→ * "centered ratio" — 1 when the card is at the container's center, 0 when
+   785→   785→ * it's at the far edge. This ratio drives `scale` (0.92 → 1) and `opacity`
+   786→   786→ * (0.5 → 1) via motion values for buttery-smooth, re-render-free animation.
+   787→   787→ */
+   788→   788→function CarouselCard({
+   789→   789→  product,
+   790→   790→  containerRef,
+   791→   791→}: {
+   792→   792→  product: Product
+   793→   793→  containerRef: React.RefObject<HTMLDivElement | null>
+   794→   794→}) {
+   795→   795→  const cardRef = useRef<HTMLDivElement>(null)
+   796→   796→  const scale = useMotionValue(1)
+   797→   797→  const opacity = useMotionValue(1)
+   798→   798→
+   799→   799→  useEffect(() => {
+   800→   800→    const container = containerRef.current
+   801→   801→    const card = cardRef.current
+   802→   802→    if (!container || !card) return
+   803→   803→
+   804→   804→    let raf = 0
+   805→   805→    const update = () => {
+   806→   806→      raf = 0
+   807→   807→      const cRect = container.getBoundingClientRect()
+   808→   808→      const eRect = card.getBoundingClientRect()
+   809→   809→      if (cRect.width === 0 || eRect.width === 0) return
+   810→   810→      const cardCenter = eRect.left + eRect.width / 2
+   811→   811→      const containerCenter = cRect.left + cRect.width / 2
+   812→   812→      const distance = Math.abs(cardCenter - containerCenter)
+   813→   813→      // Normalised 0..1 — 1 at center, 0 at the container's edge
+   814→   814→      const maxDistance = cRect.width / 2
+   815→   815→      const ratio = Math.max(0, Math.min(1, 1 - distance / maxDistance))
+   816→   816→      // Subtle scale/opacity — not over-the-top (user feedback: don't be too dramatic)
+   817→   817→      scale.set(0.97 + 0.03 * ratio)
+   818→   818→      opacity.set(0.85 + 0.15 * ratio)
+   819→   819→    }
+   820→   820→
+   821→   821→    const onScroll = () => {
+   822→   822→      if (!raf) raf = requestAnimationFrame(update)
+   823→   823→    }
+   824→   824→
+   825→   825→    // Initial compute + listeners
+   826→   826→    update()
+   827→   827→    container.addEventListener('scroll', onScroll, { passive: true })
+   828→   828→    window.addEventListener('resize', onScroll)
+   829→   829→    return () => {
+   830→   830→      container.removeEventListener('scroll', onScroll)
+   831→   831→      window.removeEventListener('resize', onScroll)
+   832→   832→      if (raf) cancelAnimationFrame(raf)
+   833→   833→    }
+   834→   834→  }, [containerRef, scale, opacity])
+   835→   835→
+   836→   836→  return (
+   837→   837→    <motion.div
+   838→   838→      ref={cardRef}
+   839→   839→      style={{ scale, opacity }}
+   840→   840→      // Spring transition so the scale/opacity eases gently on scroll
+   841→   841→      transition={{ type: 'spring', stiffness: 150, damping: 22 }}
+   842→   842→      className="shrink-0 snap-start w-full lg:w-[calc((100%-2rem)/3)]"
+   843→   843→    >
+   844→   844→      <ProductCard product={product} />
+   845→   845→    </motion.div>
+   846→   846→  )
+   847→   847→}
+   848→   848→
+   849→   849→/** Horizontal scroll row of products with arrow controls (desktop) */
+   850→   850→function ProductScrollRow({ products }: { products: Product[] }) {
+   851→   851→  const scrollRef = useRef<HTMLDivElement>(null)
+   852→   852→
+   853→   853→  const scrollBy = (dir: 1 | -1) => {
+   854→   854→    if (!scrollRef.current) return
+   855→   855→    const amount = Math.min(scrollRef.current.clientWidth * 0.8, 600)
+   856→   856→    scrollRef.current.scrollBy({ left: dir * amount, behavior: 'smooth' })
+   857→   857→  }
+   858→   858→
+   859→   859→  return (
+   860→   860→    <div className="relative">
+   861→   861→      {/* Arrows (desktop only) */}
+   862→   862→      <button
+   863→   863→        onClick={() => scrollBy(-1)}
+   864→   864→        className="absolute -left-3 top-1/2 z-10 hidden -translate-y-1/2 items-center justify-center rounded-full border border-border bg-card p-2 shadow-md transition-colors hover:bg-accent lg:flex"
+   865→   865→        aria-label="Scroll left"
+   866→   866→      >
+   867→   867→        <ChevronLeft className="size-5" />
+   868→   868→      </button>
+   869→   869→      <button
+   870→   870→        onClick={() => scrollBy(1)}
+   871→   871→        className="absolute -right-3 top-1/2 z-10 hidden -translate-y-1/2 items-center justify-center rounded-full border border-border bg-card p-2 shadow-md transition-colors hover:bg-accent lg:flex"
+   872→   872→        aria-label="Scroll right"
+   873→   873→      >
+   874→   874→        <ChevronRight className="size-5" />
+   875→   875→      </button>
+   876→   876→
+   877→   877→      <div
+   878→   878→        ref={scrollRef}
+   879→   879→        className="flex gap-3 overflow-x-auto pb-4 [scrollbar-width:thin] sm:gap-4"
+   880→   880→      >
+   881→   881→        {products.map((p) => (
+   882→   882→          <div key={p.id} className="w-36 shrink-0 sm:w-48 md:w-52">
+   883→   883→            <ProductCard product={p} />
+   884→   884→          </div>
+   885→   885→        ))}
+   886→   886→      </div>
+   887→   887→    </div>
+   888→   888→  )
+   889→   889→}
+   890→   890→

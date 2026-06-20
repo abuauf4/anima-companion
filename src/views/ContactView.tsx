@@ -7,25 +7,51 @@ import { Badge } from '@/components/ui/badge'
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from '@/components/ui/accordion'
-import { MessageCircle, Mail, Phone, MapPin, Clock, Instagram } from 'lucide-react'
+import { MessageCircle, Mail, Phone, MapPin, Clock, Instagram, HelpCircle } from 'lucide-react'
 import { SITE_CONFIG, whatsappAdminUrl } from '@/lib/config'
+import { Skeleton } from '@/components/ui/skeleton'
+import type { SiteSetting } from '@/hooks/use-home-data'
+import type { Faq } from '@/hooks/use-fetch'
 
 export function ContactView() {
-  const [faqs, setFaqs] = useState<any[]>([])
+  const [faqs, setFaqs] = useState<Faq[]>([])
+  const [faqsLoading, setFaqsLoading] = useState(true)
+  const [settings, setSettings] = useState<SiteSetting | null>(null)
 
   useEffect(() => {
-    fetch('/api/testimonials').then(() => {}) // ensure this endpoint works
-    // FAQ via direct query (we'll fetch from a simple endpoint)
-    // Since we don't have a /api/faqs endpoint, let's hardcode common FAQs
-    setFaqs([
-      { question: 'Apakah produk Anima Companion sudah terdaftar BPOM?', answer: 'Ya, semua produk kami sudah terdaftar di BPOM dengan nomor registrasi yang tertera pada kemasan dan halaman produk.' },
-      { question: 'Bagaimana cara pemesanan?', answer: 'Pilih produk yang diinginkan, masukkan ke keranjang, lalu checkout. Pesanan akan dikirim ke WhatsApp admin kami untuk konfirmasi pembayaran dan pengiriman.' },
-      { question: 'Apakah tersedia konsultasi gratis?', answer: 'Ya! Tim kami siap membantu via WhatsApp untuk konsultasi seputar kesehatan hewan peliharaan dan pemilihan produk yang tepat.' },
-      { question: 'Berapa lama waktu pengiriman?', answer: 'Untuk wilayah Jakarta 1-2 hari, dan luar Jakarta 2-4 hari kerja menggunakan ekspedisi JNE/JNT/SiCepat.' },
-      { question: 'Bagaimana cara pembayaran?', answer: 'Pembayaran dilakukan setelah konfirmasi admin via WhatsApp. Metode: transfer bank (BCA, Mandiri, BNI, BRI) atau e-wallet (GoPay, OVO, DANA).' },
-      { question: 'Apakah bisa return/refund?', answer: 'Ya, produk dapat di-return selama kondisi masih utuh dan dalam waktu 3 hari setelah diterima. Hubungi admin untuk proses return.' },
-    ])
+    fetch('/api/faqs')
+      .then((r) => r.json())
+      .then((data) => {
+        setFaqs(data.faqs || [])
+      })
+      .catch(() => {
+        // silent — FAQ section will show empty
+      })
+      .finally(() => setFaqsLoading(false))
+
+    // Fetch site settings (contact info)
+    fetch('/api/home')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.settings) setSettings(data.settings)
+      })
+      .catch(() => {
+        // silent — fall back to SITE_CONFIG defaults
+      })
   }, [])
+
+  // Use settings values if available, else fall back to SITE_CONFIG
+  const whatsappNumber = settings?.whatsappNumber || SITE_CONFIG.whatsappNumber
+  const email = settings?.email || SITE_CONFIG.email
+  const instagramHandle = settings?.instagram || SITE_CONFIG.instagram
+
+  // Format WA number for display: "6281234567890" → "+62 812-3456-7890"
+  const formattedWa = whatsappNumber.startsWith('62')
+    ? `+${whatsappNumber.slice(0, 2)} ${whatsappNumber.slice(2, 5)}-${whatsappNumber.slice(5, 9)}-${whatsappNumber.slice(9)}`
+    : `+${whatsappNumber}`
+
+  // Custom WA message with brand name
+  const waMessage = `Halo Anima Companion! 🐾`
 
   return (
     <div className="container-page py-6">
@@ -58,7 +84,7 @@ export function ContactView() {
                 atau pertanyaan lainnya. Kami siap membantu!
               </p>
               <a
-                href={whatsappAdminUrl('Halo Anima Companion! 🐾')}
+                href={whatsappAdminUrl(waMessage)}
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -67,7 +93,7 @@ export function ContactView() {
                 </Button>
               </a>
               <p className="mt-3 text-center text-xs text-muted-foreground">
-                Nomor: +62 812-3456-7890
+                Nomor: {formattedWa}
               </p>
             </div>
           </Card>
@@ -79,7 +105,7 @@ export function ContactView() {
                 <Mail className="h-5 w-5" />
               </div>
               <h3 className="font-semibold">Email</h3>
-              <p className="text-sm text-muted-foreground">{SITE_CONFIG.email}</p>
+              <p className="break-words text-sm text-muted-foreground">{email}</p>
             </Card>
 
             <Card className="p-6">
@@ -87,7 +113,7 @@ export function ContactView() {
                 <Instagram className="h-5 w-5" />
               </div>
               <h3 className="font-semibold">Instagram</h3>
-              <p className="text-sm text-muted-foreground">{SITE_CONFIG.instagram}</p>
+              <p className="text-sm text-muted-foreground">{instagramHandle}</p>
             </Card>
 
             <Card className="p-6">
@@ -95,7 +121,7 @@ export function ContactView() {
                 <Phone className="h-5 w-5" />
               </div>
               <h3 className="font-semibold">Telepon</h3>
-              <p className="text-sm text-muted-foreground">+62 812-3456-7890</p>
+              <p className="text-sm text-muted-foreground">{formattedWa}</p>
             </Card>
 
             <Card className="p-6">
@@ -127,18 +153,34 @@ export function ContactView() {
             <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">
               ❓ FAQ
             </h2>
-            <Accordion type="single" collapsible>
-              {faqs.map((faq, i) => (
-                <AccordionItem key={i} value={`faq-${i}`}>
-                  <AccordionTrigger className="text-left text-sm">
-                    {faq.question}
-                  </AccordionTrigger>
-                  <AccordionContent className="text-sm text-muted-foreground">
-                    {faq.answer}
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
+            {faqsLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10" />)}
+              </div>
+            ) : faqs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <HelpCircle className="mb-2 h-8 w-8 text-muted-foreground" />
+                <p className="text-xs text-muted-foreground">FAQ belum tersedia.</p>
+              </div>
+            ) : (
+              <Accordion type="single" collapsible>
+                {faqs.map((faq, i) => (
+                  <AccordionItem key={faq.id} value={`faq-${i}`}>
+                    <AccordionTrigger className="text-left text-sm">
+                      {faq.question}
+                    </AccordionTrigger>
+                    <AccordionContent className="text-sm text-muted-foreground">
+                      {faq.answer}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            )}
+            {faqs.length > 0 && (
+              <div className="mt-4 pt-3 border-t border-border">
+                <Badge variant="outline" className="text-[10px]">{faqs.length} pertanyaan</Badge>
+              </div>
+            )}
           </Card>
         </div>
       </div>

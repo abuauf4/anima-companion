@@ -313,3 +313,40 @@ model FAQ {
   order     Int      @default(0)
   isActive  Boolean  @default(true)
 }
+
+// ==================== SITE SETTINGS (SINGLETON) ====================
+model SiteSetting {
+  id                  String   @id @default("singleton")
+  // Hero
+  heroEyebrow         String   @default("Suplemen Rekomendasi Dokter Hewan")
+  heroTitle1          String   @default("Elevating")
+  heroTitle2          String   @default("Animal Health")
+  heroDescription     String   @default("Suplemen & vitamin hewan peliharaan premium dari Anima Companion — PT Sutan Vet Medika. Diformulasikan bersama dokter hewan, tersedia di 515+ klinik seluruh Indonesia.")
+  heroHookTitle1      String   @default("Belanja sesuai")
+  heroHookTitle2      String   @default("hewan peliharaanmu")
+  // Trust badges
+  trustBadge1Value    String   @default("50rb+")
+  trustBadge1Label    String   @default("Pelanggan")
+  trustBadge2Value    String   @default("515+")
+  trustBadge2Label    String   @default("Klinik Resmi")
+  trustBadge3Value    String   @default("4.9★")
+  trustBadge3Label    String   @default("Rating")
+  trustBadge4Value    String   @default("24/7")
+  trustBadge4Label    String   @default("Konsul Vet")
+  // Contact
+  whatsappNumber      String   @default("6281234567890")
+  email               String   @default("hello@animacompanion.id")
+  instagram           String   @default("@anima.companion")
+  instagramUrl        String   @default("https://instagram.com/anima.companion")
+  shopeeUrl           String   @default("https://shopee.co.id/anima.companion")
+  tokopediaUrl        String   @default("https://www.tokopedia.com/find/felcover")
+  tiktokUrl           String   @default("")
+  // Announcement bar
+  announcement1       String   @default("🚚 Gratis ongkir min Rp 150.000")
+  announcement2       String   @default("⏰ Flash Sale 20% — berakhir segera!")
+  announcement3       String   @default("🎁 Subscribe & Save hemat 15% setiap pesanan")
+  announcement4       String   @default("🩺 Konsultasi vet gratis 24/7 via WhatsApp")
+  // Misc
+  freeShippingThreshold Int     @default(150000)
+  updatedAt           DateTime @updatedAt
+}

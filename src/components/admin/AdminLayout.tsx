@@ -5,7 +5,7 @@ import { Logo } from '@/components/layout/Logo'
 import { Button } from '@/components/ui/button'
 import {
   LayoutDashboard, Package, Tags, ShoppingCart, Users, Image as ImageIcon,
-  Ticket, ChevronLeft, Store,
+  Ticket, ChevronLeft, Store, MessageSquare, HelpCircle, Settings,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
@@ -16,7 +16,10 @@ const NAV_ITEMS = [
   { section: 'orders', label: 'Pesanan', icon: ShoppingCart },
   { section: 'customers', label: 'Pelanggan', icon: Users },
   { section: 'banners', label: 'Banner', icon: ImageIcon },
+  { section: 'testimonials', label: 'Testimoni', icon: MessageSquare },
+  { section: 'faqs', label: 'FAQ', icon: HelpCircle },
   { section: 'vouchers', label: 'Voucher', icon: Ticket },
+  { section: 'settings', label: 'Pengaturan', icon: Settings },
 ]
 
 export function AdminLayout({ section }: { section: string }) {
@@ -40,7 +43,10 @@ export function AdminLayout({ section }: { section: string }) {
       case 'orders': return <OrdersView />
       case 'customers': return <CustomersView />
       case 'banners': return <BannersView />
+      case 'testimonials': return <TestimonialsView />
+      case 'faqs': return <FaqView />
       case 'vouchers': return <VouchersView />
+      case 'settings': return <SettingsView />
       default: return <DashboardView />
     }
   }
@@ -118,4 +124,7 @@ import { CategoriesView } from '@/views/admin/CategoriesView'
 import { OrdersView } from '@/views/admin/OrdersView'
 import { CustomersView } from '@/views/admin/CustomersView'
 import { BannersView } from '@/views/admin/BannersView'
+import { TestimonialsView } from '@/views/admin/TestimonialsView'
+import { FaqView } from '@/views/admin/FaqView'
 import { VouchersView } from '@/views/admin/VouchersView'
+import { SettingsView } from '@/views/admin/SettingsView'
