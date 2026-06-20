@@ -47,6 +47,7 @@ export function HomeView() {
     problems,
     testimonials,
     petTypes,
+    settings,
   } = useHomeData()
 
   const [emailValue, setEmailValue] = useState('')
@@ -80,23 +81,23 @@ export function HomeView() {
             className="space-y-3 text-foreground md:space-y-4"
           >
             <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
-              <PawPrint className="size-3" /> Suplemen Rekomendasi Dokter Hewan
+              <PawPrint className="size-3" /> {settings?.heroEyebrow || 'Suplemen Rekomendasi Dokter Hewan'}
             </span>
 
             <h1 className="text-balance text-3xl font-extrabold leading-[1.05] tracking-tight sm:text-4xl lg:text-5xl">
-              Elevating<br />
-              <span className="gradient-brand-text">Animal Health</span>
+              {settings?.heroTitle1 || 'Elevating'}<br />
+              <span className="gradient-brand-text">{settings?.heroTitle2 || 'Animal Health'}</span>
             </h1>
 
             <p className="max-w-md text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
-              Suplemen & vitamin hewan peliharaan premium dari <span className="font-semibold text-foreground">Anima Companion</span> — PT Sutan Vet Medika. Diformulasikan bersama dokter hewan, tersedia di <span className="font-semibold text-foreground">515+ klinik</span> seluruh Indonesia.
+              {settings?.heroDescription || 'Suplemen & vitamin hewan peliharaan premium dari Anima Companion — PT Sutan Vet Medika. Diformulasikan bersama dokter hewan, tersedia di 515+ klinik seluruh Indonesia.'}
             </p>
 
             {/* Hook text before CTAs — same typography as H1 */}
             <div className="pt-1">
               <h2 className="text-balance text-3xl font-extrabold leading-[1.05] tracking-tight sm:text-4xl lg:text-5xl">
-                Belanja sesuai<br />
-                <span className="gradient-brand-text">hewan peliharaanmu</span>
+                {settings?.heroHookTitle1 || 'Belanja sesuai'}<br />
+                <span className="gradient-brand-text">{settings?.heroHookTitle2 || 'hewan peliharaanmu'}</span>
               </h2>
             </div>
 
@@ -190,10 +191,10 @@ export function HomeView() {
         <div className="container-page relative">
           <div className="grid grid-cols-2 gap-3 rounded-2xl border border-border/40 bg-card/40 p-4 backdrop-blur-sm sm:grid-cols-4 md:gap-4 md:p-6">
             {[
-              { v: '50rb+', l: 'Pelanggan' },
-              { v: '515+', l: 'Klinik Resmi' },
-              { v: '4.9★', l: 'Rating' },
-              { v: '24/7', l: 'Konsul Vet' },
+              { v: settings?.trustBadge1Value || '50rb+', l: settings?.trustBadge1Label || 'Pelanggan' },
+              { v: settings?.trustBadge2Value || '515+', l: settings?.trustBadge2Label || 'Klinik Resmi' },
+              { v: settings?.trustBadge3Value || '4.9★', l: settings?.trustBadge3Label || 'Rating' },
+              { v: settings?.trustBadge4Value || '24/7', l: settings?.trustBadge4Label || 'Konsul Vet' },
             ].map((s) => (
               <div key={s.l} className="text-center">
                 <div className="text-lg font-extrabold gradient-brand-text sm:text-2xl md:text-3xl">{s.v}</div>

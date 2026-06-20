@@ -97,6 +97,14 @@ export interface Testimonial {
   rating: number
 }
 
+export interface Faq {
+  id: string
+  question: string
+  answer: string
+  order: number
+  isActive: boolean
+}
+
 export interface Voucher {
   id: string
   code: string

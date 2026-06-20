@@ -14,7 +14,7 @@ const PRODUCT_INCLUDE = {
  * GET /api/home
  * Single bundled endpoint for homepage — returns all data needed
  * (banners, bestSellers, newProducts, problems,
- *  testimonials, petTypes, saleCountdown)
+ *  testimonials, petTypes, saleCountdown, settings, faqs)
  * in ONE round trip to the database instead of many.
  *
  * Cached for 60s to absorb traffic spikes and reduce pool usage.
@@ -42,6 +42,8 @@ export async function GET() {
         problems,
         testimonials,
         petTypes,
+        faqs,
+        settingsRow,
       ] = await Promise.all([
         db.banner.findMany({
           where: { isActive: true },
@@ -76,6 +78,16 @@ export async function GET() {
             },
           },
         }),
+        db.fAQ.findMany({
+          where: { isActive: true },
+          orderBy: { order: 'asc' },
+        }),
+        // SiteSetting singleton — create on first access if missing
+        db.siteSetting.upsert({
+          where: { id: 'singleton' },
+          create: { id: 'singleton' },
+          update: {},
+        }),
       ])
 
       // Sale countdown: 3 days from now (recomputed each cache miss — ~60s drift acceptable)
@@ -90,6 +102,8 @@ export async function GET() {
         problems,
         testimonials,
         petTypes,
+        faqs,
+        settings: settingsRow,
         saleCountdown,
       }
     })

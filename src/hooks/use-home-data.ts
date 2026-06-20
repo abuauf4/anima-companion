@@ -1,7 +1,43 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Banner, Product, Problem, Testimonial, PetType } from '@/hooks/use-fetch'
+import { Banner, Product, Problem, Testimonial, PetType, Faq } from '@/hooks/use-fetch'
+
+export interface SiteSetting {
+  id: string
+  // Hero
+  heroEyebrow: string
+  heroTitle1: string
+  heroTitle2: string
+  heroDescription: string
+  heroHookTitle1: string
+  heroHookTitle2: string
+  // Trust badges
+  trustBadge1Value: string
+  trustBadge1Label: string
+  trustBadge2Value: string
+  trustBadge2Label: string
+  trustBadge3Value: string
+  trustBadge3Label: string
+  trustBadge4Value: string
+  trustBadge4Label: string
+  // Contact
+  whatsappNumber: string
+  email: string
+  instagram: string
+  instagramUrl: string
+  shopeeUrl: string
+  tokopediaUrl: string
+  tiktokUrl: string
+  // Announcement bar
+  announcement1: string
+  announcement2: string
+  announcement3: string
+  announcement4: string
+  // Misc
+  freeShippingThreshold: number
+  updatedAt: string
+}
 
 export interface HomeData {
   banners: Banner[]
@@ -10,6 +46,8 @@ export interface HomeData {
   problems: Problem[]
   testimonials: Testimonial[]
   petTypes: PetType[]
+  faqs: Faq[]
+  settings: SiteSetting | null
   saleCountdown?: { endsAt: string }
 }
 
@@ -142,6 +180,8 @@ export function useHomeData() {
     problems: data?.problems || [],
     testimonials: data?.testimonials || [],
     petTypes: data?.petTypes || [],
+    faqs: data?.faqs || [],
+    settings: data?.settings || null,
     saleCountdown: data?.saleCountdown,
   }
 }
