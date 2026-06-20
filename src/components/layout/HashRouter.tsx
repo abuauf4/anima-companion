@@ -2,23 +2,60 @@
 
 import { useHashRouter } from '@/lib/router'
 import { useEffect } from 'react'
-import { HomeView } from '@/views/HomeView'
-import { ShopView } from '@/views/ShopView'
-import { ProductDetailView } from '@/views/ProductDetailView'
-import { CartView } from '@/views/CartView'
-import { CheckoutView } from '@/views/CheckoutView'
-import { LoginView } from '@/views/auth/LoginView'
-import { RegisterView } from '@/views/auth/RegisterView'
-import { ProfileView } from '@/views/ProfileView'
-import { OrderHistoryView } from '@/views/OrderHistoryView'
-import { ProblemListView } from '@/views/ProblemListView'
-import { ProblemDetailView } from '@/views/ProblemDetailView'
-import { ContactView } from '@/views/ContactView'
-import { WishlistView } from '@/views/WishlistView'
-import { AdminLayout } from '@/components/admin/AdminLayout'
+import dynamic from 'next/dynamic'
 import { useAuth } from '@/hooks/use-auth'
 import { useUIStore } from '@/lib/store'
-import { ScrollArea } from '@/components/ui/scroll-area'
+
+// Lazy load all route views — each becomes a separate JS chunk.
+// This keeps the initial bundle small (only HomeView loads on first paint).
+// Admin views (with recharts ~200K) only load when /admin is visited.
+// Auth/order/profile views only load when those routes are accessed.
+
+const HomeView = dynamic(() => import('@/views/HomeView').then(m => ({ default: m.HomeView })), {
+  loading: () => <LoadingScreen />,
+})
+const ShopView = dynamic(() => import('@/views/ShopView').then(m => ({ default: m.ShopView })), {
+  loading: () => <LoadingScreen />,
+})
+const ProductDetailView = dynamic(() => import('@/views/ProductDetailView').then(m => ({ default: m.ProductDetailView })), {
+  loading: () => <LoadingScreen />,
+})
+const CartView = dynamic(() => import('@/views/CartView').then(m => ({ default: m.CartView })), {
+  loading: () => <LoadingScreen />,
+})
+const CheckoutView = dynamic(() => import('@/views/CheckoutView').then(m => ({ default: m.CheckoutView })), {
+  loading: () => <LoadingScreen />,
+})
+const LoginView = dynamic(() => import('@/views/auth/LoginView').then(m => ({ default: m.LoginView })), {
+  loading: () => <LoadingScreen />,
+})
+const RegisterView = dynamic(() => import('@/views/auth/RegisterView').then(m => ({ default: m.RegisterView })), {
+  loading: () => <LoadingScreen />,
+})
+const ProfileView = dynamic(() => import('@/views/ProfileView').then(m => ({ default: m.ProfileView })), {
+  loading: () => <LoadingScreen />,
+})
+const OrderHistoryView = dynamic(() => import('@/views/OrderHistoryView').then(m => ({ default: m.OrderHistoryView })), {
+  loading: () => <LoadingScreen />,
+})
+const ProblemListView = dynamic(() => import('@/views/ProblemListView').then(m => ({ default: m.ProblemListView })), {
+  loading: () => <LoadingScreen />,
+})
+const ProblemDetailView = dynamic(() => import('@/views/ProblemDetailView').then(m => ({ default: m.ProblemDetailView })), {
+  loading: () => <LoadingScreen />,
+})
+const ContactView = dynamic(() => import('@/views/ContactView').then(m => ({ default: m.ContactView })), {
+  loading: () => <LoadingScreen />,
+})
+const WishlistView = dynamic(() => import('@/views/WishlistView').then(m => ({ default: m.WishlistView })), {
+  loading: () => <LoadingScreen />,
+})
+
+// Admin layout — biggest win: recharts (~200K) + all admin views
+// only load when admin navigates to /admin/*
+const AdminLayout = dynamic(() => import('@/components/admin/AdminLayout').then(m => ({ default: m.AdminLayout })), {
+  loading: () => <LoadingScreen />,
+})
 
 export function HashRouter() {
   const { route } = useHashRouter()
