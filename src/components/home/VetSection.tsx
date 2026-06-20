@@ -77,8 +77,8 @@ export function VetSection() {
           })}
         </Stagger>
 
-        {/* Vet testimonial cards — equal height, clean quote-card design */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 lg:gap-6 items-stretch">
+        {/* Vet testimonial cards — equal height on ALL breakpoints */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5 lg:gap-6">
           {VETS.map((vet, i) => (
             <motion.div
               key={vet.name}
@@ -86,15 +86,15 @@ export function VetSection() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: '-50px' }}
               transition={{ duration: 0.4, delay: i * 0.1 }}
-              className="group relative flex flex-col rounded-2xl bg-card border border-border/60 p-6 shadow-sm hover:shadow-md transition-all duration-300 min-h-[260px]"
+              className="group relative flex flex-col rounded-2xl bg-card border border-border/60 p-5 md:p-6 shadow-sm hover:shadow-md transition-all duration-300 h-[280px] md:h-[300px]"
             >
               {/* Quote icon with gradient — top-left corner */}
               <div className={`mb-4 inline-flex size-10 items-center justify-center rounded-xl bg-gradient-to-br ${vet.color} text-white shadow-sm`}>
                 <Quote className="size-5" fill="currentColor" />
               </div>
 
-              {/* Quote text */}
-              <p className="text-sm leading-relaxed text-foreground/80 italic mb-5 flex-1">
+              {/* Quote text — clamped to fit fixed card height */}
+              <p className="text-sm leading-relaxed text-foreground/80 italic mb-5 flex-1 overflow-hidden line-clamp-4">
                 &ldquo;{vet.quote}&rdquo;
               </p>
 
