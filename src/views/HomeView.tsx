@@ -139,11 +139,11 @@ export function HomeView() {
               <div className="absolute inset-0 bg-gradient-to-tr from-primary/10 via-transparent to-secondary/10" />
             </div>
 
-            {/* Floating card — top-right: rating */}
+            {/* Floating card — top-right: rating (desktop only) */}
             <motion.div
               animate={{ y: [0, -8, 0] }}
               transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-              className="absolute -right-2 top-4 flex items-center gap-2 rounded-2xl bg-card/95 p-2.5 shadow-xl ring-1 ring-border/30 backdrop-blur-sm sm:-right-4 sm:top-6"
+              className="absolute -right-2 top-4 hidden items-center gap-2 rounded-2xl bg-card/95 p-2.5 shadow-xl ring-1 ring-border/30 backdrop-blur-sm sm:flex sm:-right-4 sm:top-6"
             >
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100">
                 <Star className="size-5 fill-amber-400 text-amber-400" />
@@ -154,11 +154,11 @@ export function HomeView() {
               </div>
             </motion.div>
 
-            {/* Floating card — bottom-left: BPOM */}
+            {/* Floating card — bottom-left: BPOM (desktop only) */}
             <motion.div
               animate={{ y: [0, 8, 0] }}
               transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
-              className="absolute -left-2 bottom-4 flex items-center gap-2 rounded-2xl bg-card/95 p-2.5 shadow-xl ring-1 ring-border/30 backdrop-blur-sm sm:-left-4 sm:bottom-8"
+              className="absolute -left-2 bottom-4 hidden items-center gap-2 rounded-2xl bg-card/95 p-2.5 shadow-xl ring-1 ring-border/30 backdrop-blur-sm sm:flex sm:-left-4 sm:bottom-8"
             >
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100">
                 <Shield className="size-5 text-emerald-600" />
