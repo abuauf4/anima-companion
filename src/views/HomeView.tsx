@@ -186,23 +186,6 @@ export function HomeView() {
             </motion.div>
           </motion.div>
         </div>
-
-        {/* Trust badge — full inside hero, transparent container */}
-        <div className="container-page relative">
-          <div className="grid grid-cols-2 gap-3 rounded-2xl border border-border/40 bg-card/40 p-4 backdrop-blur-sm sm:grid-cols-4 md:gap-4 md:p-6">
-            {[
-              { v: settings?.trustBadge1Value || '50rb+', l: settings?.trustBadge1Label || 'Pelanggan' },
-              { v: settings?.trustBadge2Value || '515+', l: settings?.trustBadge2Label || 'Klinik Resmi' },
-              { v: settings?.trustBadge3Value || '4.9★', l: settings?.trustBadge3Label || 'Rating' },
-              { v: settings?.trustBadge4Value || '24/7', l: settings?.trustBadge4Label || 'Konsul Vet' },
-            ].map((s) => (
-              <div key={s.l} className="text-center">
-                <div className="text-lg font-extrabold gradient-brand-text sm:text-2xl md:text-3xl">{s.v}</div>
-                <div className="text-[10px] text-muted-foreground sm:text-xs md:text-sm">{s.l}</div>
-              </div>
-            ))}
-          </div>
-        </div>
       </section>
 
       {/* ==================== PET TYPE CARDS — no section header, directly after hero ==================== */}
