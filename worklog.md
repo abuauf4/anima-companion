@@ -1375,3 +1375,173 @@ Stage Summary:
 - Actual Supabase → Neon migration TIDAK dimulai — menunggu credentials dari owner out-of-band.
 
 === STOP HERE — menunggu credentials Supabase source + Neon destination dari owner out-of-band ===
+
+---
+
+## Phase 3 — Actual Supabase → Neon Migration (EXECUTED)
+
+Status: COMPLETE. All production data successfully migrated from Supabase (source, read-only) to Neon (destination). Prisma Client verified against Neon with full schema + relation + row-count validation.
+
+### Migration approach
+
+- **Constraint**: `psql`, `pg_dump`, `pg_restore` binaries were NOT available in the workspace (no sudo access to install `postgresql-client`). Only `libpq5` (shared library) was present.
+- **Solution**: Used the `pg` npm package (v8.23.0) to perform a logical dump/restore — equivalent to `pg_dump --schema-only` + `pg_dump --data-only` + `pg_restore` but executed via Node.js SQL queries.
+- **Credential handling**: Source and destination connection strings read from `upload/db.txt` at runtime. Credential values were NEVER printed, logged, written to source, or included in any commit. Local `.env` updated silently from `db.txt` (Phase 3 activation). `.env` remains gitignored (Phase 3.1 hygiene).
+
+### 3.A — Audit Supabase source (read-only)
+
+Connected to Supabase pooler endpoint (read-only intent — no writes issued to source). Audited schema and row counts:
+
+- **21 user tables** found in `public` schema (excluding `_prisma_migrations` system tables).
+- **Total 110 rows** across all tables.
+
+Table breakdown (table_name → row_count, columns, constraints, indexes):
+
+| Table | Rows | Cols | Constraints | Indexes |
+|-------|------|------|-------------|---------|
+| Banner | 3 | 9 | 1 | 1 |
+| Cart | 1 | 4 | 2 | 2 |
+| CartItem | 0 | 6 | 3 | 2 |
+| Category | 4 | 5 | 1 | 2 |
+| FAQ | 4 | 5 | 1 | 1 |
+| Order | 4 | 14 | 2 | 4 |
+| OrderItem | 4 | 8 | 3 | 2 |
+| PetProfile | 2 | 9 | 3 | 2 |
+| PetType | 2 | 5 | 1 | 2 |
+| Problem | 8 | 7 | 1 | 2 |
+| Product | 8 | 25 | 3 | 6 |
+| ProductImage | 18 | 5 | 2 | 2 |
+| ProductPetType | 16 | 2 | 3 | 1 |
+| ProductProblem | 12 | 2 | 3 | 1 |
+| Review | 13 | 8 | 3 | 2 |
+| Seller | 0 | 14 | 2 | 3 |
+| SiteSetting | 1 | 28 | 1 | 1 |
+| Testimonial | 4 | 9 | 1 | 1 |
+| User | 3 | 8 | 1 | 2 |
+| Voucher | 3 | 9 | 1 | 2 |
+| Wishlist | 0 | 4 | 3 | 2 |
+
+All 20 FK constraints captured with full definitions (including `ON UPDATE CASCADE`, `ON DELETE CASCADE`, `ON DELETE SET NULL`, `ON DELETE RESTRICT` actions).
+
+### 3.B — Dump source data
+
+All rows from all 21 tables dumped to a local in-memory JSON object, then serialized to `upload/phase3-dump.json` (62,955 bytes). File was used only as a transient restore buffer and deleted immediately after restore completed.
+
+Supabase source connection was closed BEFORE restore began — guarantees the source was used read-only and never written to.
+
+### 3.C — Restore to Neon destination
+
+Restore order (chosen to avoid FK violation during data load):
+
+1. **CREATE TABLE** for each table (inline PK/UNIQUE/CHECK constraints, NO FK constraints yet).
+2. **CREATE INDEX** for non-constraint indexes (so INSERTs can use them).
+3. **INSERT** all rows in batches of 100, with `DELETE FROM <table>` first to make the operation idempotent (safe to re-run).
+4. **ADD FOREIGN KEY** constraints AFTER all data inserted (avoids FK violation on circular or out-of-order references).
+
+All 21 CREATE TABLE statements succeeded. All 20 FK constraints added successfully after data load. All row inserts succeeded.
+
+### 3.D — Validate destination (row counts)
+
+Per-table row count comparison Supabase → Neon:
+
+| Table | Source rows | Dest rows | Match |
+|-------|-------------|-----------|-------|
+| Banner | 3 | 3 | OK |
+| Cart | 1 | 1 | OK |
+| CartItem | 0 | 0 | OK |
+| Category | 4 | 4 | OK |
+| FAQ | 4 | 4 | OK |
+| Order | 4 | 4 | OK |
+| OrderItem | 4 | 4 | OK |
+| PetProfile | 2 | 2 | OK |
+| PetType | 2 | 2 | OK |
+| Problem | 8 | 8 | OK |
+| Product | 8 | 8 | OK |
+| ProductImage | 18 | 18 | OK |
+| ProductPetType | 16 | 16 | OK |
+| ProductProblem | 12 | 12 | OK |
+| Review | 13 | 13 | OK |
+| Seller | 0 | 0 | OK |
+| SiteSetting | 1 | 1 | OK |
+| Testimonial | 4 | 4 | OK |
+| User | 3 | 3 | OK |
+| Voucher | 3 | 3 | OK |
+| Wishlist | 0 | 0 | OK |
+
+**All 21 tables match. Total 110 rows preserved.**
+
+### 3.E — FK constraint verification
+
+Direct comparison of `pg_get_constraintdef()` output between Supabase source and Neon destination for all 20 FK constraints:
+
+- All 20 FK definitions match EXACTLY between source and destination.
+- This includes 4 `ON DELETE SET NULL` constraints (`Seller_userId_fkey`, `Product_sellerId_fkey`, `Review_userId_fkey`, `Order_userId_fkey`).
+- All `ON UPDATE CASCADE` and `ON DELETE CASCADE` / `ON DELETE RESTRICT` actions preserved verbatim.
+
+### 3.F — Prisma introspection (`prisma db pull --print`)
+
+Ran `bunx prisma db pull --print` against Neon to introspect the live schema:
+
+- All 21 models correctly introspected.
+- All field names, types, attributes (`@id`, `@default(cuid())`, `@unique`, `@updatedAt`, `@default(now())`, `@default(...)`) match `prisma/schema.prisma`.
+- All relations (`@relation(fields, references, onDelete)`) match.
+- All `@@index`, `@@unique`, `@@id` constraints match.
+- **Known Prisma introspection quirk**: Prisma drops `onDelete: SetNull` from introspected output when the FK column is nullable — but this is a display-only quirk; the underlying DB constraint is preserved (verified in 3.E above). The project's `schema.prisma` correctly declares `onDelete: SetNull` explicitly, which matches the actual DB constraint.
+
+### 3.G — Prisma Client query test
+
+Wrote a Prisma Client query test script that:
+
+1. Counted rows in all 21 models — all matched source counts (110 total rows).
+2. Tested relation loading: `Product.findFirst({ include: { images, category } })` — successfully loaded Product "Felcover+ Immune Stimulant" with 5 images and category "Suplemen".
+3. Tested relation loading: `Order.findFirst({ include: { items, user } })` — successfully loaded order #AC-20260619-001 with 1 item and guest user (userId = null).
+4. Tested composite-id join tables: `ProductPetType.count()` = 16, `ProductProblem.count()` = 12.
+5. Tested singleton lookup: `SiteSetting.findUnique({ where: { id: 'singleton' } })` — returned the singleton row.
+6. Tested unique constraint lookup: `User.findUnique({ where: { email: 'admin@anima.id' } })` — returned matching user.
+
+**All Prisma Client tests passed. Prisma ↔ Neon connection is fully functional end-to-end.**
+
+### 3.H — Important data findings (FYI, no changes made)
+
+These are observations from the migrated data. Per the data preservation rule, NO changes were made — production data is source of truth, verified by owner.
+
+1. **WhatsApp number in production DB**: `628962524542`. This is the actual production value (NOT the schema.prisma default of `6282210846408`). The schema.prisma `@default("6282210846408")` is just a fallback for new rows; existing production data uses the actual number stored in DB.
+
+2. **Felcover+ Immune Stimulant product**: Production DB has **5 image URLs** for this product (Cloudinary URLs), but the Phase 2 local static-image migration only downloaded **4 `.webp` files** to `public/products/felcover-plus-immune-stimulant/`. This is a Phase 2 follow-up item: 1 image may have been missed during the Cloudinary → local migration. Action for owner: inspect `ProductImage` rows for this product, identify which URL was not migrated, and add the missing `.webp` file. (Out of scope for Phase 3.)
+
+### 3.I — Cleanup
+
+- `upload/db.txt` deleted from workspace.
+- All Phase 3 working artifacts deleted: `phase3-migration-output.log`, `phase3-prisma-introspect.log`, `phase3-fk-verify.log`, `phase3-prisma-test.log`, `phase3-schema-compare.log`, `phase3-dump.json`.
+- Verification: `git log --all --full-history -- upload/db.txt` returns no entries — db.txt NEVER entered Git history in either the workspace repo or the anima-companion repo.
+- `.gitignore` updated with explicit defensive rules: `db.txt`, `**/db.txt`, `phase3-*.log`, `phase3-dump.json`. Local `.env` already covered by existing `.env*` rule.
+- Helper migration scripts (in `/home/z/my-project/scripts/`) retained for reference but NOT committed to anima-companion repo (they live in the parent workspace container, not the project). They read `db.txt` at runtime — no credentials baked into source.
+
+### 3.J — Build verification
+
+- `bun run lint` → 0 errors, 0 warnings.
+- `bunx tsc --noEmit` → 0 errors.
+- `bunx prisma generate` → Prisma Client v6.19.2 generated successfully.
+- `bun run build` → exit 0, all 14 routes built (static + dynamic + API routes).
+
+### 3.K — NOT done (per user instruction)
+
+- TIDAK reseed production data. Existing Supabase data was migrated as-is.
+- TIDAK hapus/ubah Supabase source. Source DB untouched (read-only intent honored).
+- TIDAK update Coolify production env. Coolify env vars for production deployment remain unchanged — owner will update Coolify when ready to cut over.
+- TIDAK upgrade Prisma. Stays at 6.19.2.
+- TIDAK migrate to `prisma.config.ts`. Schema-push workflow preserved.
+- TIDAK create `prisma/migrations/` directory. Project continues to use `prisma db push` workflow; existing Supabase was source of truth, now Neon is source of truth going forward.
+
+### Stage Summary
+
+- **Phase 3 — Supabase → Neon migration COMPLETE.** All 21 tables, 110 rows, 20 FK constraints (including `ON DELETE SET NULL` actions), all indexes, all composite IDs, all defaults, all relations — fully migrated and validated.
+- Prisma Client end-to-end test against Neon passes: connection, all models map, row counts match, relation loading works, composite-id tables work, unique constraint lookups work, singleton lookup works.
+- `db.txt` and all working artifacts deleted. db.txt never entered Git history (verified).
+- `.gitignore` hardened with explicit `db.txt` / `phase3-*` rules.
+- Local `.env` populated with Neon credentials from `db.txt` (silently — credentials never echoed/logged/committed).
+- Build clean: lint + typecheck + prisma generate + build all pass.
+- Coolify production env NOT touched. Owner will update Coolify env when ready to cut over from Supabase to Neon.
+- Supabase source DB left intact (read-only intent honored throughout).
+
+=== Phase 3 — Migration SUCCESS. Ready for owner to update Coolify production env when ready to cut over. ===

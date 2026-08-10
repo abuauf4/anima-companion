@@ -52,3 +52,11 @@ prompt
 server.log
 # Skills directory
 /skills/
+# Phase 3 — credential hygiene
+# db.txt is the credential input file for Supabase → Neon migration (Phase 3).
+# It contains raw DB passwords and MUST NEVER be committed.
+# Local .env is already covered by `.env*` rule above; this is an additional guard.
+db.txt
+**/db.txt
+phase3-*.log
+phase3-dump.json
