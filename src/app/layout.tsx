@@ -2,6 +2,13 @@ import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { HashRedirect } from "@/components/layout/HashRedirect";
+import {
+  SITE_URL,
+  BRAND,
+  organizationJsonLd,
+  websiteJsonLd,
+} from "@/lib/seo";
 
 const jakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
@@ -10,10 +17,18 @@ const jakarta = Plus_Jakarta_Sans({
   display: "swap",
 });
 
+// Default site-wide metadata — individual pages override via `buildMetadata()`.
+// Note: `title.template` is intentionally NOT set, because `buildMetadata()`
+// returns the absolute (fully-formed) title for each page. This avoids the
+// Next.js "template wraps absolute title twice" gotcha.
 export const metadata: Metadata = {
-  title: "Anima Companion — Elevating Animal Health",
-  description:
-    "Anima Companion (PT Sutan Vet Medika) — suplemen & vitamin hewan peliharaan rekomendasi dokter hewan. Produk Felcover+, Sioren, dan Forevet. Tersedia di 515+ klinik hewan seluruh Indonesia.",
+  metadataBase: new URL(SITE_URL),
+  title: `${BRAND.name} — ${BRAND.tagline}`,
+  description: BRAND.description,
+  applicationName: BRAND.name,
+  authors: [{ name: BRAND.legalName }],
+  creator: BRAND.legalName,
+  publisher: BRAND.legalName,
   keywords: [
     "anima companion",
     "felcover",
@@ -28,33 +43,46 @@ export const metadata: Metadata = {
     "PT Sutan Vet Medika",
     "PawrentHebatAnabulSehat",
   ],
-  authors: [{ name: "PT Sutan Vet Medika — Anima Companion" }],
+  alternates: {
+    canonical: SITE_URL,
+  },
   icons: {
     icon: "/logo.svg",
     apple: "/logo.svg",
     shortcut: "/logo.svg",
   },
   openGraph: {
-    title: "Anima Companion — Elevating Animal Health",
-    description:
-      "Suplemen & vitamin hewan peliharaan rekomendasi dokter hewan. Produk Felcover+, Sioren, dan Forevet. Tersedia di 515+ klinik hewan seluruh Indonesia.",
-    siteName: "Anima Companion",
+    title: `${BRAND.name} — ${BRAND.tagline}`,
+    description: BRAND.description,
+    siteName: BRAND.name,
+    url: SITE_URL,
     type: "website",
     locale: "id_ID",
     images: [
       {
-        url: "/og-image.png",
+        url: BRAND.ogImage,
         width: 1200,
         height: 630,
-        alt: "Anima Companion — Elevating Animal Health",
+        alt: `${BRAND.name} — ${BRAND.tagline}`,
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Anima Companion — Elevating Animal Health",
+    title: `${BRAND.name} — ${BRAND.tagline}`,
     description: "Suplemen rekomendasi dokter hewan untuk kucing & anjing.",
-    images: ["/og-image.png"],
+    images: [BRAND.ogImage],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+      'max-video-preview': -1,
+    },
   },
 };
 
@@ -67,13 +95,24 @@ export default function RootLayout({
     <html lang="id" suppressHydrationWarning>
       <head>
         {/* Preload critical assets for instant first paint */}
-        {/* Logo SVG (used in navbar, above the fold) — lightweight, scalable */}
         <link rel="preload" href="/anima-logo.svg" as="image" type="image/svg+xml" />
-        {/* Hero image (LCP element on homepage) */}
         <link
           rel="preload"
           as="image"
           href="/_next/image?url=%2Fhero-pets.webp&w=640&q=75"
+        />
+        {/* JSON-LD structured data — Organization + WebSite sitewide */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(organizationJsonLd()),
+          }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(websiteJsonLd()),
+          }}
         />
       </head>
       <body
@@ -81,6 +120,8 @@ export default function RootLayout({
       >
         {children}
         <Toaster />
+        {/* Mount once at root so old hash URLs redirect to their new canonical path. */}
+        <HashRedirect />
       </body>
     </html>
   );

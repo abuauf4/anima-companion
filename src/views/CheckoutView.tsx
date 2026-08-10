@@ -45,7 +45,7 @@ export function CheckoutView() {
         </div>
         <h1 className="mb-2 text-2xl font-bold">Keranjang Kosong</h1>
         <p className="mb-6 text-muted-foreground">Tambahkan produk dulu sebelum checkout.</p>
-        <Button onClick={() => navigate('/shop')} className="gap-2">
+        <Button onClick={() => navigate('/produk')} className="gap-2">
           Mulai Belanja <ChevronRight className="h-4 w-4" />
         </Button>
       </div>

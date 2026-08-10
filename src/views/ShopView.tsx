@@ -197,7 +197,7 @@ export function ShopView() {
     if (value) params.set(key, value)
     else params.delete(key)
     if (key !== 'page') params.delete('page')
-    navigate(`/shop?${params.toString()}`)
+    navigate(`/produk?${params.toString()}`)
   }
 
   const activeFilterCount = [
@@ -251,7 +251,7 @@ export function ShopView() {
                 variant="ghost"
                 size="sm"
                 className="mt-4 w-full"
-                onClick={() => navigate('/shop')}
+                onClick={() => navigate('/produk')}
               >
                 <X className="mr-1 h-4 w-4" /> Reset Filter
               </Button>
@@ -290,7 +290,7 @@ export function ShopView() {
                       variant="ghost"
                       size="sm"
                       className="mt-4 w-full"
-                      onClick={() => navigate('/shop')}
+                      onClick={() => navigate('/produk')}
                     >
                       <X className="mr-1 h-4 w-4" /> Reset Filter
                     </Button>
@@ -381,7 +381,7 @@ export function ShopView() {
               <p className="mb-4 text-sm text-muted-foreground">
                 Coba ubah filter atau kata kunci pencarian
               </p>
-              <Button onClick={() => navigate('/shop')}>Reset Filter</Button>
+              <Button onClick={() => navigate('/produk')}>Reset Filter</Button>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-4">

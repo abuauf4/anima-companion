@@ -383,3 +383,84 @@ Mobile vs Desktop behavior notes:
 - Pet Type cards: 3D tilt is desktop-only (mouse hover). On touch devices, cards stay flat — no degraded UX since touch users don't expect hover. Tap navigation works normally.
 - SectionHeader decorative blob: visible on all sizes (subtle, doesn't intrude on mobile).
 - New Arrivals posters: bento grid stacks vertically on mobile (1 big + 2 small), 1+2 layout on desktop. Stagger entrance applies on both.
+
+---
+Task ID: phase-1-routing-seo
+Agent: main
+Task: Phase 1 — Refactor public routing for SEO (Next.js App Router + sitemap + robots + JSON-LD). Audit source, implement, test, commit, push, then STOP and report.
+
+Work Log:
+- Cloned repo abuauf4/anima-companion (with PAT) to /home/z/my-project/work/anima-companion
+- Audited existing architecture: custom `HashRouter` component + `useHashRouter` hook wrapping `window.location.hash`. All "pages" were Views rendered by HashRouter based on hash path. ~24 files used `navigate()` / `route.path` / `route.segments`.
+- Installed deps with `bun install` (829 packages, OK).
+- Ran baseline `bun run build` — succeeded (1 page `/` + API routes).
+- Designed Phase 1 refactor: keep `useHashRouter` API surface, rewire internals to Next.js App Router (usePathname + useRouter + manual query parsing). Each public page becomes a real Next.js route.
+- URL migration: `/shop` → `/produk`, `/product/[slug]` → `/produk/[slug]` (canonical), plus new required `/tentang` page. Other paths unchanged.
+- Implemented:
+  * `next.config.ts` — added `redirects()`: `/shop` → `/produk` (308 permanent), `/product/:slug*` → `/produk/:slug*` (308 permanent) for backwards compat.
+  * `src/lib/seo.ts` — NEW. Helpers: `SITE_URL`, `BRAND`, `canonicalFor()`, `buildMetadata()`, `organizationJsonLd()`, `websiteJsonLd()`, `productJsonLd()`, `breadcrumbJsonLd()`. Reads `NEXT_PUBLIC_SITE_URL` env with fallback to `https://animacompanion.id`.
+  * `src/lib/router.ts` — rewrote `useHashRouter()` hook to wrap Next.js App Router. Same `route`/`navigate` API so 24 call-sites don't need rewriting. `href()` now returns real paths (no hash). `navigate()` calls `router.push()` and scrolls to top.
+  * `src/components/layout/SiteShell.tsx` — NEW. Extracted shared chrome (AnnouncementBar + Navbar + main + Footer + WhatsAppFloatingButton + MobileBottomBar) from old `src/app/page.tsx` so each new page can wrap its view.
+  * `src/components/layout/HashRedirect.tsx` — NEW. Client component mounted once in root layout. On mount, detects old `#/...` hash URLs and `router.replace()` to the new canonical path (mapping `/shop` → `/produk`, `/product/` → `/produk/`).
+  * `src/components/layout/AuthGate.tsx` — NEW. `AuthGate`, `AdminGate`, `GuestGate` client components replacing the auth/login-redirect logic that was previously baked into HashRouter.tsx.
+  * `src/components/layout/AuthViews.tsx` — NEW. Extracted `LoadingScreen`, `UnauthorizedView`, `LoginRequiredView`, `NotFoundView` (shared by AuthGate/AdminGate and not-found page).
+  * `src/app/layout.tsx` — rewrote. Added `metadataBase`, `Organization` JSON-LD + `WebSite` JSON-LD (sitewide), `HashRedirect` mount, expanded keywords, `robots` config, `alternates.canonical`. Removed `title.template` to avoid double-wrapping (buildMetadata returns absolute titles).
+  * `src/app/page.tsx` — rewrote as Server Component with `buildMetadata({ path: "/" })` + `<SiteShell><HomeView /></SiteShell>`.
+  * Created 14 new App Router page files:
+    - `src/app/produk/page.tsx` (static, metadata)
+    - `src/app/produk/[slug]/page.tsx` (dynamic, `generateMetadata` fetches product from DB, emits Product + Breadcrumb JSON-LD, 404s on missing/inactive)
+    - `src/app/tentang/page.tsx` (NEW about page; consolidates existing brand copy from Footer/HomeView — no new marketing copy invented)
+    - `src/app/kontak/page.tsx`
+    - `src/app/problem/page.tsx`
+    - `src/app/problem/[slug]/page.tsx` (dynamic metadata + Breadcrumb JSON-LD)
+    - `src/app/cart/page.tsx` (noindex)
+    - `src/app/checkout/page.tsx` (noindex)
+    - `src/app/login/page.tsx` (GuestGate, noindex)
+    - `src/app/register/page.tsx` (GuestGate, noindex)
+    - `src/app/profile/page.tsx` (AuthGate, noindex)
+    - `src/app/orders/page.tsx` (AuthGate, noindex)
+    - `src/app/wishlist/page.tsx` (noindex)
+    - `src/app/admin/[[...slug]]/page.tsx` (AdminGate, noindex; catch-all reads section from path)
+  * `src/app/not-found.tsx` — NEW. Custom 404 page with SiteShell + NotFoundView, noindex.
+  * `src/app/sitemap.ts` — NEW. Dynamic sitemap: static routes + DB-fetched product slugs + problem slugs. Try/catch around DB calls so build doesn't fail if DB unreachable at build time.
+  * `src/app/robots.ts` — NEW. Dynamic robots.txt: allows `/`, disallows non-SEO routes (cart/checkout/login/register/profile/orders/wishlist/admin/api), points at sitemap, sets host.
+  * Deleted `public/robots.txt` (replaced by `src/app/robots.ts`).
+  * Deleted `src/components/layout/HashRouter.tsx` (replaced by per-page App Router files + AuthGate + SiteShell).
+- Updated all 24 components/views that called `navigate()`:
+  * Navbar.tsx — `/shop` → `/produk`, `/shop?search=` → `/produk?search=`, isActive check `'shop'` → `'produk'`, mobile `/shop` → `/produk`
+  * Footer.tsx — `/shop` and `/shop?category=` → `/produk...`
+  * MobileBottomBar.tsx — `/shop` and `/shop?pet=` → `/produk...`, isActive `'shop'` → `'produk'`, isProductDetail `'product'` → `'produk'`
+  * ProductCard.tsx — `/product/${slug}` → `/produk/${slug}`, `/shop?brand=` → `/produk?brand=`
+  * SearchAutocomplete.tsx — `/shop?search=` → `/produk?search=`, `/product/${slug}` → `/produk/${slug}`
+  * IngredientsReveal.tsx — `/product/${slug}` → `/produk/${slug}`
+  * PetProfileQuiz.tsx — `/shop` → `/produk`
+  * HomeView.tsx — all `/shop?...` and `/product/...` → `/produk...`
+  * ShopView.tsx — `/shop?${params}` → `/produk?${params}`, all "reset filter" `/shop` → `/produk`
+  * ProductDetailView.tsx — `/shop` → `/produk`, `/product/${slug}` → `/produk/${slug}`, `/shop?category=` → `/produk?category=`
+  * CartView.tsx, WishlistView.tsx, OrderHistoryView.tsx, CheckoutView.tsx — `/shop` → `/produk`, `/product/${slug}` → `/produk/${slug}`
+  * Other paths (`/login`, `/register`, `/admin`, `/orders`, `/problem/...`, `/cart`, `/checkout`, `/`) unchanged — they already match the new canonical URLs.
+- Tests passed:
+  * `bun run build` — succeeds. All 14 new routes listed in route table. `/produk/[slug]` and `/problem/[slug]` are dynamic (server-rendered on demand); rest are static. `/robots.txt` and `/sitemap.xml` registered.
+  * `bunx tsc --noEmit` — passes clean (0 errors).
+  * `bun run lint` — passes clean (0 errors).
+  * Smoke-tested production server (`bun .next/standalone/server.js`):
+    - `/` returns 200, title "Anima Companion — Elevating Animal Health", Organization + WebSite JSON-LD present, canonical URL `https://animacompanion.id/`, full OG + Twitter card meta.
+    - `/produk` returns 200, title "Produk — Anima Companion", canonical `https://animacompanion.id/produk`.
+    - `/tentang` returns 200, title "Tentang Kami — Anima Companion", canonical `/tentang`.
+    - `/kontak` returns 200, title "Konsultasi & Kontak — Anima Companion".
+    - `/login` returns 200, title "Masuk — Anima Companion", noindex.
+    - `/robots.txt` returns 200 with proper allow/disallow rules + sitemap reference.
+    - `/sitemap.xml` returns 200 with all 5 static routes (dynamic product/problem routes fall back to static only because local SQLite DB doesn't match the postgres prisma schema — try/catch handles gracefully; in production with proper DATABASE_URL the dynamic routes will be included).
+    - `/shop` returns HTTP 308 → `/produk` (permanent redirect).
+    - `/product/foo` returns HTTP 308 → `/produk/foo` (permanent redirect).
+    - `/nonexistent-xyz` returns HTTP 404 with custom 404 page.
+
+Stage Summary:
+- Phase 1 (routing SEO) refactor COMPLETE.
+- HashRouter eliminated. All public pages are real Next.js App Router routes, server-rendered with proper metadata, canonical URLs, OG/Twitter cards, and JSON-LD structured data (Organization + WebSite sitewide; Product + Breadcrumb on product detail pages; Breadcrumb on problem detail pages).
+- `sitemap.xml` and `robots.txt` are dynamic.
+- `/shop` and `/product/*` permanently redirect to new canonical `/produk` and `/produk/*`.
+- Old hash URLs (`/#/shop` etc.) are auto-redirected client-side via `HashRedirect`.
+- UI, copy, components, and features preserved — only routing architecture changed.
+- Build/lint/typecheck all pass. Production server smoke tests pass.
+- Ready to commit and push to `main`.

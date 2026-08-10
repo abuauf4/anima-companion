@@ -100,7 +100,7 @@ export function CartView() {
         <p className="mb-6 max-w-md text-muted-foreground">
           Belum ada produk di keranjang Anda. Yuk mulai belanja untuk hewan peliharaan Anda!
         </p>
-        <Button size="lg" onClick={() => navigate('/shop')} className="gap-2">
+        <Button size="lg" onClick={() => navigate('/produk')} className="gap-2">
           Mulai Belanja <ArrowRight className="h-4 w-4" />
         </Button>
       </div>
@@ -121,7 +121,7 @@ export function CartView() {
               <Card key={item.productId} className="flex gap-4 p-4">
                 {/* Image */}
                 <button
-                  onClick={() => navigate(`/product/${item.slug}`)}
+                  onClick={() => navigate(`/produk/${item.slug}`)}
                   className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-border bg-muted"
                 >
                   <OptImage
@@ -140,7 +140,7 @@ export function CartView() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <button
-                        onClick={() => navigate(`/product/${item.slug}`)}
+                        onClick={() => navigate(`/produk/${item.slug}`)}
                         className="line-clamp-2 text-left text-sm font-semibold hover:text-primary"
                       >
                         {item.name}
@@ -201,7 +201,7 @@ export function CartView() {
 
           <Button
             variant="ghost"
-            onClick={() => navigate('/shop')}
+            onClick={() => navigate('/produk')}
             className="gap-2"
           >
             <ArrowRight className="h-4 w-4 rotate-180" /> Lanjut Belanja

@@ -80,7 +80,7 @@ export function ProductDetailView({ slug }: { slug: string }) {
         <div className="mb-4 text-5xl">🐱</div>
         <h1 className="mb-2 text-2xl font-bold">Produk Tidak Ditemukan</h1>
         <p className="mb-6 text-muted-foreground">Produk yang Anda cari tidak tersedia.</p>
-        <Button onClick={() => navigate('/shop')}>Kembali ke Belanja</Button>
+        <Button onClick={() => navigate('/produk')}>Kembali ke Belanja</Button>
       </div>
     )
   }
@@ -176,10 +176,10 @@ export function ProductDetailView({ slug }: { slug: string }) {
       <nav className="mb-4 flex flex-wrap items-center gap-1.5 text-xs md:mb-6 md:text-sm text-muted-foreground">
         <button onClick={() => navigate('/')} className="hover:text-primary">Beranda</button>
         <ChevronRight className="h-3 w-3" />
-        <button onClick={() => navigate('/shop')} className="hover:text-primary">Belanja</button>
+        <button onClick={() => navigate('/produk')} className="hover:text-primary">Belanja</button>
         <ChevronRight className="h-3 w-3" />
         <button
-          onClick={() => navigate(`/shop?category=${product.category.slug}`)}
+          onClick={() => navigate(`/produk?category=${product.category.slug}`)}
           className="hover:text-primary"
         >
           {product.category.name}

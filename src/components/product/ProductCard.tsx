@@ -76,7 +76,7 @@ export function ProductCard({ product }: { product: Product }) {
   const handleSellerClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (product.seller?.slug) {
-      navigate(`/shop?brand=${encodeURIComponent(product.seller.slug)}`)
+      navigate(`/produk?brand=${encodeURIComponent(product.seller.slug)}`)
     }
   }
 
@@ -87,7 +87,7 @@ export function ProductCard({ product }: { product: Product }) {
     <motion.div
       whileHover={{ y: -3 }}
       transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-      onClick={() => navigate(`/product/${product.slug}`)}
+      onClick={() => navigate(`/produk/${product.slug}`)}
       className="group relative flex cursor-pointer flex-col overflow-hidden rounded-lg border border-border/60 bg-card transition-shadow duration-200 hover:shadow-md hover:border-border"
     >
       {/* ==================== Image ==================== */}

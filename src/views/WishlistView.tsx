@@ -59,7 +59,7 @@ export function WishlistView() {
           Belum ada produk yang kamu simpan. Klik ikon hati (♥) di produk mana pun untuk
           menyimpannya di sini — gak perlu login, tersimpan otomatis di browser kamu.
         </p>
-        <Button onClick={() => navigate('/shop')} className="gap-2">
+        <Button onClick={() => navigate('/produk')} className="gap-2">
           <PawPrint className="size-4" /> Mulai Belanja
         </Button>
       </div>
@@ -110,7 +110,7 @@ export function WishlistView() {
             >
               {/* Image (clickable → product detail) */}
               <button
-                onClick={() => navigate(`/product/${item.slug}`)}
+                onClick={() => navigate(`/produk/${item.slug}`)}
                 className="relative aspect-square overflow-hidden bg-muted"
                 aria-label={`Lihat detail ${item.name}`}
               >
@@ -148,7 +148,7 @@ export function WishlistView() {
                 )}
                 <h3
                   className="cursor-pointer line-clamp-2 text-sm font-medium leading-tight text-foreground transition-colors hover:text-primary"
-                  onClick={() => navigate(`/product/${item.slug}`)}
+                  onClick={() => navigate(`/produk/${item.slug}`)}
                 >
                   {item.name}
                 </h3>
@@ -195,7 +195,7 @@ export function WishlistView() {
 
       {/* Bottom CTA */}
       <div className="mt-10 flex justify-center">
-        <Button variant="ghost" onClick={() => navigate('/shop')} className="gap-1.5">
+        <Button variant="ghost" onClick={() => navigate('/produk')} className="gap-1.5">
           Lanjut Belanja <ArrowRight className="size-4" />
         </Button>
       </div>

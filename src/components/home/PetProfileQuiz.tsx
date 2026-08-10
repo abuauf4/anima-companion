@@ -67,7 +67,7 @@ export function PetProfileQuiz() {
     if (selectedProblems.length >= 1) {
       navigate(`/problem/${selectedProblems[0]}`)
     } else {
-      navigate('/shop')
+      navigate('/produk')
     }
   }
 

@@ -1,23 +1,20 @@
-'use client'
+import type { Metadata } from "next";
+import { SiteShell } from "@/components/layout/SiteShell";
+import { HomeView } from "@/views/HomeView";
+import { buildMetadata } from "@/lib/seo";
 
-import { AnnouncementBar } from '@/components/layout/AnnouncementBar'
-import { Navbar } from '@/components/layout/Navbar'
-import { Footer } from '@/components/layout/Footer'
-import { HashRouter } from '@/components/layout/HashRouter'
-import { WhatsAppFloatingButton } from '@/components/layout/WhatsAppFloatingButton'
-import { MobileBottomBar } from '@/components/layout/MobileBottomBar'
+// Home page — server component with full SEO metadata.
+// Static: prerendered at build time. HomeView (client) hydrates with cart/auth state.
+export const metadata: Metadata = buildMetadata({
+  path: "/",
+  description:
+    "Anima Companion (PT Sutan Vet Medika) — suplemen & vitamin hewan peliharaan rekomendasi dokter hewan. Produk Felcover+, Sioren, dan Forevet. Tersedia di 515+ klinik hewan seluruh Indonesia.",
+});
 
-export default function Home() {
+export default function HomePage() {
   return (
-    <div className="flex min-h-screen flex-col">
-      <AnnouncementBar />
-      <Navbar />
-      <main className="flex-1 pb-[72px] md:pb-0">
-        <HashRouter />
-      </main>
-      <Footer />
-      <WhatsAppFloatingButton />
-      <MobileBottomBar />
-    </div>
-  )
+    <SiteShell>
+      <HomeView />
+    </SiteShell>
+  );
 }

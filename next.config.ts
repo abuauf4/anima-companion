@@ -24,6 +24,24 @@ const nextConfig: NextConfig = {
       },
     ]
   },
+  // Backwards-compat redirects: old hash-router paths (now real URLs) → new canonical paths.
+  // /shop          → /produk       (shop listing)
+  // /product/:slug → /produk/:slug (product detail)
+  // Permanent (308) so search engines & bookmarks update.
+  async redirects() {
+    return [
+      {
+        source: '/shop',
+        destination: '/produk',
+        permanent: true,
+      },
+      {
+        source: '/product/:slug*',
+        destination: '/produk/:slug*',
+        permanent: true,
+      },
+    ]
+  },
   // Tree-shake large barrel-export packages — only bundle used exports
   experimental: {
     optimizePackageImports: [

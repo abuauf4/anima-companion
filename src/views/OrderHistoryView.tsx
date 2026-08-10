@@ -63,7 +63,7 @@ export function OrderHistoryView() {
         </div>
         <h1 className="mb-2 text-2xl font-bold">Belum Ada Pesanan</h1>
         <p className="mb-6 text-muted-foreground">Anda belum melakukan pesanan apa pun.</p>
-        <Button onClick={() => navigate('/shop')} className="gap-2">
+        <Button onClick={() => navigate('/produk')} className="gap-2">
           Mulai Belanja <ChevronRight className="h-4 w-4" />
         </Button>
       </div>

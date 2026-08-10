@@ -113,11 +113,11 @@ export function Footer() {
           <div>
             <h4 className="mb-3 text-sm font-semibold">Belanja</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li><button onClick={() => navigate('/shop')} className="hover:text-primary">Semua Produk</button></li>
-              <li><button onClick={() => navigate('/shop?category=vitamin')} className="hover:text-primary">Vitamin</button></li>
-              <li><button onClick={() => navigate('/shop?category=suplemen')} className="hover:text-primary">Suplemen</button></li>
-              <li><button onClick={() => navigate('/shop?category=perawatan')} className="hover:text-primary">Perawatan</button></li>
-              <li><button onClick={() => navigate('/shop?category=grooming')} className="hover:text-primary">Grooming</button></li>
+              <li><button onClick={() => navigate('/produk')} className="hover:text-primary">Semua Produk</button></li>
+              <li><button onClick={() => navigate('/produk?category=vitamin')} className="hover:text-primary">Vitamin</button></li>
+              <li><button onClick={() => navigate('/produk?category=suplemen')} className="hover:text-primary">Suplemen</button></li>
+              <li><button onClick={() => navigate('/produk?category=perawatan')} className="hover:text-primary">Perawatan</button></li>
+              <li><button onClick={() => navigate('/produk?category=grooming')} className="hover:text-primary">Grooming</button></li>
               <li><button onClick={() => navigate('/problem')} className="hover:text-primary">Shop by Problem</button></li>
             </ul>
           </div>

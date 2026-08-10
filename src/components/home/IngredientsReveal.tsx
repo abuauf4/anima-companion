@@ -146,7 +146,7 @@ export function IngredientsReveal() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: '-50px' }}
               transition={{ duration: 0.4, delay: Math.min(i, 3) * 0.05 }}
-              onClick={() => navigate(`/product/${ing.slug}`)}
+              onClick={() => navigate(`/produk/${ing.slug}`)}
               whileHover={{ y: -4 }}
               className={`group relative flex shrink-0 snap-start flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br ${ing.color} p-5 text-left text-white shadow-sm transition-shadow hover:shadow-lg md:p-6 w-full md:w-[calc(33.333%-0.667rem)]`}
               style={{ minHeight: '340px' }}

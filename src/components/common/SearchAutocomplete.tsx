@@ -77,13 +77,13 @@ export function SearchAutocomplete({
     if (!q) return
     setIsOpen(false)
     if (onSubmit) onSubmit(q)
-    else navigate(`/shop?search=${encodeURIComponent(q)}`)
+    else navigate(`/produk?search=${encodeURIComponent(q)}`)
   }
 
   const handleSelectSuggestion = (slug: string) => {
     setIsOpen(false)
     setValue('')
-    navigate(`/product/${slug}`)
+    navigate(`/produk/${slug}`)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

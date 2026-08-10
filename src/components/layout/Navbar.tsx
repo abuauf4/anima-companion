@@ -50,15 +50,15 @@ export function Navbar() {
 
   // Sync search from URL
   useEffect(() => {
-    if (route.segments[0] === 'shop') {
+    if (route.segments[0] === 'produk') {
       const q = route.query.get('search') || ''
-       
+      
       setSearchValue(q)
     }
   }, [route])
 
   const goShop = (key: string, value: string) => {
-    navigate(`/shop?${key}=${encodeURIComponent(value)}`)
+    navigate(`/produk?${key}=${encodeURIComponent(value)}`)
   }
 
   return (
@@ -73,7 +73,7 @@ export function Navbar() {
             value={searchValue}
             onChange={setSearchValue}
             onSubmit={(q) => {
-              navigate(`/shop?search=${encodeURIComponent(q)}`)
+              navigate(`/produk?search=${encodeURIComponent(q)}`)
               setSearchOpen(false)
             }}
             variant="desktop"
@@ -178,7 +178,7 @@ export function Navbar() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate('/shop')}
+            onClick={() => navigate('/produk')}
             className="md:hidden"
             aria-label="Filter"
           >
@@ -279,7 +279,7 @@ export function Navbar() {
               value={searchValue}
               onChange={setSearchValue}
               onSubmit={(q) => {
-                navigate(`/shop?search=${encodeURIComponent(q)}`)
+                navigate(`/produk?search=${encodeURIComponent(q)}`)
                 setSearchOpen(false)
               }}
               variant="mobile"

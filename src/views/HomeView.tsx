@@ -105,7 +105,7 @@ export function HomeView() {
             <div className="flex items-center gap-2.5">
               <Button
                 size="lg"
-                onClick={() => navigate('/shop?pet=anjing')}
+                onClick={() => navigate('/produk?pet=anjing')}
                 className="h-11 flex-1 gap-2 bg-primary px-4 text-sm font-bold shadow-md hover:bg-primary/90"
               >
                 🐕 Anjing
@@ -113,7 +113,7 @@ export function HomeView() {
               <Button
                 size="lg"
                 variant="outline"
-                onClick={() => navigate('/shop?pet=kucing')}
+                onClick={() => navigate('/produk?pet=kucing')}
                 className="h-11 flex-1 gap-2 border-secondary/30 bg-card px-4 text-sm font-semibold text-secondary hover:bg-secondary/5 hover:text-secondary"
               >
                 🐈 Kucing
@@ -204,7 +204,7 @@ export function HomeView() {
           title={<>Best <span className="gradient-brand-text">Seller</span> Bulan Ini</>}
           subtitle="Produk yang paling banyak dibeli dan diulas positif oleh pelanggan kami."
           action={
-            <Button variant="outline" size="sm" onClick={() => navigate('/shop?bestSeller=1')} className="gap-1.5">
+            <Button variant="outline" size="sm" onClick={() => navigate('/produk?bestSeller=1')} className="gap-1.5">
               Lihat Semua <ArrowRight className="size-4" />
             </Button>
           }
@@ -248,7 +248,7 @@ export function HomeView() {
                 return (
                   <StaggerItem key={problem.id}>
                     <button
-                      onClick={() => navigate(`/shop?problem=${problem.slug}`)}
+                      onClick={() => navigate(`/produk?problem=${problem.slug}`)}
                       className="group relative flex w-full flex-col items-start gap-2 overflow-hidden rounded-2xl border border-border/60 bg-card p-4 text-left transition-all hover:shadow-md hover:border-border"
                     >
                       {/* Radial color glow */}
@@ -471,7 +471,7 @@ function PetTypeTiltCard({
   return (
     <Reveal delay={delay}>
       <motion.button
-        onClick={() => navigate(`/shop?pet=${config.slug}`)}
+        onClick={() => navigate(`/produk?pet=${config.slug}`)}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
         style={{ rotateX, rotateY, transformPerspective: 900 }}
@@ -589,7 +589,7 @@ function NewArrivalPosters({ products }: { products: Product[] }) {
 
     return (
       <button
-        onClick={() => navigate(`/product/${product.slug}`)}
+        onClick={() => navigate(`/produk/${product.slug}`)}
         className={`group relative flex h-full w-full flex-col justify-end overflow-hidden bg-gradient-to-br ${cfg.gradient} text-left text-white transition-all duration-500 hover:brightness-110`}
         aria-label={`Lihat detail ${product.name}`}
       >

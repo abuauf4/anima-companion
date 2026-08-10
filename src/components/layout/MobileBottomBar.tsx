@@ -33,16 +33,16 @@ export function MobileBottomBar() {
 
   const navLinks = [
     { label: 'Beranda', path: '/', icon: Home },
-    { label: 'Semua Produk', path: '/shop', icon: ShoppingBag },
-    { label: 'Belanja untuk Kucing', path: '/shop?pet=kucing', icon: PawPrint },
-    { label: 'Belanja untuk Anjing', path: '/shop?pet=anjing', icon: PawPrint },
+    { label: 'Semua Produk', path: '/produk', icon: ShoppingBag },
+    { label: 'Belanja untuk Kucing', path: '/produk?pet=kucing', icon: PawPrint },
+    { label: 'Belanja untuk Anjing', path: '/produk?pet=anjing', icon: PawPrint },
     { label: 'Shop by Problem', path: '/problem', icon: Shield },
     { label: 'Konsultasi', path: '/kontak', icon: MessageCircle },
     { label: 'Wishlist', path: '/wishlist', icon: Heart, badge: wishlistCount },
   ]
 
   // Hide bottom bar on product detail — sticky CTA bar handles checkout there
-  const isProductDetail = route.segments[0] === 'product'
+  const isProductDetail = route.segments[0] === 'produk'
   if (isProductDetail) return null
 
   return (
@@ -153,16 +153,16 @@ export function MobileBottomBar() {
 
         {/* 2. Produk */}
         <button
-          onClick={() => navigate('/shop')}
+          onClick={() => navigate('/produk')}
           aria-label="Produk"
-          aria-current={isActive('shop') ? 'page' : undefined}
+          aria-current={isActive('produk') ? 'page' : undefined}
           className="flex flex-1 flex-col items-center gap-0.5 py-1"
         >
           <ShoppingBag
-            className={`h-[18px] w-[18px] ${isActive('shop') ? 'text-primary' : 'text-muted-foreground'}`}
-            strokeWidth={isActive('shop') ? 2.5 : 2}
+            className={`h-[18px] w-[18px] ${isActive('produk') ? 'text-primary' : 'text-muted-foreground'}`}
+            strokeWidth={isActive('produk') ? 2.5 : 2}
           />
-          <span className={`text-[9px] font-medium ${isActive('shop') ? 'text-primary' : 'text-muted-foreground'}`}>
+          <span className={`text-[9px] font-medium ${isActive('produk') ? 'text-primary' : 'text-muted-foreground'}`}>
             Produk
           </span>
         </button>
