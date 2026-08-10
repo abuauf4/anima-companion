@@ -1282,4 +1282,96 @@ Stage Summary:
 - Steps 3-6 (Supabase introspection, schema compare, image audit, migration validation) BLOCKED pada credentials yang akan disediakan owner out-of-band. Setelah credentials tersedia, eksekusi sesuai plan di atas.
 - Setelah Supabase source dapat dibaca, kita akan menyelesaikan static image migration Phase 2 finalization berdasarkan daftar product image yang real (bukan asumsi seed.ts).
 
+=== STOP HERE — menunggu credentials Supabase source + Neon destination dari owner out-of-band === [Section closed at Phase 3 readiness. Phase 3.1 hygiene below.]
+
+---
+
+Task ID: phase-3.1-db-config-hygiene
+Agent: main
+Task: Phase 3.1 — DB config hygiene sebelum actual migration. (1) .env tidak boleh tracked Git — pastikan .env tercantum di .gitignore, lalu `git rm --cached .env` (jangan delete local .env). .env.example tetap tracked. (2) Simplify Neon examples di .env.example — jangan menggunakan parameter legacy/defensive sebagai default tanpa kebutuhan yang terbukti. Gunakan pola `DATABASE_URL=...?sslmode=require` (-pooler hostname) dan `DIRECT_URL=...?sslmode=require` (direct hostname). Jangan menambahkan `prepared_statements=false`, `pgbouncer=true`, `connection_limit`, atau `pool_timeout` kecuali runtime testing menunjukkan memang diperlukan. (3) Prisma version tetap 6.19.2 untuk sekarang. `directUrl = env("DIRECT_URL")` di schema.prisma boleh dipertahankan. Jangan upgrade Prisma atau migrasi ke prisma.config.ts dalam scope ini. Jangan membuat prisma/migrations baru dulu — existing Supabase database adalah source of truth dan project sebelumnya memakai schema-push; compare schema production dahulu sebelum menentukan migration baseline. (4) Lint, typecheck, Prisma generate, build. Commit kecil, push main, STOP. Jangan mulai actual Supabase → Neon migration.
+
+Work Log:
+
+=== 3.1.A — .env Git tracking hygiene ===
+
+Issue:
+- `.env` ADA di .gitignore (`.env*` rule, line 34) TAPI sudah terlanjur tracked di git history sejak "Initial commit". `.gitignore` hanya mencegah file baru di-track, tidak meng-untrack file yang sudah tracked.
+- Historical content `.env` (Phase 3 readiness commit `2abf5bb`): placeholder Neon URL (`USER:PASSWORD@ep-project-pooler.region.aws.neon.tech/neondb?...`) — BUKAN real credential. Tidak ada leak.
+- Tapi tetap berisiko: kalau operator lupa dan paste real URL ke .env local, `git add -A` akan stage perubahan ke .env (karena sudah tracked). Hygiene fix diperlukan.
+
+Action:
+- `git rm --cached .env` — untrack .env dari git index. Local file `.env` tetap di disk (TIDAK di-delete).
+- `.gitignore` line 34 sudah punya rule `.env*` — TIDAK perlu diubah. Setelah untrack, .env akan di-ignore untuk semua operasi git selanjutnya.
+- `.env.example` tetap tracked ✅ (untuk dokumentasi pattern).
+
+Verification:
+- `ls -la .env` → file masih ada, size 1070 bytes.
+- `git status --short` → `D .env` (staged deletion from index, file tetap di disk).
+- `git check-ignore -v .env` → `.gitignore:34:.env*  .env` ✅ (confirmed ignored).
+
+=== 3.1.B — Simplify Neon examples di .env.example ===
+
+Issue:
+- `.env.example` Phase 3 readiness version menambahkan defensive params di DATABASE_URL:
+  `?sslmode=require&pgbouncer=true&connection_limit=1&pool_timeout=60&prepared_statements=false`
+- User instruction Phase 3.1: "Jangan menambahkan prepared_statements=false, pgbouncer=true, connection_limit, atau pool_timeout kecuali runtime testing menunjukkan memang diperlukan."
+- Ini benar — params tersebut adalah defensive pre-baking yang mungkin tidak diperlukan untuk Neon + Prisma 6.x modern. Lebih baik start simple, tambah param HANYA kalau muncul error aktual di runtime.
+
+Action — `.env.example` database section sekarang:
+  ```
+  # 1. DATABASE_URL — Neon pooled runtime endpoint (host with -pooler suffix).
+  DATABASE_URL="postgresql://USER:PASSWORD@ep-xxxx-pooler.REGION.aws.neon.tech/neondb?sslmode=require"
+
+  # 2. DIRECT_URL — Neon direct endpoint (host WITHOUT -pooler suffix).
+  DIRECT_URL="postgresql://USER:PASSWORD@ep-xxxx.REGION.aws.neon.tech/neondb?sslmode=require"
+  ```
+- Notes section sekarang eksplisit: "Neon pooler defensive params (pgbouncer, connection_limit, pool_timeout, prepared_statements) are NOT set by default. Only add them if runtime testing shows actual need."
+- Catatan credentials hygiene dan local dev instruction tetap dipertahankan.
+
+=== 3.1.C — Local .env updated to match simplified pattern ===
+
+Local `.env` (sekarang untracked) di-update ke pattern yang sama:
+  ```
+  DATABASE_URL="postgresql://USER:PASSWORD@ep-xxxx-pooler.REGION.aws.neon.tech/neondb?sslmode=require"
+  DIRECT_URL="postgresql://USER:PASSWORD@ep-xxxx.REGION.aws.neon.tech/neondb?sslmode=require"
+  ```
+- Karena .env sekarang untracked, perubahan ini TIDAK akan muncul di `git diff`. Tapi file di disk sudah konsisten dengan .env.example pattern.
+
+=== 3.1.D — src/lib/db.ts comment cleanup ===
+
+Issue:
+- Comment block di `src/lib/db.ts` (Phase 3 readiness version) masih menyebut:
+  "MUST include `?pgbouncer=true&connection_limit=1&pool_timeout=60&prepared_statements=false`"
+  dan
+  "If you see 'prepared statement does not exist' errors at runtime, it means DATABASE_URL is missing `prepared_statements=false` — fix it in the deploy env, not in code."
+- Ini inkonsisten dengan Phase 3.1 simplification.
+
+Action — comment block di-update:
+- Hapus referensi "MUST include" untuk defensive params.
+- Tambah: "Defensive pooler params are NOT pre-baked by default. Only add them if runtime testing shows actual need (e.g. 'prepared statement does not exist' errors under load). Fix misconfiguration at the deploy env, not in code."
+- Tetap menjelaskan bahwa hack Supabase-specific sudah dihapus (Phase 3 readiness) — itu tetap benar dan tidak berubah.
+
+=== 3.1.E — Tidak dilakukan (per user instruction) ===
+
+- TIDAK upgrade Prisma version. Tetap 6.19.2.
+- TIDAK migrasi ke `prisma.config.ts`. Tetap pakai `prisma/schema.prisma` + env vars.
+- TIDAK membuat `prisma/migrations/` directory. Project tetap pakai schema-push workflow (`prisma db push`). Existing Supabase database adalah source of truth — compare schema production dahulu sebelum menentukan migration baseline.
+- TIDAK mulai actual Supabase → Neon migration. Menunggu credentials dari owner out-of-band.
+
+=== 3.1.F — Verification ===
+
+- `bun x prisma generate` → OK (Prisma Client v6.19.2, `directUrl` recognized, no error about missing DIRECT_URL value karena placeholder valid).
+- `bun run lint` → 0 errors, 0 warnings.
+- `bunx tsc --noEmit` → 0 errors.
+- `bun run build` → exit 0, all 14 routes built.
+
+Stage Summary:
+- Phase 3.1 — DB config hygiene SELESAI. Commit kecil di-push ke main.
+- `.env` untracked dari git (via `git rm --cached`), local file tetap di disk, `.gitignore` rule sudah ada sebelumnya.
+- `.env.example` simplified: hanya `?sslmode=require`, tanpa defensive pooler params.
+- `src/lib/db.ts` comment block di-update untuk konsistensi.
+- Prisma 6.19.2 + `directUrl` pattern tetap dipertahankan.
+- Tidak ada `prisma/migrations/` directory. Schema-push workflow tetap. Compare schema production dahulu sebelum menentukan migration baseline.
+- Actual Supabase → Neon migration TIDAK dimulai — menunggu credentials dari owner out-of-band.
+
 === STOP HERE — menunggu credentials Supabase source + Neon destination dari owner out-of-band ===

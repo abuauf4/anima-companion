@@ -8,27 +8,25 @@ const globalForPrisma = globalThis as unknown as {
  * Prisma client for Anima Companion.
  *
  * Phase 3 (Neon migration readiness):
- * - `DATABASE_URL`  → Neon pooled connection (PgBouncer transaction mode).
- *   MUST include `?pgbouncer=true&connection_limit=1&pool_timeout=60&prepared_statements=false`.
- *   Operator sets this at deploy time (Coolify / Vercel env var).
- * - `DIRECT_URL`    → Neon direct connection (no pooler). Used by `prisma migrate`,
- *   `prisma db push`, `prisma studio`, `prisma introspect`. Set in `.env` locally
- *   and in the deploy environment for migration tooling.
+ * - `DATABASE_URL`  → Neon pooled runtime endpoint (host with `-pooler` suffix).
+ *   Used by the Next.js runtime (Prisma Client) for all app queries.
+ * - `DIRECT_URL`    → Neon direct endpoint (host WITHOUT `-pooler`). Used by
+ *   `prisma migrate`, `prisma db push`, `prisma studio`, `prisma introspect`,
+ *   `pg_dump`/`psql restore`, and admin tooling.
  *
- * The previous Supabase-specific runtime URL rewriting (port 5432 → 6543 with
- * injected pgbouncer params) has been removed. That was a defensive hack for
- * operators who pasted the session-mode Supabase URL into DATABASE_URL. With
- * Neon, the operator is expected to paste the correct pooled connection string
- * from the Neon dashboard directly. This matches the modern Prisma 6.x pattern
- * and avoids hiding misconfiguration behind runtime magic.
- *
- * If you see "prepared statement does not exist" errors at runtime, it means
- * DATABASE_URL is missing `prepared_statements=false` — fix it in the deploy
- * env, not in code.
+ * Phase 3.1 (DB config hygiene):
+ *   - The previous Supabase-specific runtime URL rewriting hack (port 5432 →
+ *     6543 with injected `pgbouncer`/`connection_limit`/`pool_timeout`/
+ *     `prepared_statements` params) has been removed. Operator pastes the
+ *     Neon connection strings from the dashboard directly into env vars.
+ *   - Defensive pooler params are NOT pre-baked by default. Only add them if
+ *     runtime testing shows actual need (e.g. "prepared statement does not
+ *     exist" errors under load). Fix misconfiguration at the deploy env, not
+ *     in code.
  *
  * The client is reused across warm lambda invocations via `globalForPrisma`
- * cache to avoid spawning multiple clients (which would exhaust the connection
- * pool).
+ * cache to avoid spawning multiple clients (which would exhaust the
+ * connection pool).
  */
 export const db =
   globalForPrisma.prisma ??
