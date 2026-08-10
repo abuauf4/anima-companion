@@ -786,11 +786,12 @@ Total: 116.0 KB → 109.4 KB (-5.7%).
 
 Optimization: re-encoded at WebP quality=72, method=6 (slowest/best compression), max longest edge 1200px (source images were already 1024x1024 so no resize needed), EXIF rotation applied, metadata stripped. Quality 72 chosen because source images were already heavily compressed (q=82 made files LARGER, q=72 reduces size while remaining visually fine for product photography).
 
-Deleted orphan files (16 files, 8 slugs × 2 formats each):
+Deleted orphan files (16 Zesty Paws + 4 Felcover+ root = 20 files total):
   appetite-booster.{webp,png}, eye-care-solution.{webp,png}, hip-and-joint-advanced.{webp,png},
   immuno-plus.{webp,png}, multi-vitamin-daily.{webp,png}, omega-3-salmon-oil.{webp,png},
-  probiotic-digest.{webp,png}, skin-and-coat-care.{webp,png}
-Also deleted old Felcover+ files at root: Felcover+.webp, Felcover+2.webp, Felcover+3.webp, Felcover+4.webp (after migration to subdirectory).
+  probiotic-digest.{webp,png}, skin-and-coat-care.{webp,png}  — 16 Zesty Paws files (8 slugs × 2 formats)
+Also deleted old Felcover+ files at root: Felcover+.webp, Felcover+2.webp, Felcover+3.webp, Felcover+4.webp (after migration to subdirectory) — 4 Felcover+ files.
+[Corrected in QA Phase 2: original wording here said "16 files" without counting the 4 Felcover+ root files that were also deleted.]
 
 Final /public/products/ contents:
   felcover-plus-immune-stimulant/
@@ -878,7 +879,7 @@ Stage Summary:
 - Admin UI updated to reflect static image model (label, placeholder, hint). No upload system created (V1 acceptable per user).
 - Cloudinary references: only the admin UI label/placeholder mentioned Cloudinary as a hint — both updated. No Cloudinary library was installed.
 - 4 Felcover+ images migrated + optimized (-5.7% total size).
-- 16 orphan image files (Zesty Paws marketplace leftovers) deleted.
+- 20 orphan image files deleted total = 16 Zesty Paws marketplace leftovers (8 slugs × .webp+.png) + 4 old Felcover+ root files (post-migration cleanup). [Corrected in QA Phase 2 — original summary said "16" which was inconsistent with the parenthetical in the commit message and the actual git stat.]
 - WhatsApp number corrected to official 0822 1084 6408 across all surfaces (display, wa.me, tel:, JSON-LD).
 
 === MISSING ASSETS REPORT (for owner) ===
@@ -895,7 +896,9 @@ Stage Summary:
 
 Until then, next/image will 404 on those paths and the alt text will display. No DB update is needed when images are added — just drop the files into the right directories and rebuild.
 
-Until images are provided, the UI on /produk, /produk/[slug], homepage best-sellers, and cart will show broken-image placeholders for those 7 products. This is acceptable per user instruction ("untuk V1 hal tersebut acceptable") and the alternative (inventing placeholder images) was explicitly forbidden.
+Until images are provided, the UI on /produk, /produk/[slug], homepage best-sellers, and cart will show broken-image placeholders for those 7 products. This is acceptable **only for development/staging sementara** selama owner belum mengirimkan foto produk asli. Itu BUKAN acceptable untuk production launch — lihat koreksi scope di bagian QA.4 di bawah. Alternatif (membuat placeholder image palsu) dilarang oleh user.
+
+> **CORRECTION (QA Phase 2):** Pernyataan "acceptable per user instruction ('untuk V1 hal tersebut acceptable')" di atas menyesatkan. User instruction "V1 acceptable" merujuk pada **tidak adanya upload system di admin**, BUKAN pada missing image asset. Missing image adalah BLOCKER untuk production launch. Lihat detail di section `qa-phase-2-static-product-images` → `QA.4` di bawah.
 
 Recommended image specs for the owner:
   - Format: WebP
@@ -903,5 +906,132 @@ Recommended image specs for the owner:
   - File size: < 100 KB each
   - Naming: 01.webp (main), 02.webp, 03.webp, 04.webp
   - At minimum, provide 01.webp (main product image) for each product.
+
+=== STOP HERE — DO NOT START PHASE 3 (Neon migration) ===
+
+---
+
+Task ID: qa-phase-2-static-product-images
+Agent: main
+Task: QA singkat Phase 2 — verifikasi file yang dihapus pada static product image cleanup (laporan menyebut 16 file tetapi jumlahnya tidak konsisten); cari seluruh repo untuk path product image yang menunjuk file yang belum ada; buat daftar final slug → expected path → exists/missing; koreksi dokumentasi bahwa missing image acceptable HANYA untuk dev/staging sementara, bukan production launch.
+
+Work Log:
+
+=== QA.1 — Koreksi hitungan file yang dihapus ===
+
+Inkonsistensi sebelumnya:
+- Commit message `fb48bade` headline: "Delete 16 orphan image files from previous Zesty Paws marketplace refactor (8 slugs x .webp + .png duplicates + 4 old Felcover+ files at root)." — angka "16" di headline konflik dengan parenthetical yang menyebut 16 Zesty Paws + 4 Felcover+ = 20.
+- worklog.md baris 789: "Deleted orphan files (16 files, 8 slugs × 2 formats each)" — lalu di baris 793 menyebut "Also deleted old Felcover+ files at root" (4 file lagi). Total aktual 20, bukan 16.
+- worklog.md baris 881 (Stage Summary): "16 orphan image files (Zesty Paws marketplace leftovers) deleted." — lupa menyebut 4 file Felcover+ root yang juga dihapus.
+- worklog.md baris 880: "4 Felcover+ images migrated + optimized" — menyebut 4 file Felcover+ sebagai "migrated", padahal setelah migrasi ke subdirectory, 4 file root Felcover+ JUGA dihapus (terlihat di `git show --stat fb48bade`).
+
+Hitungan final yang benar (verifikasi via `git show --stat fb48bade`):
+- Zesty Paws orphans (8 slugs × 2 format .webp+.png): 16 file dihapus
+- Felcover+ root files (Felcover+.webp, Felcover+2.webp, Felcover+3.webp, Felcover+4.webp): 4 file dihapus setelah migrasi ke /public/products/felcover-plus-immune-stimulant/01..04.webp
+- TOTAL file dihapus: 20 (bukan 16)
+- TOTAL file ditambahkan: 4 (felcover-plus-immune-stimulant/01..04.webp)
+- Net change: -16 file (dari 20 file root → 4 file subdirectory)
+
+=== QA.2 — Verifikasi tidak ada source/UI yang mereferensi file terhapus ===
+
+Grep path literal dari 20 file yang dihapus (Felcover+, appetite-booster, eye-care-solution, hip-and-joint-advanced, immuno-plus, multi-vitamin-daily, omega-3-salmon-oil, probiotic-digest, skin-and-coat-care — semua varian .webp/.png) di seluruh repo:
+
+Hasil: 0 referensi aktif di kode sumber/UI yang bisa menyebabkan broken behavior. Hanya 3 referensi text/historis yang tersisa, semuanya aman:
+1. `scripts/phase2-migrate-images.py:5` — komentar header script yang menjelaskan sumber migrasi historis (script sudah tidak dipakai, disimpan sebagai catatan).
+2. `src/lib/ingredients-data.ts:14-66` — key lookup table yang menggunakan slug lama (immuno-plus, appetite-booster, dll.) sebagai object key. Ini bukan path file — tidak me-load image apa pun. Berbahaya? Tidak, tetapi DEAD DATA dari era marketplace refactor. Bisa di-clean di commit terpisah (out of scope QA ini).
+3. `src/lib/placeholder.ts:9-30` — `PRODUCT_COLORS` map yang juga menggunakan slug lama sebagai key untuk warna placeholder. Sama: bukan path file, hanya data warna. Tidak me-load image. Dead data, bisa di-clean di commit terpisah (out of scope).
+
+Verify path pattern aktif di kode:
+- `src/app/api/admin/products/route.ts:81` — default fallback path: `/products/${slug}/01.webp` ✅ format baru
+- `prisma/seed.ts:184` — `productImagePath()` helper: `/products/${slug}/0N.webp` ✅ format baru
+- `src/views/admin/ProductsView.tsx:366` — placeholder hint: `/products/<slug>/01.webp` ✅ format baru
+- Tidak ada path literal seperti `/products/immuno-plus.webp` atau `/products/Felcover+.webp` di mana pun di kode.
+
+Kesimpulan: tidak ada asset yang masih direferensikan UI/source yang terhapus. ✅
+
+=== QA.3 — Daftar final slug → expected local image path → exists/missing ===
+
+Verifikasi via `scripts/qa-phase2-image-audit.py` (Python script, read-only, parse seed.ts untuk list slug lalu check filesystem).
+
+8 product slugs di prisma/seed.ts:
+1. felcover-plus-immune-stimulant
+2. sioren-nafsu-makan
+3. sioren-fish-oil
+4. sioren-booster-plus
+5. sioren-pet-odor-x
+6. sioren-skin-coat
+7. sioren-flu-support-plus
+8. forevet-stress-manajemen
+
+Expected: 8 slug × 4 image = 32 file. Aktual: 4 EXISTS, 28 MISSING.
+
+| #  | Product slug                  | Expected local path                                          | Status   |
+|----|-------------------------------|--------------------------------------------------------------|----------|
+| 1  | felcover-plus-immune-stimulant | /products/felcover-plus-immune-stimulant/01.webp           | EXISTS   |
+| 2  | felcover-plus-immune-stimulant | /products/felcover-plus-immune-stimulant/02.webp           | EXISTS   |
+| 3  | felcover-plus-immune-stimulant | /products/felcover-plus-immune-stimulant/03.webp           | EXISTS   |
+| 4  | felcover-plus-immune-stimulant | /products/felcover-plus-immune-stimulant/04.webp           | EXISTS   |
+| 5  | sioren-nafsu-makan            | /products/sioren-nafsu-makan/01.webp                        | MISSING  |
+| 6  | sioren-nafsu-makan            | /products/sioren-nafsu-makan/02.webp                        | MISSING  |
+| 7  | sioren-nafsu-makan            | /products/sioren-nafsu-makan/03.webp                        | MISSING  |
+| 8  | sioren-nafsu-makan            | /products/sioren-nafsu-makan/04.webp                        | MISSING  |
+| 9  | sioren-fish-oil               | /products/sioren-fish-oil/01.webp                           | MISSING  |
+| 10 | sioren-fish-oil               | /products/sioren-fish-oil/02.webp                           | MISSING  |
+| 11 | sioren-fish-oil               | /products/sioren-fish-oil/03.webp                           | MISSING  |
+| 12 | sioren-fish-oil               | /products/sioren-fish-oil/04.webp                           | MISSING  |
+| 13 | sioren-booster-plus           | /products/sioren-booster-plus/01.webp                       | MISSING  |
+| 14 | sioren-booster-plus           | /products/sioren-booster-plus/02.webp                       | MISSING  |
+| 15 | sioren-booster-plus           | /products/sioren-booster-plus/03.webp                       | MISSING  |
+| 16 | sioren-booster-plus           | /products/sioren-booster-plus/04.webp                       | MISSING  |
+| 17 | sioren-pet-odor-x             | /products/sioren-pet-odor-x/01.webp                         | MISSING  |
+| 18 | sioren-pet-odor-x             | /products/sioren-pet-odor-x/02.webp                         | MISSING  |
+| 19 | sioren-pet-odor-x             | /products/sioren-pet-odor-x/03.webp                         | MISSING  |
+| 20 | sioren-pet-odor-x             | /products/sioren-pet-odor-x/04.webp                         | MISSING  |
+| 21 | sioren-skin-coat              | /products/sioren-skin-coat/01.webp                          | MISSING  |
+| 22 | sioren-skin-coat              | /products/sioren-skin-coat/02.webp                          | MISSING  |
+| 23 | sioren-skin-coat              | /products/sioren-skin-coat/03.webp                          | MISSING  |
+| 24 | sioren-skin-coat              | /products/sioren-skin-coat/04.webp                          | MISSING  |
+| 25 | sioren-flu-support-plus       | /products/sioren-flu-support-plus/01.webp                   | MISSING  |
+| 26 | sioren-flu-support-plus       | /products/sioren-flu-support-plus/02.webp                   | MISSING  |
+| 27 | sioren-flu-support-plus       | /products/sioren-flu-support-plus/03.webp                   | MISSING  |
+| 28 | sioren-flu-support-plus       | /products/sioren-flu-support-plus/04.webp                   | MISSING  |
+| 29 | forevet-stress-manajemen      | /products/forevet-stress-manajemen/01.webp                  | MISSING  |
+| 30 | forevet-stress-manajemen      | /products/forevet-stress-manajemen/02.webp                  | MISSING  |
+| 31 | forevet-stress-manajemen      | /products/forevet-stress-manajemen/03.webp                  | MISSING  |
+| 32 | forevet-stress-manajemen      | /products/forevet-stress-manajemen/04.webp                  | MISSING  |
+
+Total: 32 expected | 4 EXISTS | 28 MISSING
+
+Minimal viable product: 7 file `01.webp` (main image per product) yang WAJIB disediakan owner sebelum production launch. File `02..04.webp` (gallery) opsional tapi idealnya disediakan untuk ProductDetailView gallery.
+
+=== QA.4 — Koreksi scope "acceptable" untuk missing image ===
+
+Pernyataan sebelumnya di worklog baris 898 — "This is acceptable per user instruction ('untuk V1 hal tersebut acceptable') and the alternative (inventing placeholder images) was explicitly forbidden." — menyesatkan karena:
+
+1. User instruction "V1 acceptable" merujuk pada **tidak adanya upload system di admin** — BUKAN pada missing image asset di production launch. Dua hal tersebut berbeda.
+2. Missing image di /produk, /produk/[slug], homepage best-sellers, cart akan menyebabkan next/image 404 dan menampilkan broken-image icon di UI. Itu BUKAN kondisi production-ready.
+
+Koreksi scope:
+- Missing image assets (28 file untuk 7 produk) acceptable HANYA untuk **development dan staging sementara** selama owner belum mengirimkan foto produk asli.
+- Missing image assets adalah **BLOCKER untuk production launch**. Site tidak boleh di-deploy ke production (animacompanion.id) sampai minimal 7 file `01.webp` (main image per product) sudah di-drop ke /public/products/<slug>/.
+- Setelah image asset tersedia, TIDAK perlu DB update — cukup drop file ke /public/products/<slug>/ dan rebuild. DB sudah berisi path yang benar.
+
+Pernyataan ini menggantikan baris 898 yang sebelumnya terlalu longgar.
+
+=== QA.5 — Source code change ===
+
+Tidak ada perubahan source code (src/, prisma/, next.config.ts, public/) yang diperlukan. Hanya worklog.md yang dikoreksi:
+- Hitungan file yang dihapus: 16 → 20 (16 Zesty Paws + 4 Felcover+ root)
+- Scope "acceptable" untuk missing image: dipersempit ke dev/staging sementara, BUKAN production launch.
+
+Karena worklog.md adalah tracked file di repo, koreksi ini di-commit kecil terpisah.
+
+Stage Summary:
+- Inkonsistensi hitungan di commit message `fb48bade` dan worklog ditemukan dan dikoreksi: 20 file dihapus total (16 Zesty Paws + 4 Felcover+ root), bukan 16.
+- Tidak ada source/UI yang mereferensi file terhapus (verified via grep). Hanya dead data di ingredients-data.ts dan placeholder.ts (key lookup tables, bukan image paths) — out of scope QA ini, bisa di-clean di commit terpisah jika diperlukan.
+- Daftar final image asset audit: 32 expected, 4 EXISTS, 28 MISSING (7 produk × 4 image). Detail di tabel QA.3.
+- Scope "acceptable" untuk missing image dipersempit: dev/staging sementara ONLY, BUKAN production launch. Production launch BLOCKED sampai minimal 7 file `01.webp` disediakan owner.
+- Tidak ada placeholder image baru dibuat, tidak ada image didownload dari internet, tidak ada product data yang diubah.
+- Hanya worklog.md yang di-update. Lint/typecheck/build tetap dijalankan untuk memverifikasi tidak ada regression, lalu commit kecil + push main + STOP.
 
 === STOP HERE — DO NOT START PHASE 3 (Neon migration) ===
