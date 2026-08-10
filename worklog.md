@@ -1034,4 +1034,252 @@ Stage Summary:
 - Tidak ada placeholder image baru dibuat, tidak ada image didownload dari internet, tidak ada product data yang diubah.
 - Hanya worklog.md yang di-update. Lint/typecheck/build tetap dijalankan untuk memverifikasi tidak ada regression, lalu commit kecil + push main + STOP.
 
-=== STOP HERE — DO NOT START PHASE 3 (Neon migration) ===
+=== STOP HERE — DO NOT START PHASE 3 (Neon migration) === [Section closed at QA Phase 2. Phase 3 work begins below.]
+
+---
+
+Task ID: phase-3-neon-migration-readiness
+Agent: main
+Task: Phase 3 — Supabase PostgreSQL → Neon PostgreSQL Migration Readiness. Step 1 audit Prisma/db config. Step 2 prepare Neon config (DATABASE_URL pooled + DIRECT_URL direct, NO credentials). Steps 3-6 documented as plan (BLOCKED on Supabase source + Neon destination connection strings being provided by owner out-of-band). Don't change product records or image paths until Supabase is inspected. Don't deploy. Don't change Coolify env without instruction. Lint/typecheck/build + small commit + push main + STOP.
+
+Work Log:
+
+=== Step 1 — Audit Prisma / database config ===
+
+Findings (BEFORE Phase 3 changes):
+
+1. Prisma version (verified via `bun x prisma --version`):
+   - prisma            : 6.19.2
+   - @prisma/client    : 6.19.2
+   - binaryTarget      : debian-openssl-3.0.x
+   - TypeScript        : 5.9.3
+   - Node.js           : v24.18.0
+   - Query Engine      : libquery-engine c2990dca591cba766e3b7ef5d9e8a84796e47ab7
+   - `directUrl` is supported (introduced in Prisma 5.10; we are well past that).
+
+2. prisma/schema.prisma (BEFORE):
+   - `provider = "postgresql"` ✅ (stays — user: "Pastikan provider tetap: provider = 'postgresql'").
+   - `datasource db { url = env("DATABASE_URL") }` — single URL, no `directUrl`.
+   - This is a pre-5.10 pattern. Needs `directUrl` for proper Neon pooled+direct setup.
+
+3. prisma.config.ts: TIDAK ADA. Tidak perlu — Prisma 6.x menggunakan schema.prisma + env vars.
+
+4. package.json scripts:
+   - `db:push`     → `prisma db push` (schema-push workflow, NO migration files)
+   - `db:generate` → `prisma generate`
+   - `db:migrate`  → `prisma migrate dev` (currently unused — no migrations dir)
+   - `db:reset`    → `prisma migrate reset` (currently unused)
+   - `build`       → `prisma generate && next build`
+   - `postinstall` → `prisma generate`
+   - Tidak ada perubahan script diperlukan untuk Phase 3.
+
+5. Migration history:
+   - TIDAK ADA `prisma/migrations/` directory.
+   - Project uses schema-push workflow (`prisma db push`), bukan migration files.
+   - Implikasi untuk Neon: setelah migration source (Supabase) berhasil diinspeksi dan schema-nya dibandingkan dengan prisma/schema.prisma, jika schema cocok → bisa langsung `prisma db push` ke Neon destination. Jika mismatch → perlu `prisma migrate diff` atau migrasi manual via SQL dump/restore.
+   - Untuk production: disarankan mulai menggunakan `prisma migrate` (bukan `db push`) setelah Neon siap, supaya ada migration history. Tapi itu decision post-migration, BUKAN Phase 3 readiness.
+
+6. Prisma client initialization (src/lib/db.ts, BEFORE):
+   - Memakai `globalForPrisma` cache pattern — ✅ best practice untuk serverless.
+   - Memiliki `normalizeDatabaseUrl()` hack yang hardcoded untuk Supabase:
+     - Deteksi `pooler.supabase.com` + `:5432` (session mode).
+     - Auto-rewrite ke port 6543 (transaction mode) + inject `pgbouncer=true&connection_limit=1&pool_timeout=60&prepared_statements=false`.
+   - Hack ini adalah Supabase-specific. Untuk Neon, hostname tidak match, jadi function menjadi no-op. Tapi kode mati yang misleading.
+   - User instruction: "Ikuti konfigurasi yang benar untuk versi Prisma aktual; jangan memaksakan syntax lama." → hack ini adalah "syntax lama" yang harus dibersihkan.
+   - Setelah dibersihkan: Prisma Client dipakai langsung dengan DATABASE_URL yang sudah berisi param pooler yang benar. Operator bertanggung jawab set URL yang benar di deploy env.
+
+7. .env (local, gitignored TAPI tracked — lihat catatan di bawah):
+   - BEFORE: `DATABASE_URL=file:/home/z/my-project/db/custom.db` — SQLite file path.
+   - Ini INCONSISTENT dengan `provider = "postgresql"` di schema — Prisma akan error kalau ada operasi DB aktual (db push, db studio, query runtime).
+   - Inilah sebabnya `/produk/[slug]` 500 di Phase 2 verification — local DB tidak terhubung dengan benar.
+   - AFTER (Phase 3): dua placeholder URL Neon (pooled + direct) — operator isi dengan creds Neon dev branch.
+
+8. .env.example (BEFORE):
+   - Hanya mendokumentasikan Supabase pooler URL.
+   - Tidak ada DIRECT_URL.
+   - AFTER (Phase 3): dokumentasi lengkap Neon pooled + direct, dengan param yang benar dan catatan credentials hygiene.
+
+9. Git tracking anomaly:
+   - `.env` ADA di .gitignore (`.env*` rule), TAPI sudah terlanjur tracked di git history (committed sejak "Initial commit"). `.gitignore` hanya mencegah file baru di-track, tidak meng-untrack file yang sudah tracked.
+   - Historical content `.env` HANYA berisi `DATABASE_URL=file:/home/z/my-project/db/custom.db` — local file path, BUKAN credential. Tidak ada leak credential di history.
+   - Phase 3 update .env: placeholder `USER:PASSWORD@ep-project...` — BUKAN credential real. Aman untuk commit.
+   - Out-of-scope cleanup (TIDAK dilakukan di Phase 3 ini): `git rm --cached .env` untuk untrack. Bisa di commit terpisah jika diperlukan.
+
+=== Step 2 — Prepare Neon configuration ===
+
+Changes applied (config readiness):
+
+A. prisma/schema.prisma — datasource block:
+   ```prisma
+   datasource db {
+     provider  = "postgresql"
+     url       = env("DATABASE_URL")   # Neon pooled (PgBouncer transaction mode) — runtime
+     directUrl = env("DIRECT_URL")     # Neon direct (no pooler) — migrations/introspection/admin
+   }
+   ```
+   - Provider tetap `postgresql` ✅.
+   - Tidak ada credential di schema — hanya env var references.
+   - Prisma 6.x native support untuk `directUrl`.
+
+B. src/lib/db.ts — cleanup:
+   - Removed: hardcoded `normalizeDatabaseUrl()` Supabase-specific hack (port 5432→6543 rewrite, pgbouncer param injection).
+   - Kept: `globalForPrisma` cache pattern (best practice untuk serverless).
+   - Kept: PrismaClient init dengan `log: [warn, error]`.
+   - Added: documentation comment explaining bahwa operator harus set DATABASE_URL dengan param pooler yang benar di deploy env (Coolify/Vercel). Tidak ada runtime magic — "fix misconfiguration at deploy env, not in code".
+   - Jika operator lupa set `prepared_statements=false` di DATABASE_URL Neon pooler, error "prepared statement does not exist" akan muncul — fix di deploy env, bukan di code.
+
+C. .env.example — Neon-ready documentation:
+   - DATABASE_URL pattern: `postgresql://USER:PASSWORD@ep-project-pooler.region.aws.neon.tech/neondb?sslmode=require&pgbouncer=true&connection_limit=1&pool_timeout=60&prepared_statements=false`
+   - DIRECT_URL pattern: `postgresql://USER:PASSWORD@ep-project.region.aws.neon.tech/neondb?sslmode=require`
+   - Required params di DATABASE_URL dijelaskan satu per satu (sslmode, pgbouncer, connection_limit, pool_timeout, prepared_statements).
+   - Catatan: DIRECT_URL TIDAK boleh punya pgbouncer params (direct endpoint bypasses PgBouncer).
+   - Catatan: local dev butuh Postgres (Neon dev branch atau Docker postgres) — `file:` SQLite tidak lagi didukung karena provider postgresql.
+   - Catatan credentials hygiene: .env gitignored, .env.example hanya placeholder, production secrets di Coolify/Vercel env vars, jangan commit real URL — kalau accidentally committed, rotate password + rewrite history.
+
+D. .env (local, gitignored tapi tracked):
+   - Updated ke pattern yang sama dengan .env.example (placeholder USER:PASSWORD@ep-project...).
+   - Operator akan isi dengan Neon dev branch creds saat tersedia.
+   - BUKAN real credential — aman untuk commit.
+
+NO credential committed. NO Supabase source URL written to repo. NO Neon destination URL written to repo. Operator will provide both out-of-band.
+
+=== Step 3 — Existing Supabase data migration (PLAN — BLOCKED on creds) ===
+
+PRASYARAT (belum tersedia):
+- Supabase source direct (non-pooled) connection string — disediakan owner out-of-band. Jangan ditulis ke chat/log/repo/source.
+- Neon destination project + connection strings (pooled + direct) — disediakan owner out-of-band.
+
+Setelah prasyarat terpenuhi, eksekusi:
+
+3.1. Connect ke Supabase source (direct connection, NON-pooled) via `psql` atau Prisma introspect.
+   - JANGAN pakai pooler Supabase untuk dump — pooler mode transaction tidak support semua operasi DDL/long-lived.
+   - JANGAN modify Supabase source — read-only audit.
+
+3.2. Audit isi Supabase source:
+   - List tables (termasuk yang tidak tercermin di prisma/schema.prisma — bisa jadi legacy).
+   - Row counts per table.
+   - Sample products (id, name, slug, image URLs).
+   - Categories, users, orders, settings, testimonials, faqs, banners, vouchers, leads (jika ada).
+   - Schema version consistency (prisma migrations table `_prisma_migrations` jika ada).
+
+3.3. Migration Postgres-to-Postgres:
+   - PREFER: `pg_dump` Supabase source (direct conn) → `psql \i dump.sql` ke Neon destination (direct conn).
+   - ATAU: `prisma migrate diff --from-url <supabase> --to-schema-datamodel <schema.prisma>` untuk lihat perbedaan dulu.
+   - JANGAN reseed production data dari prisma/seed.ts — seed hanya dev fixtures, BUKAN source of truth.
+   - JANGAN drop table/data di source Supabase. Supabase tetap sebagai rollback source sampai Neon production terverifikasi.
+
+3.4. Setelah migration:
+   - JANGAN delete Supabase project. Pertahankan sebagai rollback source sampai Neon production diverifikasi dan stabil minimal 1-2 minggu.
+
+=== Step 4 — Compare DB vs Prisma schema (PLAN — BLOCKED on creds) ===
+
+Setelah Supabase source dapat dibaca, lapor:
+
+4.1. Model/table match:
+   - Tabel di Supabase vs model di prisma/schema.prisma.
+   - Tabel yang ada di Supabase TAPI tidak di schema → legacy tables (e.g. Seller dari era marketplace refactor). JANGAN drop hanya karena dianggap legacy.
+   - Tabel yang ada di schema TAPI tidak di Supabase → model yang belum pernah di-deploy.
+
+4.2. Field differences:
+   - Kolom yang ada di DB tapi tidak di schema (legacy columns).
+   - Kolom yang ada di schema tapi tidak di DB (belum migrated).
+   - Type mismatch (e.g. String vs text, Int vs bigint).
+
+4.3. Migration history mismatch:
+   - Apakah Supabase punya `_prisma_migrations` table? Kalau ya, list entries vs repo migration files (repo TIDAK punya migrations dir — schema-push workflow).
+   - Kalau tidak ada `_prisma_migrations` → Supabase di-push via `prisma db push` juga, tidak ada migration history.
+
+4.4. Risk assessment:
+   - Kalau ada mismatch berisiko (e.g. kolom NOT NULL di schema tapi NULL di DB, atau foreign key constraint berbeda) → STOP dan lapor sebelum migration.
+   - Kalau match aman atau hanya cosmetic differences → lanjut ke Step 5.
+
+=== Step 5 — Product image audit from real DB (PLAN — BLOCKED on creds) ===
+
+Setelah Supabase source dapat dibaca, ambil daftar product records dan field image-nya:
+
+5.1. Query: `SELECT id, name, slug, sku, brand FROM "Product" ORDER BY "createdAt" ASC;`
+5.2. Query: `SELECT "productId", url, alt, "order" FROM "ProductImage" ORDER BY "productId", "order" ASC;`
+5.3. Untuk setiap produk, lapor:
+   - name, slug
+   - existing image URLs/paths (per image, urut by order)
+   - jumlah images
+5.4. Bandingkan dengan asumsi Phase 2 (8 produk sioren/felcover/forevet + 4 image per produk):
+   - Apakah product slugs di Supabase sama dengan seed.ts?
+   - Apakah product images di Supabase menggunakan placehold.co URLs (asumsi Phase 2) atau Cloudinary/URL lain yang belum diketahui?
+   - Berapa image per produk di Supabase? Bisa jadi bukan 4 — bisa lebih atau kurang.
+5.5. Setelah daftar ini ada, kerjakan static image migration Phase 2 finalization:
+   - Untuk setiap produk di Supabase, mapping slug → image URLs existing.
+   - Owner berikan image file asli (download dari Cloudinary/Supabase storage jika ada, atau foto produk baru).
+   - Drop ke /public/products/<slug>/0N.webp dengan optimisasi WebP.
+   - JANGAN mengubah product records atau image paths di DB sampai Supabase dikonfirmasi inspeksi.
+
+=== Step 6 — Migration validation (PLAN — BLOCKED on creds) ===
+
+Setelah data dipindahkan ke Neon, verifikasi minimal:
+
+6.1. Row count source (Supabase) vs destination (Neon):
+   - `SELECT count(*) FROM "User";` — User count.
+   - `SELECT count(*) FROM "Product";` — Product count.
+   - `SELECT count(*) FROM "Order";` — Order count.
+   - `SELECT count(*) FROM "ProductImage";` — Image record count.
+   - `SELECT count(*) FROM "Category";` — Category count.
+   - `SELECT count(*) FROM "Banner";` — Banner count.
+   - `SELECT count(*) FROM "Testimonial";` — Testimonial count.
+   - `SELECT count(*) FROM "FAQ";` — FAQ count.
+   - `SELECT count(*) FROM "Voucher";` — Voucher count.
+   - `SELECT count(*) FROM "SiteSetting";` — SiteSetting count.
+   - `SELECT count(*) FROM "Review";` — Review count.
+   - Jika ada leads table di Supabase (lihat Step 4 audit) → count juga.
+
+6.2. Representative relations:
+   - Sample product dengan images, petTypes, problems, reviews → jumlah relasi cocok.
+   - Sample user dengan orders, cart, wishlist → relasi intact.
+   - Sample order dengan orderItems → relasi intact.
+
+6.3. Prisma Client query Neon:
+   - Set DATABASE_URL di .env ke Neon pooler URL.
+   - Set DIRECT_URL di .env ke Neon direct URL.
+   - Run `bun x prisma db pull --print` untuk introspect Neon dan compare dengan schema.prisma.
+   - Run `bun run dev`, browse /produk, /produk/[slug], admin/products → semua load tanpa error.
+
+6.4. Setelah verifikasi lulus:
+   - JANGAN delete Supabase project (rollback source).
+   - Update Coolify production env: set DATABASE_URL + DIRECT_URL ke Neon — TUNGGU instruksi eksplisit dari owner.
+   - Deploy ke production domain HANYA setelah owner instruction.
+
+=== Deployment constraints ===
+
+- JANGAN deploy Anima ke production domain tanpa instruksi eksplisit.
+- JANGAN ubah Coolify production env tanpa instruksi eksplisit.
+- Staging tetap:
+  - NEXT_PUBLIC_SITE_URL=https://animacompanion.id
+  - NEXT_PUBLIC_ALLOW_INDEXING=false
+
+=== Phase 3 readiness status ===
+
+Code/config changes (COMMITTED):
+- prisma/schema.prisma: added `directUrl = env("DIRECT_URL")`.
+- src/lib/db.ts: removed Supabase-specific URL rewrite hack, clean Prisma client init.
+- .env.example: Neon-ready DATABASE_URL + DIRECT_URL pattern, no credentials.
+- .env: local placeholder (gitignored tapi tracked — git hygiene cleanup out-of-scope).
+
+BLOCKED on credentials (provided by owner out-of-band):
+- Supabase source direct (non-pooled) connection string.
+- Neon destination project + pooled + direct connection strings.
+
+TIDAK dilakukan (per user instruction):
+- TIDAK melakukan actual data migration (Supabase → Neon). Menunggu credentials.
+- TIDAK mengubah product records atau image paths.
+- TIDAK mendeploy ke production domain.
+- TIDAK mengubah Coolify production env.
+- TIDAK meminta/menuliskan credential ke chat/log/source.
+
+Stage Summary:
+- Phase 3 audit + config readiness SELESAI. Commit kecil di-push ke main.
+- Provider tetap `postgresql` ✅.
+- Prisma 6.19.2 dengan `directUrl` pattern (modern, sesuai versi aktual).
+- Tidak ada credential di repo. .env.example hanya placeholder.
+- Steps 3-6 (Supabase introspection, schema compare, image audit, migration validation) BLOCKED pada credentials yang akan disediakan owner out-of-band. Setelah credentials tersedia, eksekusi sesuai plan di atas.
+- Setelah Supabase source dapat dibaca, kita akan menyelesaikan static image migration Phase 2 finalization berdasarkan daftar product image yang real (bukan asumsi seed.ts).
+
+=== STOP HERE — menunggu credentials Supabase source + Neon destination dari owner out-of-band ===

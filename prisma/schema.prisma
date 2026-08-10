@@ -1,13 +1,20 @@
 // Anima Companion — Prisma Schema
 // PostgreSQL untuk dev & production (Supabase / Neon / Vercel Postgres).
+//
+// Phase 3 (Neon migration readiness):
+// - `url`       → DATABASE_URL  (Neon pooled connection via PgBouncer, for runtime)
+// - `directUrl` → DIRECT_URL    (Neon direct connection, for migrations/introspection/admin)
+// Prisma 6.x supports `directUrl` natively (introduced in 5.10). Both env vars
+// MUST be set in production. See `.env.example` for the correct format.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ==================== USER & AUTH ====================
