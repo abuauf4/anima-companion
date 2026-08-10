@@ -10,10 +10,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // Static public routes — only include SEO-indexable pages.
   // Cart/checkout/login/register/profile/orders/wishlist/admin are noindex.
+  // /tentang is intentionally EXCLUDED (Phase 1.1): the page contains
+  // marketing prose invented during the Phase 1 refactor that is not sourced
+  // from official Anima content. It stays noindex + out of the sitemap until
+  // official Anima "Tentang Kami" content is provided. The route still
+  // returns 200 if visited directly — it is just not advertised or indexed.
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: `${SITE_URL}/`, lastModified: now, changeFrequency: "daily", priority: 1.0 },
     { url: `${SITE_URL}/produk`, lastModified: now, changeFrequency: "daily", priority: 0.9 },
-    { url: `${SITE_URL}/tentang`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     { url: `${SITE_URL}/kontak`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     { url: `${SITE_URL}/problem`, lastModified: now, changeFrequency: "weekly", priority: 0.7 },
   ]

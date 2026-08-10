@@ -6,6 +6,7 @@ import { HashRedirect } from "@/components/layout/HashRedirect";
 import {
   SITE_URL,
   BRAND,
+  ALLOW_INDEXING,
   organizationJsonLd,
   websiteJsonLd,
 } from "@/lib/seo";
@@ -73,17 +74,30 @@ export const metadata: Metadata = {
     description: "Suplemen rekomendasi dokter hewan untuk kucing & anjing.",
     images: [BRAND.ogImage],
   },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      'max-image-preview': 'large',
-      'max-snippet': -1,
-      'max-video-preview': -1,
-    },
-  },
+  robots: ALLOW_INDEXING
+    ? {
+        index: true,
+        follow: true,
+        googleBot: {
+          index: true,
+          follow: true,
+          'max-image-preview': 'large',
+          'max-snippet': -1,
+          'max-video-preview': -1,
+        },
+      }
+    : {
+        // Non-production deployment (staging/preview/local): noindex,nofollow
+        // sitewide. Canonical URLs still point to https://animacompanion.id
+        // via alternates.canonical above, so Google will consolidate signals
+        // to the production URL without indexing the staging clone.
+        index: false,
+        follow: false,
+        googleBot: {
+          index: false,
+          follow: false,
+        },
+      },
 };
 
 export default function RootLayout({

@@ -4,15 +4,31 @@ import { buildMetadata } from "@/lib/seo";
 import { whatsappAdminUrl } from "@/lib/config";
 import { Building2, MapPin, Mail, Phone, Clock, Shield, Heart, PawPrint, MessageCircle, ShoppingBag } from "lucide-react";
 
-// /tentang — About page (new in Phase 1, required for SEO).
-// Server component. Uses brand copy already present in Footer & HomeView —
-// no new marketing copy invented, no UI redesign; just consolidates existing
-// brand identity information onto its own URL so it can be linked and indexed.
+// /tentang — About page.
+//
+// IMPORTANT (Phase 1.1):
+// - This page is `noindex` and excluded from sitemap.ts. The route returns 200
+//   so internal links do not break, but it must not appear in Google's index.
+// - Marketing prose invented during the Phase 1 refactor has been REMOVED.
+//   Only fact-style contact/identity information already present elsewhere in
+//   the codebase (Footer / SITE_CONFIG) remains.
+// - The remaining contact/identity values (PT Sutan Vet Medika, Bogor address,
+//   hello@animacompanion.id, +62 812-3456-7890, Senin–Sabtu 09.00–18.00 WIB,
+//   515+ klinik, BPOM Terdaftar, #PawrentHebatAnabulSehat) are NOT verified —
+//   they are inherited from existing repo content pending a separate content
+//   audit. Do not treat them as authoritative until that audit is complete.
+// - No new marketing copy has been added. When official Anima "Tentang Kami"
+//   content becomes available, re-enable indexing by removing `noIndex: true`
+//   below and re-adding the `/tentang` entry to src/app/sitemap.ts.
 export const metadata: Metadata = buildMetadata({
   title: "Tentang Kami",
   description:
-    "Anima Companion — PT Sutan Vet Medika. Brand suplemen & vitamin hewan peliharaan premium yang dirancang bersama dokter hewan, tersedia di 515+ klinik seluruh Indonesia. Misi: Elevating Animal Health.",
+    "Anima Companion — PT Sutan Vet Medika. Brand suplemen & vitamin hewan peliharaan. Tersedia di 515+ klinik seluruh Indonesia. Misi: Elevating Animal Health.",
   path: "/tentang",
+  // Always noindex regardless of deployment env, until official Anima content
+  // is provided. buildMetadata() also force-noindexes on staging, but this
+  // explicit flag keeps /tentang out of production indexing too.
+  noIndex: true,
   keywords: [
     "tentang anima companion",
     "PT Sutan Vet Medika",
@@ -46,7 +62,6 @@ export default function TentangPage() {
           <p className="mt-4 text-balance text-base leading-relaxed text-muted-foreground sm:text-lg">
             <span className="font-semibold text-foreground">Elevating Animal Health</span> —
             Suplemen &amp; vitamin hewan peliharaan premium dari PT Sutan Vet Medika.
-            Diformulasikan bersama dokter hewan, tersedia di 515+ klinik seluruh Indonesia.
           </p>
         </section>
 
@@ -74,84 +89,62 @@ export default function TentangPage() {
           })}
         </section>
 
-        {/* Brand story */}
-        <section className="mt-16 grid gap-10 md:grid-cols-2">
-          <div>
-            <h2 className="text-2xl font-bold">Misi Kami</h2>
-            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-              Anima Companion hadir untuk meningkatkan kualitas hidup hewan peliharaan
-              melalui suplemen &amp; vitamin yang dirancang bersama dokter hewan.
-              Setiap produk diformulasikan dengan bahan aktif pilihan dan terdaftar
-              resmi di BPOM, sehingga aman digunakan untuk kucing &amp; anjing
-              peliharaan Anda.
-            </p>
-            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-              Kami percaya pawrent hebat = anabul sehat. Itulah mengapa setiap
-              produk kami didistribusikan melalui jaringan 515+ klinik hewan
-              terpercaya di seluruh Indonesia — agar konsultasi vet dan akses
-              suplemen premium selalu dalam jangkauan.
-            </p>
-            <p className="mt-3 text-sm font-semibold text-secondary">
-              #PawrentHebatAnabulSehat
-            </p>
-          </div>
+        {/* Company identity — fact-style, no marketing prose */}
+        <section className="mt-16">
+          <h2 className="text-2xl font-bold">Identitas Perusahaan</h2>
+          <ul className="mt-6 space-y-3 text-sm text-muted-foreground">
+            <li className="flex items-start gap-2">
+              <Building2 className="mt-0.5 h-4 w-4 text-primary" />
+              <span>
+                <span className="font-semibold text-foreground">Legal Entity:</span>{" "}
+                PT Sutan Vet Medika
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <MapPin className="mt-0.5 h-4 w-4 text-primary" />
+              <span>
+                <span className="font-semibold text-foreground">Lokasi:</span>{" "}
+                Bogor, Jawa Barat, Indonesia
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <Mail className="mt-0.5 h-4 w-4 text-primary" />
+              <span>
+                <span className="font-semibold text-foreground">Email:</span>{" "}
+                hello@animacompanion.id
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <Phone className="mt-0.5 h-4 w-4 text-primary" />
+              <span>
+                <span className="font-semibold text-foreground">WhatsApp:</span>{" "}
+                +62 812-3456-7890
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <Clock className="mt-0.5 h-4 w-4 text-primary" />
+              <span>
+                <span className="font-semibold text-foreground">Jam Operasional:</span>{" "}
+                Senin–Sabtu, 09.00–18.00 WIB
+              </span>
+            </li>
+          </ul>
 
-          <div className="space-y-4">
-            <h2 className="text-2xl font-bold">Identitas Perusahaan</h2>
-            <ul className="space-y-3 text-sm text-muted-foreground">
-              <li className="flex items-start gap-2">
-                <Building2 className="mt-0.5 h-4 w-4 text-primary" />
-                <span>
-                  <span className="font-semibold text-foreground">Legal Entity:</span>{" "}
-                  PT Sutan Vet Medika
-                </span>
-              </li>
-              <li className="flex items-start gap-2">
-                <MapPin className="mt-0.5 h-4 w-4 text-primary" />
-                <span>
-                  <span className="font-semibold text-foreground">Lokasi:</span>{" "}
-                  Bogor, Jawa Barat, Indonesia
-                </span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Mail className="mt-0.5 h-4 w-4 text-primary" />
-                <span>
-                  <span className="font-semibold text-foreground">Email:</span>{" "}
-                  hello@animacompanion.id
-                </span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Phone className="mt-0.5 h-4 w-4 text-primary" />
-                <span>
-                  <span className="font-semibold text-foreground">WhatsApp:</span>{" "}
-                  +62 812-3456-7890
-                </span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Clock className="mt-0.5 h-4 w-4 text-primary" />
-                <span>
-                  <span className="font-semibold text-foreground">Jam Operasional:</span>{" "}
-                  Senin–Sabtu, 09.00–18.00 WIB
-                </span>
-              </li>
-            </ul>
-
-            <div className="flex flex-wrap gap-2 pt-2">
-              <a
-                href={whatsappAdminUrl("Halo Anima Companion! Saya ingin bertanya tentang produk 🐾")}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium hover:border-primary hover:text-primary transition-colors"
-              >
-                <MessageCircle className="h-3.5 w-3.5" /> Chat WhatsApp
-              </a>
-              <a
-                href="/produk"
-                className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-              >
-                <ShoppingBag className="h-3.5 w-3.5" /> Lihat Produk
-              </a>
-            </div>
+          <div className="mt-6 flex flex-wrap gap-2">
+            <a
+              href={whatsappAdminUrl("Halo Anima Companion! Saya ingin bertanya tentang produk 🐾")}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium hover:border-primary hover:text-primary transition-colors"
+            >
+              <MessageCircle className="h-3.5 w-3.5" /> Chat WhatsApp
+            </a>
+            <a
+              href="/produk"
+              className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              <ShoppingBag className="h-3.5 w-3.5" /> Lihat Produk
+            </a>
           </div>
         </section>
       </div>

@@ -464,3 +464,241 @@ Stage Summary:
 - UI, copy, components, and features preserved — only routing architecture changed.
 - Build/lint/typecheck all pass. Production server smoke tests pass.
 - Ready to commit and push to `main`.
+
+---
+Task ID: phase-1-audit-canonical-and-tentang
+Agent: main
+Task: Two final verifications before Phase 2 — (1) audit canonical/site URL is always https://animacompanion.id (not localhost/Vercel/VPS IP/Coolify/staging); NEXT_PUBLIC_SITE_URL for prod = https://animacompanion.id; staging handled with noindex, NOT by changing canonical. (2) Audit new /tentang page — if placeholder/generic, exclude from sitemap/index or remove; if using existing valid Anima content, may keep. Report findings and STOP.
+
+Work Log:
+- Read src/lib/seo.ts (SITE_URL constant + canonicalFor/buildMetadata/JSON-LD helpers)
+- Read src/app/layout.tsx (metadataBase + alternates.canonical + OG + JSON-LD)
+- Read src/app/sitemap.ts (sitemap entries)
+- Read src/app/robots.ts (robots rules + sitemap reference + host)
+- Read src/lib/config.ts (SITE_CONFIG)
+- Read next.config.ts (redirects/rewrites; no canonical-related logic)
+- Read Caddyfile (reverse proxy; passes Host/X-Forwarded-* — does NOT mutate canonical)
+- Read .env / .env.example / .next/standalone/.env
+- Grepped for NEXT_PUBLIC_SITE_URL|NEXT_PUBLIC_VERCEL_URL|VERCEL_URL|localhost|coolify|staging|animacompanion.id across repo
+- Grepped for process.env.NEXT_PUBLIC|headers()|host|referer|x-forwarded — only Caddyfile touches headers, Next.js code does not read request host
+- Read src/app/tentang/page.tsx (full content)
+- Read src/components/layout/Footer.tsx (to cross-reference /tentang content)
+- Grepped for "/tentang" and "Tentang" across src/ to check internal linking
+
+Stage Summary:
+
+=== AUDIT 1 — Canonical / Site URL ===
+
+Verdict: MOSTLY COMPLIANT, but has 3 latent risks that should be fixed before Phase 2.
+
+✅ Pass:
+- src/lib/seo.ts line 12-13: `SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://animacompanion.id').replace(/\/$/, '')` — hardcoded fallback to https://animacompanion.id
+- src/app/layout.tsx line 25: `metadataBase: new URL(SITE_URL)` — uses constant, not request host
+- src/app/layout.tsx line 47: `alternates.canonical: SITE_URL` (root) — constant
+- All page-level metadata via `buildMetadata({ path })` produces `canonical: canonicalFor(path)` which is `${SITE_URL}${path}` — always absolute with the constant origin
+- src/app/sitemap.ts: every URL is `${SITE_URL}/...` — constant
+- src/app/robots.ts: `sitemap: ${SITE_URL}/sitemap.xml` + `host: SITE_URL` — constant
+- JSON-LD (Organization.url, WebSite.url, Product.url, BreadcrumbList.item.url) — all use SITE_URL constant
+- Next.js code does NOT read `headers().get('host')` or `x-forwarded-host` anywhere — no dynamic host-header canonical derivation
+- Caddyfile only forwards Host/X-Forwarded-* headers to upstream; it does not rewrite canonical
+
+⚠️ Risk A — No safeguard against misconfigured NEXT_PUBLIC_SITE_URL:
+  If an operator sets `NEXT_PUBLIC_SITE_URL=https://staging.animacompanion.id` (or a Vercel preview URL, Coolify URL, VPS IP) in the staging environment, EVERY canonical URL on staging will point to that staging domain — which directly violates the user's rule "staging handled with noindex, NOT by changing canonical to staging URL." There is currently NO code that detects non-production origins and forces noindex.
+
+⚠️ Risk B — NEXT_PUBLIC_SITE_URL is not documented in .env.example:
+  .env.example only documents DATABASE_URL and AUTH_SECRET. NEXT_PUBLIC_SITE_URL is invisible to operators — they may not know to set it for production, or may set it incorrectly for staging.
+
+⚠️ Risk C — No automatic noindex for non-production origins:
+  Per the user's policy ("staging handled with noindex"), the app should detect when it is being served from a non-`animacompanion.id` origin and force `robots: { index: false, follow: false }` sitewide. Currently there is no such logic — staging relies entirely on operator discipline.
+
+Recommendation (for Phase 2, do NOT implement now):
+  1. Add NEXT_PUBLIC_SITE_URL to .env.example with the documented production value `https://animacompanion.id`.
+  2. In src/lib/seo.ts, add a `IS_PROD_CANONICAL` flag = `(SITE_URL === 'https://animacompanion.id')`.
+  3. In src/app/layout.tsx default metadata, when `!IS_PROD_CANONICAL`, override `robots: { index: false, follow: false }` sitewide so any non-production deployment is auto-noindexed.
+  4. Optionally: in buildMetadata(), when `!IS_PROD_CANONICAL`, force `noIndex: true` regardless of caller input.
+
+=== AUDIT 2 — /tentang page content ===
+
+Verdict: MIXED — partially existing valid content, partially invented generic marketing prose. Recommend REMOVE from sitemap + apply noindex (do NOT delete the route file). User's rule: "jangan masukkan ke sitemap/index dulu atau hapus sampai content resmi Anima tersedia."
+
+Content analysis of src/app/tentang/page.tsx:
+
+A. EXISTING VALID Anima content (sourced from Footer.tsx / config.ts):
+   - "Elevating Animal Health" tagline ✅ (Footer line 39, 54)
+   - "Suplemen & vitamin hewan peliharaan premium dari PT Sutan Vet Medika, tersedia di 515+ klinik seluruh Indonesia" ✅ (Footer line 40, paraphrased)
+   - Trust badges row: BPOM Terdaftar / 100% Asli / 515+ Klinik / Fast Response via WhatsApp ✅ (Footer line 17-20, identical wording)
+   - PT Sutan Vet Medika (legal entity) ✅ (Footer line 46)
+   - Bogor, Jawa Barat, Indonesia ✅ (Footer line 50, config.ts line 16)
+   - hello@animacompanion.id ✅ (Footer line 142, config.ts line 8)
+   - +62 812-3456-7890 ✅ (Footer line 146, config.ts line 7)
+   - Senin–Sabtu, 09.00–18.00 WIB ✅ (Footer line 154, config.ts line 17)
+   - #PawrentHebatAnabulSehat ✅ (Footer line 54)
+
+B. NEWLY INVENTED generic marketing prose (NOT in existing codebase — created during Phase 1 refactor):
+   - "Misi Kami" section paragraph 1: "Anima Companion hadir untuk meningkatkan kualitas hidup hewan peliharaan melalui suplemen & vitamin yang dirancang bersama dokter hewan. Setiap produk diformulasikan dengan bahan aktif pilihan dan terdaftar resmi di BPOM, sehingga aman digunakan untuk kucing & anjing peliharaan Anda."
+   - "Misi Kami" section paragraph 2: "Kami percaya pawrent hebat = anabul sehat. Itulah mengapa setiap produk kami didistribusikan melalui jaringan 515+ klinik hewan terpercaya di seluruh Indonesia — agar konsultasi vet dan akses suplemen premium selalu dalam jangkauan."
+   - Meta description: "Brand suplemen & vitamin hewan peliharaan premium yang dirancang bersama dokter hewan..." (extended paraphrase, partially new wording)
+   - Hero subtitle: "Diformulasikan bersama dokter hewan, tersedia di 515+ klinik seluruh Indonesia." (paraphrase, claims consistent with Footer but specific wording is new)
+
+C. Internal linking check:
+   - /tentang is NOT linked from Navbar, Footer, MobileBottomBar, or any other UI component
+   - /tentang is ONLY referenced in src/app/sitemap.ts line 16 and in its own page.tsx
+   - Removing /tentang from sitemap would NOT break any internal navigation
+   - The route would still return 200 if anyone visits /tentang directly (no broken links)
+
+Per user's strict rule: since the page contains generic marketing copy invented during the refactor (the "Misi Kami" section), it should NOT be in sitemap/index until official Anima content is provided.
+
+Recommendation (for Phase 2, do NOT implement now):
+  1. Remove the /tentang entry from src/app/sitemap.ts (delete line 16).
+  2. Add `noIndex: true` to the buildMetadata() call in src/app/tentang/page.tsx so the route returns 200 but is not indexed.
+  3. Optionally: remove the two invented "Misi Kami" paragraphs and replace with a minimal "Halaman ini sedang diperbarui. Untuk informasi brand, hubungi kami via WhatsApp." placeholder until official Anima content is provided.
+  4. When official Anima "Tentang Kami" content is provided later, re-enable indexing by removing the noIndex flag and re-adding the sitemap entry.
+
+=== STOP HERE — DO NOT START PHASE 2 ===
+
+---
+Task ID: phase-1.1-seo-env-safety
+Agent: main
+Task: Phase 1.1 — SEO environment safety. Decouple canonical from indexing. Add NEXT_PUBLIC_SITE_URL + NEXT_PUBLIC_ALLOW_INDEXING to .env.example. Make canonical always https://animacompanion.id (including staging). Make indexing driven by env var, not by SITE_URL===animacompanion.id check. /tentang: remove from sitemap, set noindex, delete invented marketing prose, no new copy. Then lint/typecheck/build, commit small Phase 1.1 commit, push main, STOP.
+
+Work Log:
+- Read current state of: src/lib/seo.ts, src/app/layout.tsx, src/app/robots.ts, src/app/sitemap.ts, src/app/tentang/page.tsx, .env.example, .env, .gitignore
+- Confirmed from prior Phase 1 audit that /tentang contains BOTH inherited Footer/config facts AND two newly-invented "Misi Kami" marketing paragraphs.
+
+Implemented changes (6 files):
+
+1. **.env.example** — added full SEO section:
+   - `NEXT_PUBLIC_SITE_URL="https://animacompanion.id"` (canonical production origin — never staging/preview/Vercel/Coolify/VPS-IP)
+   - `NEXT_PUBLIC_ALLOW_INDEXING="false"` (default safe — non-indexable; production sets to "true")
+   - Critical build-time vs runtime note: `NEXT_PUBLIC_*` vars are inlined at `next build` time, so the env var must be set BEFORE running `next build`, not at server-start time. Documented the two build commands explicitly (staging vs production build).
+
+2. **src/lib/seo.ts** — decoupled canonical from indexing:
+   - Updated module docblock to explain the two independent env vars and why they're decoupled.
+   - Added `export const ALLOW_INDEXING = process.env.NEXT_PUBLIC_ALLOW_INDEXING === 'true'` (defaults to `false` — safe).
+   - `buildMetadata()` now computes `effectiveNoIndex = noIndex || !ALLOW_INDEXING` — when staging, every page is forced noindex regardless of caller input. When production, caller's `noIndex` argument decides per-page.
+   - Canonical URL output unchanged (still always `${SITE_URL}${path}`).
+   - JSON-LD helpers unchanged (still emit production canonical URLs).
+
+3. **src/app/layout.tsx** — root default metadata `robots` block made conditional:
+   - When `ALLOW_INDEXING`: `{ index: true, follow: true, googleBot: {...} }` (full production rules)
+   - When `!ALLOW_INDEXING`: `{ index: false, follow: false, googleBot: { index: false, follow: false } }` (sitewide noindex,nofollow)
+   - Imported `ALLOW_INDEXING` from `@/lib/seo`.
+
+4. **src/app/robots.ts** — completely rewritten with two modes:
+   - When `!ALLOW_INDEXING` (staging/preview/local): returns `{ rules: [{ userAgent: "*", disallow: "/" }] }` — NO sitemap reference, NO host directive. This prevents crawlers from discovering or fetching the sitemap on staging, even though the sitemap would still contain production canonical URLs.
+   - When `ALLOW_INDEXING` (production): original production rules (allow `/`, disallow non-SEO paths, point at sitemap, declare host).
+   - Added full explanatory docblock describing the two modes + the defence-in-depth guarantee (robots.txt + sitewide noindex meta = staging can never be indexed even if canonical points to production).
+
+5. **src/app/sitemap.ts** — removed `/tentang` entry from staticRoutes array:
+   - Added inline comment explaining why /tentang is excluded (invented marketing prose, not official Anima content) and that the route still returns 200 if visited directly.
+
+6. **src/app/tentang/page.tsx** — full rewrite:
+   - Added `noIndex: true` to the `buildMetadata()` call (page-level explicit noindex, in addition to the global staging-noindex guarantee — so /tentang stays out of Google's index even on a production build).
+   - REMOVED the "Misi Kami" section entirely (two invented marketing paragraphs that were not sourced from existing content).
+   - REMOVED the inline `#PawrentHebatAnabulSehat` marketing-style callout that lived inside the "Misi Kami" section.
+   - Hero subtitle simplified to a single fact-style sentence: "Suplemen & vitamin hewan peliharaan premium dari PT Sutan Vet Medika." — the "515+ klinik" claim was moved OUT of the hero (it's still in the trust badges row below, where it was already).
+   - "Identitas Perusahaan" section preserved (PT Sutan Vet Medika, Bogor, hello@animacompanion.id, +62 812-3456-7890, Senin–Sabtu 09.00–18.00 WIB) — these are inherited from existing repo content (Footer / SITE_CONFIG) and are pending separate content audit (see below).
+   - CTA buttons (Chat WhatsApp + Lihat Produk) preserved — they are functional navigation, not marketing copy.
+   - Trust badges row preserved (BPOM Terdaftar / 100% Asli / 515+ Klinik / Fast Response via WhatsApp) — these already exist in Footer.tsx, so /tentang staying consistent with Footer is fine; both are pending audit.
+   - Added detailed comment block at top of file explaining the noindex decision, the prose removal, and the pending content audit status.
+
+Verification:
+
+- `bun run lint` — 0 errors, 0 warnings.
+- `bunx tsc --noEmit` — 0 errors.
+- `bun run build` (default staging build, no env vars) — succeeds, exit 0. All 14 routes listed.
+- `bun run build` with `NEXT_PUBLIC_ALLOW_INDEXING=true NEXT_PUBLIC_SITE_URL=https://animacompanion.id` — succeeds, exit 0.
+
+Smoke tests (production standalone server):
+
+**Staging build** (env unset — `NEXT_PUBLIC_ALLOW_INDEXING` defaults to false):
+- `/robots.txt` body: `User-Agent: *\nDisallow: /\n` — no sitemap reference ✅
+- `/` HTML: `<meta name="robots" content="noindex, nofollow"/>` ✅
+- `/produk` HTML: `<meta name="robots" content="noindex, nofollow"/>` ✅
+- `/tentang` HTML: `<meta name="robots" content="noindex, nofollow"/>` ✅
+- `/` canonical: `<link rel="canonical" href="https://animacompanion.id"/>` ✅ (canonical still production domain)
+- `/sitemap.xml` body: 4 entries (/, /produk, /kontak, /problem) — no `/tentang` ✅
+
+**Production build** (`NEXT_PUBLIC_ALLOW_INDEXING=true` at build time):
+- `/robots.txt` body: full production rules — `Allow: /`, disallows /cart /checkout /login /register /profile /orders /wishlist /admin /api, `Host: https://animacompanion.id`, `Sitemap: https://animacompanion.id/sitemap.xml` ✅
+- `/` HTML: `<meta name="robots" content="index, follow"/>` ✅
+- `/produk` HTML: `<meta name="robots" content="index, follow"/>` ✅
+- `/tentang` HTML: `<meta name="robots" content="noindex, nofollow"/>` ✅ (page-level flag still wins — /tentang never indexed)
+- `/cart` HTML: `<meta name="robots" content="noindex, nofollow"/>` ✅ (page-level flag)
+- `/` canonical: `<link rel="canonical" href="https://animacompanion.id"/>` ✅
+- `/sitemap.xml`: no `/tentang` entry ✅
+
+Stage Summary:
+- Phase 1.1 SEO environment safety COMPLETE.
+- Canonical URL and indexing are now independent: canonical always points to `https://animacompanion.id` regardless of deployment env, while indexing is controlled by `NEXT_PUBLIC_ALLOW_INDEXING` env var (build-time inlined).
+- Default safe behavior: any build without `NEXT_PUBLIC_ALLOW_INDEXING=true` produces a fully non-indexable deployment (noindex,nofollow sitewide + robots.txt disallow all + no sitemap advertised).
+- Production build only happens when `NEXT_PUBLIC_ALLOW_INDEXING=true` is explicitly set at `next build` time.
+- `/tentang` is noindex in BOTH modes (page-level flag), excluded from sitemap in both modes, and the invented "Misi Kami" marketing prose has been deleted. No new replacement copy was created.
+- Critical Next.js build-time inlining behavior documented in `.env.example`.
+- Build/lint/typecheck all pass; smoke tests confirm both build modes behave correctly.
+
+=== PENDING CONTENT AUDIT — DO NOT TREAT AS VERIFIED FACTS ===
+
+Per user instruction ("jangan menganggap content yang 'sudah ada di repo' sebagai fakta yang sudah terverifikasi"), the following claims/values are inherited from existing repo content and are pending a separate content audit. Their values have NOT been changed in this commit. They should NOT be treated as authoritative until the audit is complete:
+
+1. **"515+ klinik"** claim — appears in:
+   - src/components/layout/Footer.tsx (trust badge + brand copy)
+   - src/app/tentang/page.tsx (trust badge)
+   - src/lib/seo.ts BRAND.description (JSON-LD Organization description, meta description fallback)
+   - src/lib/config.ts SITE_CONFIG.clinicCount
+
+2. **"BPOM Terdaftar"** claim — appears in:
+   - src/components/layout/Footer.tsx (trust badge)
+   - src/app/tentang/page.tsx (trust badge)
+   - No BPOM registration numbers are currently displayed anywhere in the codebase; productJsonLd() in seo.ts supports a `bpomNumber` field but it's not populated by the product detail page.
+
+3. **WhatsApp number `+62 812-3456-7890`** (config.ts: `6281234567890`) — appears in:
+   - src/lib/config.ts SITE_CONFIG.whatsappNumber (used by whatsappAdminUrl helper)
+   - src/components/layout/Footer.tsx (display only)
+   - src/app/tentang/page.tsx (display only)
+   - src/components/layout/WhatsAppFloatingButton.tsx (via whatsappAdminUrl)
+   - src/components/layout/MobileBottomBar.tsx (via whatsappAdminUrl)
+   - src/views/ProductDetailView.tsx (via whatsappAdminUrl)
+   - src/views/OrderHistoryView.tsx (via whatsappAdminUrl)
+   - src/lib/seo.ts BRAND.phone (JSON-LD telephone)
+
+4. **Email `hello@animacompanion.id`** — appears in:
+   - src/lib/config.ts SITE_CONFIG.email
+   - src/lib/seo.ts BRAND.email
+   - src/components/layout/Footer.tsx
+   - src/app/tentang/page.tsx
+   - prisma/schema.prisma (Settings model default value)
+   - src/views/admin/SettingsView.tsx (placeholder)
+
+5. **Jam operasional `Senin–Sabtu, 09.00–18.00 WIB`** — appears in:
+   - src/lib/config.ts SITE_CONFIG.hours
+   - src/lib/seo.ts BRAND.hours
+   - src/components/layout/Footer.tsx
+   - src/app/tentang/page.tsx
+
+6. **Testimonials / reviews** — seeded via prisma/seed.ts (Indonesian names like "Diana Pradnya", "Rizky Aditya", star ratings, review text). These are database seed data, not real customer reviews, and should be flagged for review before going live in production.
+
+7. **"5 sellers/brands"** (Zesty Paws ID, Native Pet, Vetri Science, Pet Honesty, Anima Companion) — also seeded via prisma/seed.ts. These were added during the marketplace refactor and may not represent real Anima Companion brand partners.
+
+8. **Legal entity `PT Sutan Vet Medika`** + **Bogor, Jawa Barat, Indonesia** address — appears in:
+   - src/lib/seo.ts BRAND.legalName + BRAND.address
+   - src/components/layout/Footer.tsx
+   - src/app/tentang/page.tsx
+   - src/app/layout.tsx (authors / creator / publisher)
+   - prisma/schema.prisma
+
+9. **`#PawrentHebatAnabulSehat`** hashtag — appears in:
+   - src/components/layout/Footer.tsx
+   - src/app/layout.tsx keywords
+
+10. **Social channels** (https://instagram.com/anima.companion, https://shopee.co.id/anima.companion, https://www.tokopedia.com/find/felcover, TikTok @anima.companion) — appears in:
+    - src/lib/config.ts SITE_CONFIG + src/lib/seo.ts BRAND.social
+    - src/components/layout/Footer.tsx
+    - src/lib/seo.ts sameAs (JSON-LD Organization)
+
+Action required (separate task, NOT in Phase 1.1):
+- Verify each claim above against official Anima Companion / PT Sutan Vet Medika sources (BPOM registration database, official website, business registration records, official social media accounts).
+- Do not invent replacement data — if any claim cannot be verified, flag for removal rather than guessing.
+- Once verified (or corrected), the values in src/lib/config.ts, src/lib/seo.ts, prisma/seed.ts, and Footer.tsx can be updated in a separate dedicated commit.
+
+=== STOP HERE — DO NOT START PHASE 2 (static image migration) ===

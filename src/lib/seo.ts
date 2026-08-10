@@ -2,15 +2,38 @@
  * SEO helpers for Anima Companion — central place for canonical URLs,
  * metadata builders, and JSON-LD structured data (Product / Organization / WebSite).
  *
- * All helpers read `NEXT_PUBLIC_SITE_URL` from env (set in Vercel / .env).
- * Falls back to `https://animacompanion.id` if unset.
+ * Two independent env vars control SEO behavior (Phase 1.1):
+ *
+ * - `NEXT_PUBLIC_SITE_URL`  — official canonical production domain.
+ *   MUST always be `https://animacompanion.id`, on every deployment
+ *   (production, staging, preview, local). Never set this to a staging /
+ *   preview / Vercel / Coolify / VPS-IP URL.
+ *
+ * - `NEXT_PUBLIC_ALLOW_INDEXING` — whether THIS deployment may be indexed.
+ *   "true" → production only. Anything else (or unset) → staging/preview/local,
+ *   forces noindex,nofollow sitewide and disallows all crawling in robots.txt.
+ *
+ * The two are intentionally DECOUPLED: canonical always points to the production
+ * domain (so staging pages tell Google "the canonical is the production URL"),
+ * but the staging deployment itself is never indexed or crawled. This is the
+ * correct pattern per Google's documentation on canonical + noindex.
  */
 
 import type { Metadata } from 'next'
 
-/** Canonical site origin (no trailing slash). */
+/** Canonical site origin (no trailing slash). Always https://animacompanion.id. */
 export const SITE_URL =
   (process.env.NEXT_PUBLIC_SITE_URL || 'https://animacompanion.id').replace(/\/$/, '')
+
+/**
+ * Whether this deployment may be indexed by search engines.
+ * Decoupled from SITE_URL so canonical stays the production domain even on
+ * staging, but staging is never crawled.
+ *
+ * Default: `false` (safe default — any deployment that forgets to set the
+ * env var is treated as non-indexable, never the other way around).
+ */
+export const ALLOW_INDEXING = process.env.NEXT_PUBLIC_ALLOW_INDEXING === 'true'
 
 /** Brand defaults pulled from existing site config so copy stays in sync. */
 export const BRAND = {
@@ -63,9 +86,16 @@ interface BuildMetadataOpts {
  * Build Next.js Metadata object for a page.
  *
  * Always sets:
- * - canonical URL
+ * - canonical URL (always points to production origin via SITE_URL)
  * - OpenGraph (title, description, url, siteName, locale, type, images)
  * - Twitter card (summary_large_image)
+ *
+ * Indexing is controlled by the global ALLOW_INDEXING flag (env-driven):
+ * - When `NEXT_PUBLIC_ALLOW_INDEXING !== "true"` (staging/preview/local),
+ *   `noIndex` is FORCED to `true` regardless of caller input, so every page
+ *   on a non-production deployment emits `<meta name="robots" content="noindex, nofollow">`.
+ * - When `ALLOW_INDEXING === true` (production), the caller's `noIndex`
+ *   argument decides per-page (cart/checkout/login/etc. opt out).
  */
 export function buildMetadata({
   title,
@@ -82,6 +112,11 @@ export function buildMetadata({
   const fullTitle = title
     ? `${title} — ${BRAND.name}`
     : `${BRAND.name} — ${BRAND.tagline}`
+
+  // Force noindex on non-production deployments, regardless of caller input.
+  // This is the core Phase 1.1 safety guarantee: even if a page forgets to
+  // pass noIndex, staging can never be indexed.
+  const effectiveNoIndex = noIndex || !ALLOW_INDEXING
 
   return {
     title: fullTitle,
@@ -124,7 +159,7 @@ export function buildMetadata({
       description,
       images: [ogImageUrl],
     },
-    ...(noIndex ? { robots: { index: false, follow: false } } : {}),
+    ...(effectiveNoIndex ? { robots: { index: false, follow: false } } : {}),
   }
 }
 
