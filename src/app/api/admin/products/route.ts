@@ -71,6 +71,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'SKU sudah digunakan' }, { status: 409 })
     }
 
+    // Product images are now static local assets under /public/products/<slug>/0N.webp.
+    // If admin provides images, use them. If not, default to the canonical local
+    // path /products/<slug>/01.webp so the DB is always correct & ready — the
+    // owner can drop a real image into /public/products/<slug>/ later without
+    // any DB update. No remote/Cloudinary fallback.
+    const imageUrls: string[] = Array.isArray(images) && images.length > 0
+      ? images.filter(Boolean)
+      : [`/products/${slug}/01.webp`]
+
     const product = await db.product.create({
       data: {
         name, slug, sku, brand: brand || 'Anima',
@@ -84,13 +93,9 @@ export async function POST(req: NextRequest) {
         isNew: !!isNew,
         isActive: isActive !== false,
         categoryId,
-        images: images?.length
-          ? { create: images.map((url: string, i: number) => ({ url, alt: name, order: i })) }
-          : {
-              create: [
-                { url: `https://placehold.co/600x600/F97316/ffffff?text=${encodeURIComponent(name)}`, alt: name, order: 0 },
-              ],
-            },
+        images: {
+          create: imageUrls.map((url: string, i: number) => ({ url, alt: name, order: i })),
+        },
         petTypes: petTypeIds?.length
           ? { create: petTypeIds.map((id: string) => ({ petTypeId: id })) }
           : undefined,

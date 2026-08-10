@@ -2,7 +2,7 @@
 
 import { useHashRouter } from '@/lib/router'
 import { Logo } from './Logo'
-import { whatsappAdminUrl } from '@/lib/config'
+import { whatsappAdminUrl, whatsappDisplayNumber, whatsappTelUrl } from '@/lib/config'
 import { Mail, Phone, MapPin, Clock, Instagram, MessageCircle, ShoppingBag, Music2, Hash, Building2 } from 'lucide-react'
 
 export function Footer() {
@@ -143,7 +143,13 @@ export function Footer() {
               </li>
               <li className="flex items-start gap-2">
                 <Phone className="mt-0.5 h-4 w-4 text-primary" />
-                <span>+62 812-3456-7890</span>
+                <a
+                  href={whatsappTelUrl()}
+                  className="hover:text-primary transition-colors"
+                  aria-label="Telepon Anima Companion"
+                >
+                  {whatsappDisplayNumber()}
+                </a>
               </li>
               <li className="flex items-start gap-2">
                 <MapPin className="mt-0.5 h-4 w-4 text-primary" />

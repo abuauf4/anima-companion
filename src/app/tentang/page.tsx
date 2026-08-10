@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { SiteShell } from "@/components/layout/SiteShell";
 import { buildMetadata } from "@/lib/seo";
-import { whatsappAdminUrl } from "@/lib/config";
+import { whatsappAdminUrl, whatsappDisplayNumber, whatsappTelUrl } from "@/lib/config";
 import { Building2, MapPin, Mail, Phone, Clock, Shield, Heart, PawPrint, MessageCircle, ShoppingBag } from "lucide-react";
 
 // /tentang — About page.
@@ -13,7 +13,7 @@ import { Building2, MapPin, Mail, Phone, Clock, Shield, Heart, PawPrint, Message
 //   Only fact-style contact/identity information already present elsewhere in
 //   the codebase (Footer / SITE_CONFIG) remains.
 // - The remaining contact/identity values (PT Sutan Vet Medika, Bogor address,
-//   hello@animacompanion.id, +62 812-3456-7890, Senin–Sabtu 09.00–18.00 WIB,
+//   hello@animacompanion.id, 0822 1084 6408, Senin–Sabtu 09.00–18.00 WIB,
 //   515+ klinik, BPOM Terdaftar, #PawrentHebatAnabulSehat) are NOT verified —
 //   they are inherited from existing repo content pending a separate content
 //   audit. Do not treat them as authoritative until that audit is complete.
@@ -118,7 +118,13 @@ export default function TentangPage() {
               <Phone className="mt-0.5 h-4 w-4 text-primary" />
               <span>
                 <span className="font-semibold text-foreground">WhatsApp:</span>{" "}
-                +62 812-3456-7890
+                <a
+                  href={whatsappTelUrl()}
+                  className="hover:text-primary transition-colors"
+                  aria-label="Telepon Anima Companion"
+                >
+                  {whatsappDisplayNumber()}
+                </a>
               </span>
             </li>
             <li className="flex items-start gap-2">

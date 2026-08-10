@@ -334,7 +334,7 @@ model SiteSetting {
   trustBadge4Value    String   @default("24/7")
   trustBadge4Label    String   @default("Konsul Vet")
   // Contact
-  whatsappNumber      String   @default("6281234567890")
+  whatsappNumber      String   @default("6282210846408")
   email               String   @default("hello@animacompanion.id")
   instagram           String   @default("@anima.companion")
   instagramUrl        String   @default("https://instagram.com/anima.companion")

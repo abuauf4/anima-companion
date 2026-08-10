@@ -45,7 +45,7 @@ export const BRAND = {
   logoUrl: '/anima-logo.svg',
   ogImage: '/og-image.png',
   email: 'hello@animacompanion.id',
-  phone: '+62 812-3456-7890',
+  phone: '+6282210846408',
   address: {
     street: '',
     city: 'Bogor',

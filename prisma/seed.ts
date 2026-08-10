@@ -46,7 +46,7 @@ async function main() {
       email: 'admin@anima.id',
       password: adminPassword,
       name: 'Admin Anima',
-      phone: '081234567890',
+      phone: '082210846408',
       role: 'ADMIN',
     },
   })
@@ -167,8 +167,21 @@ async function main() {
   // ============================================================================
 
   // ==================== PRODUCTS (8 real Anima Companion products) ====================
-  const img = (label: string, color: string, idx: number) =>
-    `https://placehold.co/600x600/${color}/ffffff?text=${encodeURIComponent(label + ' ' + (idx + 1))}`
+  // Product images are now static local assets under /public/products/<slug>/0N.webp.
+  // The DB still stores ProductImage.url strings, but their values are local paths
+  // (e.g. "/products/felcover-plus-immune-stimulant/01.webp") that resolve against
+  // the Next.js /public directory.
+  //
+  // Phase 2 image status (see worklog for missing-asset list):
+  //   - felcover-plus-immune-stimulant: 4 real images already migrated to
+  //     /public/products/felcover-plus-immune-stimulant/01..04.webp ✅
+  //   - sioren-* and forevet-* (7 products): NO real image assets in repo.
+  //     Their seed entries still reference /products/<slug>/01..04.webp so the DB
+  //     is correct & ready; when the owner provides real images, they just drop
+  //     them into /public/products/<slug>/ — no DB update needed. Until then,
+  //     next/image will 404 on those paths and the alt text will display.
+  const productImagePath = (slug: string, idx: number) =>
+    `/products/${slug}/${String(idx + 1).padStart(2, '0')}.webp`
 
   interface ProductSeed {
     name: string
@@ -471,7 +484,7 @@ async function main() {
         categoryId: category.id,
         images: {
           create: [0, 1, 2, 3].map((i) => ({
-            url: img(p.name, p.color, i),
+            url: productImagePath(p.slug, i),
             alt: `${p.name} - gambar ${i + 1}`,
             order: i,
           })),

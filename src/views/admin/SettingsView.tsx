@@ -223,7 +223,7 @@ export function SettingsView() {
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Nomor WhatsApp (format internasional tanpa +)">
-            <Input value={form.whatsappNumber} onChange={(e) => setForm({ ...form, whatsappNumber: e.target.value })} placeholder="6281234567890" />
+            <Input value={form.whatsappNumber} onChange={(e) => setForm({ ...form, whatsappNumber: e.target.value })} placeholder="6282210846408" />
           </Field>
           <Field label="Email">
             <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="hello@animacompanion.id" />

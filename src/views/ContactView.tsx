@@ -8,7 +8,7 @@ import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from '@/components/ui/accordion'
 import { MessageCircle, Mail, Phone, MapPin, Clock, Instagram, HelpCircle } from 'lucide-react'
-import { SITE_CONFIG, whatsappAdminUrl } from '@/lib/config'
+import { SITE_CONFIG, whatsappAdminUrl, whatsappDisplayNumber, whatsappTelUrl } from '@/lib/config'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { SiteSetting } from '@/hooks/use-home-data'
 import type { Faq } from '@/hooks/use-fetch'
@@ -45,10 +45,10 @@ export function ContactView() {
   const email = settings?.email || SITE_CONFIG.email
   const instagramHandle = settings?.instagram || SITE_CONFIG.instagram
 
-  // Format WA number for display: "6281234567890" → "+62 812-3456-7890"
-  const formattedWa = whatsappNumber.startsWith('62')
-    ? `+${whatsappNumber.slice(0, 2)} ${whatsappNumber.slice(2, 5)}-${whatsappNumber.slice(5, 9)}-${whatsappNumber.slice(9)}`
-    : `+${whatsappNumber}`
+  // Display form for the WhatsApp number — "0822 1084 6408" (local 0 prefix, grouped 4-4-4).
+  const formattedWa = whatsappDisplayNumber(whatsappNumber)
+  // tel: link form — "tel:+6282210846408"
+  const telHref = whatsappTelUrl(whatsappNumber)
 
   // Custom WA message with brand name
   const waMessage = `Halo Anima Companion! 🐾`
@@ -117,11 +117,13 @@ export function ContactView() {
             </Card>
 
             <Card className="p-6">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <a href={telHref} className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors" aria-label="Telepon Anima Companion">
                 <Phone className="h-5 w-5" />
-              </div>
+              </a>
               <h3 className="font-semibold">Telepon</h3>
-              <p className="text-sm text-muted-foreground">{formattedWa}</p>
+              <a href={telHref} className="text-sm text-muted-foreground hover:text-primary transition-colors">
+                {formattedWa}
+              </a>
             </Card>
 
             <Card className="p-6">

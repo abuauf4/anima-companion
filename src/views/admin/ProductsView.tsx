@@ -352,7 +352,7 @@ function ProductDialog({
               <Input type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} className="mt-1.5" />
             </div>
             <div className="col-span-2">
-              <Label>URL Gambar Produk (Cloudinary/dll)</Label>
+              <Label>Path Gambar Produk (lokal)</Label>
               <div className="mt-1.5 space-y-2">
                 {form.imageUrls.map((url, idx) => (
                   <div key={idx} className="flex items-center gap-2">
@@ -363,8 +363,8 @@ function ProductDialog({
                         newUrls[idx] = e.target.value
                         setForm({ ...form, imageUrls: newUrls })
                       }}
-                      placeholder="https://res.cloudinary.com/..."
-                      className="flex-1"
+                      placeholder="/products/<slug>/01.webp"
+                      className="flex-1 font-mono text-xs"
                     />
                     {form.imageUrls.length > 1 && (
                       <Button
@@ -392,7 +392,11 @@ function ProductDialog({
                   <Plus className="size-4" /> Tambah Gambar
                 </Button>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">Gambar pertama = gambar utama di product card. Tambah multiple untuk gallery di detail produk.</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Static image model — file gambar disimpan di repository di <code className="rounded bg-muted px-1">/public/products/&lt;slug&gt;/01.webp</code>.
+                Gambar pertama = gambar utama di product card. Tambah multiple untuk gallery di detail produk.
+                Upload gambar baru saat ini belum didukung — admin perlu menambah file ke repo via deploy.
+              </p>
             </div>
             <div className="col-span-2">
               <Label>No. BPOM</Label>
