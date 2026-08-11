@@ -86,3 +86,57 @@
 nixPkgs = ["...", "openssl"]
 nixLibs = ["...", "openssl"]
 aptPkgs = ["...", "ca-certificates"]
+
+# ─── Standalone static assets (fix #3) ────────────────────────────────────────
+#
+# Problem:
+#   After fix #2 (commit 0cad56c), the app successfully boots on port 3000 and
+#   serves HTML, but pages render unstyled and public images are broken.
+#
+# Root cause:
+#   `next.config.ts` sets `output: "standalone"`. Per official Next.js standalone
+#   deployment docs (https://nextjs.org/docs/app/api-reference/next-config-js/output):
+#
+#     "Next.js will create a standalone folder which copies only the necessary
+#      files for a production deployment including select files in node_modules.
+#      Note: This does NOT copy the public or .next/static folders by default
+#      as those folders should be served by a CDN or reverse proxy. However,
+#      these folders can be copied into the standalone/public and
+#      standalone/.next/static folders manually."
+#
+#   Coolify serves the standalone server directly via `bun .next/standalone/server.js`
+#   with no separate CDN/reverse-proxy in front of it for /_next/static/ and /public.
+#   Without the manual cp, the standalone server returns 404 for:
+#     - /_next/static/css/*.css         → unstyled pages
+#     - /_next/static/chunks/*.js       → broken hydration chunks
+#     - /_next/static/media/*           → missing fonts/images
+#     - /logo.svg, /products/*.webp     → broken public images
+#
+# Fix:
+#   Extend the default build command (`bun run build`) with three cp/mkdir
+#   commands that mirror what `next start` does internally when not running
+#   standalone. We use the `...` sentinel so Nixpacks' default Next.js build
+#   command is preserved (NOT replaced) — only appended to.
+#
+#   - `cp -r public .next/standalone/`         — copy public assets
+#   - `mkdir -p .next/standalone/.next`        — ensure parent dir exists
+#   - `cp -r .next/static .next/standalone/.next/`  — copy static chunks
+#
+# Verification (local):
+#   - `.next/standalone/public/` exists and contains `logo.svg`, `products/`, etc.
+#   - `.next/standalone/.next/static/` exists and contains `css/`, `chunks/`, `media/`.
+#
+# What this does NOT change:
+#   - Port (still 3000), HOSTNAME, start command (`bun .next/standalone/server.js`)
+#   - UI/CSS source, Tailwind config
+#   - Neon, Prisma schema/binaryTargets, routing
+#   - The OpenSSL nixPkgs/nixLibs fix from commit 0cad56c (preserved above)
+#   - No Dockerfile added (Nixpacks [phases.build] cmds is sufficient)
+
+[phases.build]
+cmds = [
+  "...",
+  "cp -r public .next/standalone/",
+  "mkdir -p .next/standalone/.next",
+  "cp -r .next/static .next/standalone/.next/"
+]
