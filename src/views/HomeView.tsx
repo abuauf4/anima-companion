@@ -10,11 +10,10 @@ import { Reveal, Stagger, StaggerItem } from '@/components/common/Reveal'
 import {
   Shield, Utensils, Sparkles, Bone, Activity, Eye, Heart, Sun,
   ArrowRight, MessageCircle, Star, ChevronRight, ChevronLeft,
-  PawPrint,
   Mail, Gift,
 } from 'lucide-react'
 import {
-  Product, PetType,
+  Product,
 } from '@/hooks/use-fetch'
 import { useHomeData } from '@/hooks/use-home-data'
 import { VetSection } from '@/components/home/VetSection'
@@ -22,6 +21,7 @@ import { IngredientsReveal } from '@/components/home/IngredientsReveal'
 import { motion, useMotionValue, useTransform } from 'framer-motion'
 import { toast } from 'sonner'
 import { formatRupiah } from '@/lib/format'
+import { useHomeHeroStore } from '@/lib/store'
 
 const PROBLEM_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   imunitas: Shield,
@@ -46,7 +46,6 @@ export function HomeView() {
     newProducts,
     problems,
     testimonials,
-    petTypes,
     settings,
   } = useHomeData()
 
@@ -61,8 +60,38 @@ export function HomeView() {
     setEmailValue('')
   }
 
-  // Only Kucing & Anjing — Anima Companion only sells cat & dog supplements
-  const mainPetTypes = petTypes.filter((p) => ['kucing', 'anjing'].includes(p.slug))
+  // Redesign Phase 1.2 — Mobile nav hide/reveal.
+  // Observe the hero section; publish its visibility to a small zustand store
+  // so <MobileBottomBar /> (rendered globally by SiteShell) can slide off when
+  // the hero is on-screen and reveal with a slide-up/fade when it scrolls out.
+  const heroRef = useRef<HTMLElement>(null)
+  const setHeroVisible = useHomeHeroStore((s) => s.setVisible)
+  useEffect(() => {
+    const el = heroRef.current
+    if (!el) return
+    // Initialize as visible on mount (hero is at top of page).
+    setHeroVisible(true)
+    const obs = new IntersectionObserver(
+      (entries) => {
+        // Hero is large; track the top 30% as the "hero still visible" signal
+        // so the bar starts revealing once the hero headline area scrolls past.
+        for (const entry of entries) {
+          setHeroVisible(entry.isIntersecting)
+        }
+      },
+      // Trigger when the hero's top portion crosses below the threshold line.
+      // rootMargin top: 0, bottom: -60% so the hero is considered "out of view"
+      // when its bottom 40% reaches the viewport top — i.e. user has scrolled
+      // far enough to see Shop-by-Pet cards.
+      { threshold: 0, rootMargin: '0px 0px -60% 0px' }
+    )
+    obs.observe(el)
+    return () => {
+      obs.disconnect()
+      // Reset on unmount so other pages don't inherit a stale "hero visible" flag.
+      setHeroVisible(false)
+    }
+  }, [setHeroVisible])
 
   return (
     <div className="overflow-x-hidden">
@@ -77,7 +106,7 @@ export function HomeView() {
           so a portrait 4/5 crop on mobile shows both faces clearly instead
           of cropping them out at the left/right edges. */}
 
-      <section className="relative bg-background pb-2 pt-3 md:pb-4 md:pt-6">
+      <section ref={heroRef} className="relative bg-background pb-2 pt-3 md:pb-4 md:pt-6">
         <div className="container-page">
           <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -113,23 +142,22 @@ export function HomeView() {
         </div>
       </section>
 
-      {/* ==================== SHOP BY PET — dual visual CTA ====================
-          Replaces the old PetTypeTiltCard section. Two visually distinct cards
-          with cat/dog photography. Compact on mobile (side-by-side). */}
+      {/* ==================== SHOP BY PET — compact category cards (Phase 1.2) ====================
+          Two compact cards: Kucing (warm peach/cream) and Anjing (soft purple).
+          Solid bottom panel holds the Indonesian label + arrow; pet face
+          stays clear of any text overlay. Routes unchanged. */}
 
-      <section className="bg-background pb-10 pt-2 md:pb-14">
+      <section className="bg-background pb-8 pt-2 md:pb-12">
         <div className="container-page">
           <div className="grid grid-cols-2 gap-3 md:gap-5">
             <ShopByPetCard
               variant="kucing"
               imageSrc="/pets/cat-portrait.webp"
-              count={mainPetTypes.find(p => p.slug === 'kucing')?._count?.products || 0}
               onClick={() => navigate('/produk?pet=kucing')}
             />
             <ShopByPetCard
               variant="anjing"
               imageSrc="/pets/dog-portrait.webp"
-              count={mainPetTypes.find(p => p.slug === 'anjing')?._count?.products || 0}
               onClick={() => navigate('/produk?pet=anjing')}
             />
           </div>
@@ -309,88 +337,78 @@ export function HomeView() {
   )
 }
 
-/* ============== Shop by Pet — dual visual CTA (Redesign Phase 1) ============== */
+/* ============== Shop by Pet — compact category cards (Phase 1.2) ============== */
 
 /**
- * ShopByPetCard — a single card in the "Shop for Dogs / Shop for Cats" section.
+ * ShopByPetCard — compact visual category card for "Kucing" / "Anjing".
  *
- * Two of these sit side-by-side on mobile (compact). Each card:
- * - Has a real pet photograph as the primary visual (not an emoji).
- * - Has a small paw print as a subtle identity accent.
- * - Uses different accent tone per variant (kucing=primary orange, anjing=secondary purple)
- *   so the two cards look visually distinct, not just two buttons with different labels.
- * - Is a button for a11y (clickable + keyboard focusable).
+ * Phase 1.2 redesign:
+ *  - Two columns on mobile (preserved).
+ *  - Card height reduced substantially (was aspect-[4/5] tall portrait;
+ *    now aspect-[5/4] landscape on mobile — short and wide).
+ *  - Top ~62% of the card is the pet close-up (face clearly visible).
+ *  - Bottom ~38% is a SOLID accent panel containing only the Indonesian
+ *    label and an arrow. No text overlays the pet's face.
+ *  - Cat = warm peach/cream accent. Dog = soft purple accent.
+ *  - Removed: "UNTUK KUCING/ANJING", "Shop Cats/Dogs", product count,
+ *    dark overlay gradient, paw-print chip, hover bar at bottom.
+ *  - Route/filter behavior preserved — onClick handler unchanged.
  */
 function ShopByPetCard({
   variant,
   imageSrc,
-  count,
   onClick,
 }: {
   variant: 'kucing' | 'anjing'
   imageSrc: string
-  count: number
+  count?: number
   onClick: () => void
 }) {
   const isCat = variant === 'kucing'
   const label = isCat ? 'Kucing' : 'Anjing'
-  const cta = isCat ? 'Shop Cats' : 'Shop Dogs'
 
-  // Distinct accent per variant — orange for cat, purple for dog.
-  // (Matches the brand color roles: primary=orange, secondary=purple.)
-  const accentText = isCat ? 'text-primary' : 'text-secondary'
-  const accentHoverBg = isCat ? 'group-hover:bg-primary' : 'group-hover:bg-secondary'
-  const accentRing = isCat ? 'group-hover:ring-primary/30' : 'group-hover:ring-secondary/30'
+  // Accent palette per variant.
+  // Cat → warm peach/cream (matches the warm cream brand background).
+  // Dog → soft purple (matches secondary brand color, but desaturated).
+  const accentBg = isCat ? 'bg-[oklch(0.96_0.04_60)]' : 'bg-[oklch(0.95_0.04_295)]'
+  const accentText = isCat ? 'text-[oklch(0.55_0.13_45)]' : 'text-[oklch(0.45_0.13_295)]'
+  const accentArrowBg = isCat ? 'bg-[oklch(0.92_0.06_55)]' : 'bg-[oklch(0.90_0.06_295)]'
+  const accentArrowText = isCat ? 'text-[oklch(0.55_0.13_45)]' : 'text-[oklch(0.45_0.13_295)]'
+  const accentRing = isCat
+    ? 'group-hover:ring-[oklch(0.68_0.19_45_/_0.35)]'
+    : 'group-hover:ring-[oklch(0.52_0.22_295_/_0.35)]'
 
   return (
     <button
       onClick={onClick}
       aria-label={`Belanja untuk ${label}`}
-      className={`group relative flex aspect-[4/5] w-full flex-col justify-end overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-border/50 transition-all duration-300 hover:shadow-md md:aspect-[4/5] md:rounded-3xl ${accentRing} hover:ring-2`}
+      className={`group relative flex aspect-[5/4] w-full flex-col overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-border/50 transition-all duration-300 hover:shadow-md hover:ring-2 md:rounded-2xl ${accentRing}`}
     >
-      {/* Pet photograph — primary visual, fills the card */}
-      <OptImage
-        src={imageSrc}
-        alt={`Belanja suplemen untuk ${label}`}
-        fill
-        sizes="(max-width: 768px) 50vw, 33vw"
-        className="object-cover transition-transform duration-500 group-hover:scale-105"
-      />
-
-      {/* Subtle dark gradient at the bottom for text legibility */}
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/15 to-transparent" />
-
-      {/* Small paw print — identity accent, top-left corner */}
-      <div className={`absolute left-3 top-3 flex size-9 items-center justify-center rounded-full bg-white/85 backdrop-blur-sm md:left-4 md:top-4 md:size-10`}>
-        <PawPrint className={`size-4 ${accentText} md:size-5`} />
+      {/* Top: pet close-up — fills the upper portion of the card.
+          object-cover + object-top keeps the face (which sits in the upper
+          half of the source image) within the card frame. */}
+      <div className="relative h-[62%] w-full overflow-hidden bg-muted">
+        <OptImage
+          src={imageSrc}
+          alt={`Belanja suplemen untuk ${label}`}
+          fill
+          sizes="(max-width: 768px) 50vw, 33vw"
+          className="object-cover object-top transition-transform duration-500 group-hover:scale-105"
+        />
       </div>
 
-      {/* Content — bottom */}
-      <div className="relative z-10 p-3 text-left text-white md:p-5">
-        {/* Variant label */}
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/80 md:text-xs">
-          Untuk {label}
-        </p>
-        {/* Big CTA word */}
-        <div className="mt-1 flex items-center justify-between gap-2">
-          <span className="text-lg font-bold leading-tight tracking-tight md:text-2xl">
-            {cta}
-          </span>
-          {/* Arrow chip — accent-colored, expands on hover */}
-          <span
-            className={`flex size-7 items-center justify-center rounded-full bg-white text-foreground transition-all duration-300 group-hover:translate-x-0.5 md:size-9`}
-          >
-            <ArrowRight className="size-3.5 md:size-4" />
-          </span>
-        </div>
-        {/* Product count — small, subtle */}
-        <p className="mt-1 text-[10px] font-medium text-white/70 md:text-[11px]">
-          {count} produk tersedia
-        </p>
+      {/* Bottom: solid accent panel with label + arrow.
+          No text overlays the pet face above. */}
+      <div className={`flex flex-1 items-center justify-between gap-2 px-3 ${accentBg}`}>
+        <span className={`text-base font-bold leading-tight tracking-tight md:text-lg ${accentText}`}>
+          {label}
+        </span>
+        <span
+          className={`flex size-7 items-center justify-center rounded-full transition-transform duration-300 group-hover:translate-x-0.5 ${accentArrowBg} ${accentArrowText} md:size-8`}
+        >
+          <ArrowRight className="size-3.5 md:size-4" />
+        </span>
       </div>
-
-      {/* Hidden accent bar at bottom for brand color identity */}
-      <div className={`absolute bottom-0 left-0 h-0.5 w-0 transition-all duration-500 group-hover:w-full ${accentHoverBg}`} />
     </button>
   )
 }

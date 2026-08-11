@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useHashRouter } from '@/lib/router'
-import { useWishlistStore } from '@/lib/store'
+import { useWishlistStore, useHomeHeroStore } from '@/lib/store'
 import { whatsappAdminUrl } from '@/lib/config'
 import { Home, ShoppingBag, User, Menu, Heart, ChevronRight, PawPrint, Shield, Stethoscope, MessageCircle } from 'lucide-react'
 import {
@@ -25,6 +25,11 @@ export function MobileBottomBar() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const wishlistCount = useWishlistStore((s) => s.items.length)
   const { user, logout } = useAuth()
+  // Redesign Phase 1.2 — only the homepage sets this flag (via IntersectionObserver
+  // in <HomeView />). When true, the hero is on-screen and we slide the bar out
+  // of view with a fade. On other pages the flag is always false → bar stays put.
+  const heroVisibleOnHome = useHomeHeroStore((s) => s.isVisible)
+  const isHome = route.path === '/'
 
   const isActive = (path: string) => {
     if (path === '/') return route.path === '/'
@@ -44,6 +49,10 @@ export function MobileBottomBar() {
   // Hide bottom bar on product detail — sticky CTA bar handles checkout there
   const isProductDetail = route.segments[0] === 'produk'
   if (isProductDetail) return null
+
+  // Phase 1.2 — when hero is visible on the homepage, slide the bar fully out
+  // of view. On every other page (or after hero scrolls off), it sits flush.
+  const heroHideActive = isHome && heroVisibleOnHome
 
   return (
     <>
@@ -130,10 +139,16 @@ export function MobileBottomBar() {
         </SheetContent>
       </Sheet>
 
-      {/* Bottom bar (mobile only) — thinner */}
+      {/* Bottom bar (mobile only) — thinner.
+          Phase 1.2: slides down + fades out when hero is visible on homepage. */}
       <nav
         aria-label="Navigasi mobile"
-        className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t border-border bg-card/95 px-1 pb-[env(safe-area-inset-bottom)] pt-1.5 shadow-[0_-2px_12px_rgba(0,0,0,0.06)] backdrop-blur-md md:hidden"
+        aria-hidden={heroHideActive}
+        className={`fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t border-border bg-card/95 px-1 pb-[env(safe-area-inset-bottom)] pt-1.5 shadow-[0_-2px_12px_rgba(0,0,0,0.06)] backdrop-blur-md transition-all duration-300 ease-out md:hidden ${
+          heroHideActive
+            ? 'pointer-events-none translate-y-full opacity-0'
+            : 'translate-y-0 opacity-100'
+        }`}
       >
         {/* 1. Home */}
         <button

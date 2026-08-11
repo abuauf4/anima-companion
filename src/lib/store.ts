@@ -78,6 +78,20 @@ export const useUIStore = create<UIState>((set) => ({
   setMobileMenuOpen: (open) => set({ mobileMenuOpen: open }),
 }))
 
+// ===================== Home Hero Visibility Store =====================
+// Redesign Phase 1.2 — Mobile nav hide/reveal driven by hero visibility.
+// Set to true while the homepage hero is intersecting the viewport; consumers
+// (MobileBottomBar) read this to know when to slide off-screen. Only ever set
+// on the homepage by the IntersectionObserver in <HomeView />.
+interface HomeHeroState {
+  isVisible: boolean
+  setVisible: (v: boolean) => void
+}
+export const useHomeHeroStore = create<HomeHeroState>((set) => ({
+  isVisible: false,
+  setVisible: (v) => set({ isVisible: v }),
+}))
+
 // ===================== Wishlist Store (no login required) =====================
 export interface WishlistItemData {
   productId: string
