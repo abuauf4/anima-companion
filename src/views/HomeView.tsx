@@ -18,6 +18,7 @@ import {
 import { useHomeData } from '@/hooks/use-home-data'
 import { VetSection } from '@/components/home/VetSection'
 import { IngredientsReveal } from '@/components/home/IngredientsReveal'
+import { PetSelector, PetSelectorItem } from '@/components/home/PetSelector'
 import { motion, useMotionValue, useTransform } from 'framer-motion'
 import { toast } from 'sonner'
 import { formatRupiah } from '@/lib/format'
@@ -142,27 +143,26 @@ export function HomeView() {
         </div>
       </section>
 
-      {/* ==================== SHOP BY PET — compact category cards (Phase 1.2) ====================
-          Two compact cards: Kucing (warm peach/cream) and Anjing (soft purple).
-          Solid bottom panel holds the Indonesian label + arrow; pet face
-          stays clear of any text overlay. Routes unchanged. */}
+      {/* ==================== PET SELECTOR — floating silhouette CTAs (Phase 1.3) ====================
+          Two floating visual CTAs (no card container): Kucing (purple
+          silhouette) and Anjing (orange silhouette). Idle is static;
+          desktop hover lifts body + rotates tail; mobile tap navigates
+          within ~180ms. Routes/filter behavior preserved exactly. */}
 
-      <section className="bg-background pb-8 pt-2 md:pb-12">
-        <div className="container-page">
-          <div className="grid grid-cols-2 gap-3 md:gap-5">
-            <ShopByPetCard
-              variant="kucing"
-              imageSrc="/pets/cat-portrait.webp"
-              onClick={() => navigate('/produk?pet=kucing')}
-            />
-            <ShopByPetCard
-              variant="anjing"
-              imageSrc="/pets/dog-portrait.webp"
-              onClick={() => navigate('/produk?pet=anjing')}
-            />
-          </div>
-        </div>
-      </section>
+      <PetSelector>
+        <PetSelectorItem
+          type="cat"
+          label="Kucing"
+          ariaLabel="Lihat produk untuk kucing"
+          onActivate={() => navigate('/produk?pet=kucing')}
+        />
+        <PetSelectorItem
+          type="dog"
+          label="Anjing"
+          ariaLabel="Lihat produk untuk anjing"
+          onActivate={() => navigate('/produk?pet=anjing')}
+        />
+      </PetSelector>
 
       {/* ==================== BEST SELLERS ==================== */}
       <section className="container-page py-10 md:py-14">
@@ -334,82 +334,6 @@ export function HomeView() {
         </div>
       </section>
     </div>
-  )
-}
-
-/* ============== Shop by Pet — compact category cards (Phase 1.2) ============== */
-
-/**
- * ShopByPetCard — compact visual category card for "Kucing" / "Anjing".
- *
- * Phase 1.2 redesign:
- *  - Two columns on mobile (preserved).
- *  - Card height reduced substantially (was aspect-[4/5] tall portrait;
- *    now aspect-[5/4] landscape on mobile — short and wide).
- *  - Top ~62% of the card is the pet close-up (face clearly visible).
- *  - Bottom ~38% is a SOLID accent panel containing only the Indonesian
- *    label and an arrow. No text overlays the pet's face.
- *  - Cat = warm peach/cream accent. Dog = soft purple accent.
- *  - Removed: "UNTUK KUCING/ANJING", "Shop Cats/Dogs", product count,
- *    dark overlay gradient, paw-print chip, hover bar at bottom.
- *  - Route/filter behavior preserved — onClick handler unchanged.
- */
-function ShopByPetCard({
-  variant,
-  imageSrc,
-  onClick,
-}: {
-  variant: 'kucing' | 'anjing'
-  imageSrc: string
-  count?: number
-  onClick: () => void
-}) {
-  const isCat = variant === 'kucing'
-  const label = isCat ? 'Kucing' : 'Anjing'
-
-  // Accent palette per variant.
-  // Cat → warm peach/cream (matches the warm cream brand background).
-  // Dog → soft purple (matches secondary brand color, but desaturated).
-  const accentBg = isCat ? 'bg-[oklch(0.96_0.04_60)]' : 'bg-[oklch(0.95_0.04_295)]'
-  const accentText = isCat ? 'text-[oklch(0.55_0.13_45)]' : 'text-[oklch(0.45_0.13_295)]'
-  const accentArrowBg = isCat ? 'bg-[oklch(0.92_0.06_55)]' : 'bg-[oklch(0.90_0.06_295)]'
-  const accentArrowText = isCat ? 'text-[oklch(0.55_0.13_45)]' : 'text-[oklch(0.45_0.13_295)]'
-  const accentRing = isCat
-    ? 'group-hover:ring-[oklch(0.68_0.19_45_/_0.35)]'
-    : 'group-hover:ring-[oklch(0.52_0.22_295_/_0.35)]'
-
-  return (
-    <button
-      onClick={onClick}
-      aria-label={`Belanja untuk ${label}`}
-      className={`group relative flex aspect-[5/4] w-full flex-col overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-border/50 transition-all duration-300 hover:shadow-md hover:ring-2 md:rounded-2xl ${accentRing}`}
-    >
-      {/* Top: pet close-up — fills the upper portion of the card.
-          object-cover + object-top keeps the face (which sits in the upper
-          half of the source image) within the card frame. */}
-      <div className="relative h-[62%] w-full overflow-hidden bg-muted">
-        <OptImage
-          src={imageSrc}
-          alt={`Belanja suplemen untuk ${label}`}
-          fill
-          sizes="(max-width: 768px) 50vw, 33vw"
-          className="object-cover object-top transition-transform duration-500 group-hover:scale-105"
-        />
-      </div>
-
-      {/* Bottom: solid accent panel with label + arrow.
-          No text overlays the pet face above. */}
-      <div className={`flex flex-1 items-center justify-between gap-2 px-3 ${accentBg}`}>
-        <span className={`text-base font-bold leading-tight tracking-tight md:text-lg ${accentText}`}>
-          {label}
-        </span>
-        <span
-          className={`flex size-7 items-center justify-center rounded-full transition-transform duration-300 group-hover:translate-x-0.5 ${accentArrowBg} ${accentArrowText} md:size-8`}
-        >
-          <ArrowRight className="size-3.5 md:size-4" />
-        </span>
-      </div>
-    </button>
   )
 }
 
