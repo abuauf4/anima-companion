@@ -66,133 +66,99 @@ export function HomeView() {
 
   return (
     <div className="overflow-x-hidden">
-      {/* ==================== HERO — split with trust badge overlay ==================== */}
-      <section className="relative overflow-hidden gradient-mesh-warm pb-8 md:pb-12">
-        {/* Decorative blurred orbs */}
-        <div className="pointer-events-none absolute -right-24 -top-24 size-96 rounded-full bg-primary/15 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-24 -left-24 size-96 rounded-full bg-secondary/15 blur-3xl" />
+      {/* ==================== HERO — Redesign Phase 1 ====================
+          Editorial, warm cream background, pet visual as primary element.
+          - No gradient mesh, no glassmorphism, no floating trust cards.
+          - Single primary CTA → /produk.
+          - Headline kept short (2 lines max on mobile).
+          - Image is the hero, not decoration. */}
 
-        <div className="container-page relative grid items-center gap-4 py-4 md:grid-cols-2 md:gap-6 md:py-12 lg:py-16">
-          {/* CONTENT: bottom on mobile, LEFT on desktop */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="space-y-3 text-foreground md:space-y-4"
-          >
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
-              <PawPrint className="size-3" /> {settings?.heroEyebrow || 'Suplemen Rekomendasi Dokter Hewan'}
-            </span>
-
-            <h1 className="text-balance text-3xl font-extrabold leading-[1.05] tracking-tight sm:text-4xl lg:text-5xl">
-              {settings?.heroTitle1 || 'Elevating'}<br />
-              <span className="gradient-brand-text">{settings?.heroTitle2 || 'Animal Health'}</span>
-            </h1>
-
-            <p className="max-w-md text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
-              {settings?.heroDescription || 'Suplemen & vitamin hewan peliharaan premium dari Anima Companion — PT Sutan Vet Medika. Diformulasikan bersama dokter hewan, tersedia di 515+ klinik seluruh Indonesia.'}
-            </p>
-
-            {/* Hook text before CTAs — same typography as H1 */}
-            <div className="pt-1">
-              <h2 className="text-balance text-3xl font-extrabold leading-[1.05] tracking-tight sm:text-4xl lg:text-5xl">
-                {settings?.heroHookTitle1 || 'Belanja sesuai'}<br />
-                <span className="gradient-brand-text">{settings?.heroHookTitle2 || 'hewan peliharaanmu'}</span>
-              </h2>
-            </div>
-
-            {/* CTAs — 1 baris, Anjing kiri Kucing kanan */}
-            <div className="flex items-center gap-2.5">
-              <Button
-                size="lg"
-                onClick={() => navigate('/produk?pet=anjing')}
-                className="h-11 flex-1 gap-2 bg-primary px-4 text-sm font-bold shadow-md hover:bg-primary/90"
-              >
-                🐕 Anjing
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                onClick={() => navigate('/produk?pet=kucing')}
-                className="h-11 flex-1 gap-2 border-secondary/30 bg-card px-4 text-sm font-semibold text-secondary hover:bg-secondary/5 hover:text-secondary"
-              >
-                🐈 Kucing
-              </Button>
-            </div>
-          </motion.div>
-
-          {/* IMAGE: top on mobile, RIGHT on desktop */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
-            className="relative order-first h-44 sm:h-80 md:order-last md:h-96"
-          >
-            <div className="relative h-full w-full overflow-hidden rounded-3xl shadow-2xl ring-4 ring-white/60">
-              <OptImage
-                src="/hero-pets.webp"
-                alt="Anima Companion — Elevating Animal Health"
-                fill
-                priority
-                sizes="(max-width: 768px) 100vw, 50vw"
-                className="object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-tr from-primary/10 via-transparent to-secondary/10" />
-            </div>
-
-            {/* Floating card — top-right: rating (desktop only) */}
+      <section className="relative bg-background pb-10 pt-6 md:pb-16 md:pt-10">
+        <div className="container-page">
+          {/* Mobile-first vertical stack: image first (visual anchor),
+              then text + CTA below. Desktop inverts to text left, image right. */}
+          <div className="grid items-center gap-6 md:grid-cols-12 md:gap-10">
+            {/* IMAGE: top on mobile, RIGHT (cols 7-12) on desktop */}
             <motion.div
-              animate={{ y: [0, -8, 0] }}
-              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-              className="absolute -right-2 top-4 hidden items-center gap-2 rounded-2xl bg-card/95 p-2.5 shadow-xl ring-1 ring-border/30 backdrop-blur-sm sm:flex sm:-right-4 sm:top-6"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="md:col-span-7 md:order-2"
             >
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100">
-                <Star className="size-5 fill-amber-400 text-amber-400" />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-foreground">4.9★ 12rb+ ulasan</p>
-                <p className="text-[10px] text-muted-foreground">Rating pelanggan</p>
+              <div className="relative aspect-[4/5] w-full overflow-hidden rounded-3xl bg-muted md:aspect-[5/4]">
+                <OptImage
+                  src="/hero-pets-fresh.webp"
+                  alt="Anima Companion — suplemen & vitamin hewan peliharaan rekomendasi dokter hewan"
+                  fill
+                  priority
+                  sizes="(max-width: 768px) 100vw, 60vw"
+                  className="object-cover"
+                />
               </div>
             </motion.div>
 
-            {/* Floating card — bottom-left: BPOM (desktop only) */}
+            {/* CONTENT: bottom on mobile, LEFT (cols 1-5) on desktop */}
             <motion.div
-              animate={{ y: [0, 8, 0] }}
-              transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
-              className="absolute -left-2 bottom-4 hidden items-center gap-2 rounded-2xl bg-card/95 p-2.5 shadow-xl ring-1 ring-border/30 backdrop-blur-sm sm:flex sm:-left-4 sm:bottom-8"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.05 }}
+              className="md:col-span-5 md:order-1"
             >
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100">
-                <Shield className="size-5 text-emerald-600" />
+              {/* Eyebrow — single small accent, no pill/badge */}
+              <div className="mb-4 flex items-center gap-2 text-primary">
+                <PawPrint className="size-4" />
+                <span className="text-xs font-semibold uppercase tracking-[0.18em]">
+                  {settings?.heroEyebrow || 'Suplemen Rekomendasi Dokter Hewan'}
+                </span>
               </div>
-              <div>
-                <p className="text-xs font-bold text-foreground">BPOM Terdaftar</p>
-                <p className="text-[10px] text-muted-foreground">100% Original</p>
-              </div>
-            </motion.div>
 
-            {/* Floating card — top-left small: vet */}
-            <motion.div
-              animate={{ y: [0, -6, 0] }}
-              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
-              className="absolute left-4 top-4 hidden items-center gap-2 rounded-2xl bg-card/95 p-2.5 shadow-xl ring-1 ring-border/30 backdrop-blur-sm sm:flex"
-            >
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/10">
-                <MessageCircle className="size-5 text-secondary" />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-foreground">Gratis Konsul Vet</p>
-                <p className="text-[10px] text-muted-foreground">Chat WhatsApp</p>
+              {/* Headline — editorial, max 2 lines on mobile (390px) */}
+              <h1 className="text-balance text-[28px] font-bold leading-[1.1] tracking-tight text-foreground sm:text-4xl lg:text-[44px]">
+                {settings?.heroTitle1 || 'Elevating'}{' '}
+                <span className="text-primary">{settings?.heroTitle2 || 'Animal Health'}</span>
+              </h1>
+
+              {/* Supporting copy — max 2 short lines */}
+              <p className="mt-4 max-w-md text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
+                {settings?.heroDescription || 'Suplemen & vitamin hewan peliharaan premium dari Anima Companion — PT Sutan Vet Medika. Diformulasikan bersama dokter hewan, tersedia di 515+ klinik seluruh Indonesia.'}
+              </p>
+
+              {/* Single primary CTA */}
+              <div className="mt-6">
+                <Button
+                  size="lg"
+                  onClick={() => navigate('/produk')}
+                  className="h-12 gap-2 bg-primary px-7 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+                >
+                  Belanja Sekarang
+                  <ArrowRight className="size-4" />
+                </Button>
               </div>
             </motion.div>
-          </motion.div>
+          </div>
         </div>
       </section>
 
-      {/* ==================== PET TYPE CARDS — no section header, directly after hero ==================== */}
-      <section className="container-page py-8 md:py-10">
-        <div className="grid gap-5 md:grid-cols-2">
-          <PetTypeTiltCard config={PET_CARDS[0]} productCount={mainPetTypes.find(p => p.slug === 'kucing')?._count?.products || 0} delay={0} />
-          <PetTypeTiltCard config={PET_CARDS[1]} productCount={mainPetTypes.find(p => p.slug === 'anjing')?._count?.products || 0} delay={0.05} />
+      {/* ==================== SHOP BY PET — dual visual CTA ====================
+          Replaces the old PetTypeTiltCard section. Two visually distinct cards
+          with cat/dog photography. Compact on mobile (side-by-side). */}
+
+      <section className="bg-background pb-10 pt-2 md:pb-14">
+        <div className="container-page">
+          <div className="grid grid-cols-2 gap-3 md:gap-5">
+            <ShopByPetCard
+              variant="kucing"
+              imageSrc="/pets/cat-portrait.webp"
+              count={mainPetTypes.find(p => p.slug === 'kucing')?._count?.products || 0}
+              onClick={() => navigate('/produk?pet=kucing')}
+            />
+            <ShopByPetCard
+              variant="anjing"
+              imageSrc="/pets/dog-portrait.webp"
+              count={mainPetTypes.find(p => p.slug === 'anjing')?._count?.products || 0}
+              onClick={() => navigate('/produk?pet=anjing')}
+            />
+          </div>
         </div>
       </section>
 
@@ -369,169 +335,89 @@ export function HomeView() {
   )
 }
 
-/* ============== Pet Type Cards (3D tilt) ============== */
-
-interface PetCardConfig {
-  slug: 'kucing' | 'anjing'
-  emoji: string
-  badgeText: string
-  title: string
-  description: string
-  cardClass: string
-  badgeClass: string
-  pawColor: string
-  pawHoverClass: string
-  emojiBadgeClass: string
-}
+/* ============== Shop by Pet — dual visual CTA (Redesign Phase 1) ============== */
 
 /**
- * Visual config for the two main pet-type cards (Kucing & Anjing).
- * The Kucing card uses warm orange tones; the Anjing card uses cool violet tones.
- */
-const PET_CARDS: PetCardConfig[] = [
-  {
-    slug: 'kucing',
-    emoji: '🐈',
-    badgeText: 'Untuk Kucing',
-    title: 'Felcover+, Sioren &\nForevet untuk Kucing',
-    description:
-      'Imun booster, nafsu makan, fish oil, skin & coat, flu support, dan stress management.',
-    cardClass:
-      'bg-gradient-to-br from-orange-50 via-amber-50 to-rose-50 hover:shadow-orange-200/50',
-    badgeClass: 'bg-orange-500/10 text-orange-600',
-    pawColor: 'text-orange-200/60',
-    pawHoverClass: 'group-hover:scale-110 group-hover:rotate-6',
-    emojiBadgeClass: '',
-  },
-  {
-    slug: 'anjing',
-    emoji: '🐕',
-    badgeText: 'Untuk Anjing',
-    title: 'Felcover+, Sioren &\nForevet untuk Anjing',
-    description:
-      'Imun booster, nafsu makan, fish oil, skin & coat, flu support, dan stress management.',
-    cardClass:
-      'bg-gradient-to-br from-violet-50 via-purple-50 to-fuchsia-50 hover:shadow-violet-200/50',
-    badgeClass: 'bg-violet-500/10 text-violet-600',
-    pawColor: 'text-violet-200/60',
-    pawHoverClass: 'group-hover:-rotate-3 group-hover:scale-110',
-    emojiBadgeClass: '',
-  },
-]
-
-/**
- * Pet Type card with a subtle 3D tilt on hover (desktop only — touch devices
- * don't fire mousemove, so the card stays flat on mobile, which is fine).
+ * ShopByPetCard — a single card in the "Shop for Dogs / Shop for Cats" section.
  *
- * The card rotates around X and Y axes based on the cursor's position over
- * the card. A decorative paw print inside parallaxes in the opposite
- * direction for a layered, depth feel. On mouse leave, the card springs
- * back to flat.
+ * Two of these sit side-by-side on mobile (compact). Each card:
+ * - Has a real pet photograph as the primary visual (not an emoji).
+ * - Has a small paw print as a subtle identity accent.
+ * - Uses different accent tone per variant (kucing=primary orange, anjing=secondary purple)
+ *   so the two cards look visually distinct, not just two buttons with different labels.
+ * - Is a button for a11y (clickable + keyboard focusable).
  */
-function PetTypeTiltCard({
-  config,
-  productCount,
-  delay,
+function ShopByPetCard({
+  variant,
+  imageSrc,
+  count,
+  onClick,
 }: {
-  config: PetCardConfig
-  productCount: number
-  delay: number
+  variant: 'kucing' | 'anjing'
+  imageSrc: string
+  count: number
+  onClick: () => void
 }) {
-  const { navigate } = useHashRouter()
+  const isCat = variant === 'kucing'
+  const label = isCat ? 'Kucing' : 'Anjing'
+  const cta = isCat ? 'Shop Cats' : 'Shop Dogs'
 
-  // Mouse position relative to card center, in pixels (-half..+half).
-  const x = useMotionValue(0)
-  const y = useMotionValue(0)
-
-  // Derive rotation from mouse position — subtle max ±3 degrees (was ±8, too dramatic).
-  const rotateX = useTransform(y, [-50, 50], [3, -3])
-  const rotateY = useTransform(x, [-50, 50], [-3, 3])
-
-  // Paw print parallax — subtle, opposite direction (was ±10, now ±4).
-  const pawX = useTransform(x, [-50, 50], [4, -4])
-  const pawY = useTransform(y, [-50, 50], [4, -4])
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLButtonElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    const xPct = e.clientX - rect.left - rect.width / 2
-    const yPct = e.clientY - rect.top - rect.height / 2
-    x.set(xPct)
-    y.set(yPct)
-  }
-
-  const handleMouseLeave = () => {
-    x.set(0)
-    y.set(0)
-  }
-
-  // Split title on "\n" so each line breaks naturally (preserves the
-  // existing visual layout with the line break between brand list & pet type).
-  const titleLines = config.title.split('\n')
+  // Distinct accent per variant — orange for cat, purple for dog.
+  // (Matches the brand color roles: primary=orange, secondary=purple.)
+  const accentText = isCat ? 'text-primary' : 'text-secondary'
+  const accentHoverBg = isCat ? 'group-hover:bg-primary' : 'group-hover:bg-secondary'
+  const accentRing = isCat ? 'group-hover:ring-primary/30' : 'group-hover:ring-secondary/30'
 
   return (
-    <Reveal delay={delay}>
-      <motion.button
-        onClick={() => navigate(`/produk?pet=${config.slug}`)}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
-        style={{ rotateX, rotateY, transformPerspective: 900 }}
-        // Spring transition so the tilt eases in/out smoothly
-        transition={{ type: 'spring', stiffness: 200, damping: 18 }}
-        className={`group relative flex h-72 w-full flex-col justify-end overflow-hidden rounded-3xl p-6 text-left shadow-sm transition-shadow duration-300 hover:shadow-xl sm:h-80 sm:p-8 ${config.cardClass}`}
-        aria-label={`Belanja untuk ${config.badgeText.replace('Untuk ', '')}`}
-      >
-        {/* Decorative paw print SVG (large, top-right, faded) — parallaxes on tilt */}
-        <motion.div
-          style={{ x: pawX, y: pawY }}
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-8 -top-8"
-        >
-          <svg
-            viewBox="0 0 100 100"
-            className={`size-48 transition-transform duration-500 sm:size-64 ${config.pawColor} ${config.pawHoverClass}`}
-            fill="currentColor"
-          >
-            <ellipse cx="30" cy="32" rx="9" ry="12" />
-            <ellipse cx="48" cy="22" rx="9" ry="12" />
-            <ellipse cx="66" cy="22" rx="9" ry="12" />
-            <ellipse cx="78" cy="32" rx="9" ry="12" />
-            <path d="M54 44c-12 0-22 9-22 21 0 9 6 15 12 15 3.6 0 6-1.2 8-2.4 2-1.2 3.2-1.2 5.2 0 2 1.2 4.4 2.4 8 2.4 6 0 12-6 12-15 0-12-11-21-23-21z" />
-          </svg>
-        </motion.div>
+    <button
+      onClick={onClick}
+      aria-label={`Belanja untuk ${label}`}
+      className={`group relative flex aspect-[4/5] w-full flex-col justify-end overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-border/50 transition-all duration-300 hover:shadow-md md:aspect-[4/5] md:rounded-3xl ${accentRing} hover:ring-2`}
+    >
+      {/* Pet photograph — primary visual, fills the card */}
+      <OptImage
+        src={imageSrc}
+        alt={`Belanja suplemen untuk ${label}`}
+        fill
+        sizes="(max-width: 768px) 50vw, 33vw"
+        className="object-cover transition-transform duration-500 group-hover:scale-105"
+      />
 
-        {/* Floating emoji badge (top-right) */}
-        <span className="absolute right-5 top-5 z-10 flex size-14 items-center justify-center rounded-2xl bg-white/80 text-3xl shadow-lg backdrop-blur-sm transition-transform duration-300 group-hover:scale-110 sm:right-7 sm:top-7 sm:size-16 sm:text-4xl">
-          {config.emoji}
-        </span>
+      {/* Subtle dark gradient at the bottom for text legibility */}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/15 to-transparent" />
 
-        {/* Content (bottom-left) */}
-        <div className="relative z-10">
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${config.badgeClass}`}
-          >
-            {config.badgeText}
+      {/* Small paw print — identity accent, top-left corner */}
+      <div className={`absolute left-3 top-3 flex size-9 items-center justify-center rounded-full bg-white/85 backdrop-blur-sm md:left-4 md:top-4 md:size-10`}>
+        <PawPrint className={`size-4 ${accentText} md:size-5`} />
+      </div>
+
+      {/* Content — bottom */}
+      <div className="relative z-10 p-3 text-left text-white md:p-5">
+        {/* Variant label */}
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/80 md:text-xs">
+          Untuk {label}
+        </p>
+        {/* Big CTA word */}
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <span className="text-lg font-bold leading-tight tracking-tight md:text-2xl">
+            {cta}
           </span>
-          <h3 className="mt-3 text-2xl font-extrabold leading-[1.1] tracking-tight text-foreground sm:text-3xl">
-            {titleLines.map((line, i) => (
-              <span key={i} className="block">
-                {line}
-              </span>
-            ))}
-          </h3>
-          <p className="mt-2 max-w-[80%] text-sm text-muted-foreground">
-            {config.description}
-          </p>
-          <div className="mt-4 flex items-center gap-4">
-            <span className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background transition-transform group-hover:translate-x-1">
-              Jelajahi <ArrowRight className="size-4" />
-            </span>
-            <span className="text-xs font-medium text-muted-foreground">
-              {productCount} produk tersedia
-            </span>
-          </div>
+          {/* Arrow chip — accent-colored, expands on hover */}
+          <span
+            className={`flex size-7 items-center justify-center rounded-full bg-white text-foreground transition-all duration-300 group-hover:translate-x-0.5 md:size-9`}
+          >
+            <ArrowRight className="size-3.5 md:size-4" />
+          </span>
         </div>
-      </motion.button>
-    </Reveal>
+        {/* Product count — small, subtle */}
+        <p className="mt-1 text-[10px] font-medium text-white/70 md:text-[11px]">
+          {count} produk tersedia
+        </p>
+      </div>
+
+      {/* Hidden accent bar at bottom for brand color identity */}
+      <div className={`absolute bottom-0 left-0 h-0.5 w-0 transition-all duration-500 group-hover:w-full ${accentHoverBg}`} />
+    </button>
   )
 }
 

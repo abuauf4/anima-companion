@@ -64,7 +64,7 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border/60 glass shadow-sm">
       {/* Main nav */}
-      <div className="container-page flex h-16 items-center gap-4 md:gap-6">
+      <div className="container-page flex h-14 items-center gap-3 md:h-16 md:gap-6">
         <Logo />
 
         {/* Desktop search with autocomplete */}
