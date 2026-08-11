@@ -1,0 +1,33 @@
+# Nixpacks build configuration for Anima Companion (Coolify deployment)
+#
+# WHY THIS EXISTS:
+# Prisma 6.19.2 ships a prebuilt query engine binary named
+# `libquery_engine-debian-openssl-3.0.x.so.node` which dynamically links against
+# `libssl.so.3` and `libcrypto.so.3`. The default Nixpacks Node runtime image
+# does NOT include these shared libraries, causing:
+#
+#   PrismaClientInitializationError
+#   libssl.so.3: cannot open shared object file
+#
+# At the same time, the engine validates TLS certificates when connecting to
+# Neon (PostgreSQL over TLS), so CA certificates must also be present.
+#
+# WHAT THIS FILE DOES:
+# - Installs `openssl` (provides libssl.so.3 + libcrypto.so.3) and `ca-certificates`
+#   into BOTH the build phase (so `prisma generate` can run) AND the final runtime
+#   image (so Prisma Client can load the engine at request time).
+# - Does NOT change Node version, install command, build command, start command,
+#   port, or any application behavior.
+# - Does NOT change Prisma `binaryTargets` — the default `debian-openssl-3.0.x`
+#   target is correct for the Nixpacks debian-based runtime image.
+#
+# Minimal, surgical fix. No Dockerfile needed.
+
+# ─── Setup phase: apt packages available to ALL subsequent phases ─────────────
+# Nixpacks applies `aptPkgs` to both the builder image AND the final runtime
+# image (per Nixpacks docs: "Pkgs installed here will be available at runtime").
+# This is exactly what we need for Prisma: libssl must exist both when
+# `prisma generate` runs (build phase) and when the Next.js server boots
+# (runtime phase).
+[phases.setup]
+aptPkgs = ["openssl", "ca-certificates"]
