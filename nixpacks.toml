@@ -1,33 +1,88 @@
 # Nixpacks build configuration for Anima Companion (Coolify deployment)
 #
-# WHY THIS EXISTS:
+# ─── HISTORY / WHY THIS EXISTS ───────────────────────────────────────────────
+#
 # Prisma 6.19.2 ships a prebuilt query engine binary named
 # `libquery_engine-debian-openssl-3.0.x.so.node` which dynamically links against
 # `libssl.so.3` and `libcrypto.so.3`. The default Nixpacks Node runtime image
-# does NOT include these shared libraries, causing:
+# does NOT add the OpenSSL shared-library output to the dynamic linker search
+# path, causing at runtime:
 #
 #   PrismaClientInitializationError
 #   libssl.so.3: cannot open shared object file
 #
-# At the same time, the engine validates TLS certificates when connecting to
-# Neon (PostgreSQL over TLS), so CA certificates must also be present.
+# ─── FIX ATTEMPT #1 (commit 4d0b291) — INSUFFICIENT ─────────────────────────
 #
-# WHAT THIS FILE DOES:
-# - Installs `openssl` (provides libssl.so.3 + libcrypto.so.3) and `ca-certificates`
-#   into BOTH the build phase (so `prisma generate` can run) AND the final runtime
-#   image (so Prisma Client can load the engine at request time).
-# - Does NOT change Node version, install command, build command, start command,
-#   port, or any application behavior.
-# - Does NOT change Prisma `binaryTargets` — the default `debian-openssl-3.0.x`
-#   target is correct for the Nixpacks debian-based runtime image.
+#   [phases.setup]
+#   aptPkgs = ["openssl", "ca-certificates"]
 #
-# Minimal, surgical fix. No Dockerfile needed.
+# aptPkgs installs the `openssl` Debian binary package into the builder image,
+# but it does NOT add the library path to `LD_LIBRARY_PATH` in the final
+# runtime image. Result: `libssl.so.3` is present somewhere in /usr/lib but
+# the dynamic linker still cannot find it because Prisma's query engine is a
+# .so.node loaded via Node's `process.dlopen`, which respects LD_LIBRARY_PATH
+# (and the default ld.so cache) but does NOT auto-search /usr/lib the way the
+# runtime image's PATH is searched.
+#
+# Inspecting the generated Nixpacks plan confirmed:
+#   nixPkgs:  ["nodejs_18", "bun", "openssl"]      ← openssl present
+#   nixLibs:  ["gcc-unwrapped"]                     ← openssl NOT here
+#   aptPkgs:  ["openssl", "ca-certificates"]        ← apt not LD_LIBRARY_PATH
+#
+# ─── FIX ATTEMPT #2 (this commit) — CORRECT ─────────────────────────────────
+#
+# Move the OpenSSL library into the `nixLibs` array, which Nixpacks explicitly
+# adds to LD_LIBRARY_PATH at runtime (this is the field designed for "packages
+# whose `lib` output should be on the shared-library search path").
+#
+# We use the `...` (spread) sentinel in each array to EXTEND the provider
+# defaults rather than REPLACE them — this preserves `nodejs_18` and `bun`
+# (the Node/Bun provider defaults) while appending our OpenSSL entries.
+# Without `...`, Nixpacks would treat the array as a complete replacement,
+# dropping the Node runtime and breaking the build entirely.
+#
+# Field-by-field intent:
+#
+#   nixPkgs = ["...", "openssl"]
+#     Extends default nix packages with the openssl Nix package (binary +
+#     library + dev headers). `openssl` already gets auto-detected by Nixpacks
+#     when Prisma is present, but stating it explicitly is a safety net in case
+#     auto-detection rules change in future Nixpacks versions.
+#
+#   nixLibs = ["...", "openssl"]
+#     THIS IS THE ACTUAL FIX. Extends the default nix libraries (which contains
+#     `gcc-unwrapped` for libgcc_s.so) with the `openssl` Nix package's `lib`
+#     output. Nixpacks adds every entry's `/lib` to LD_LIBRARY_PATH at runtime,
+#     so libssl.so.3 and libcrypto.so.3 become discoverable by the dynamic
+#     linker when Prisma loads `libquery_engine-debian-openssl-3.0.x.so.node`.
+#
+#   aptPkgs = ["...", "ca-certificates"]
+#     Keeps ca-certificates (TLS root CAs) — required so the OpenSSL inside the
+#     Prisma engine can validate the Neon TLS certificate (Neon enforces
+#     sslmode=require + channel_binding=require). We use `...` here too so any
+#     default aptPkgs Nixpacks injects are preserved. `openssl` is intentionally
+#     NOT in aptPkgs anymore — the nixPkgs/nixLibs path is the canonical fix.
+#
+# ─── WHAT THIS COMMIT DOES NOT CHANGE ───────────────────────────────────────
+#
+# - Does NOT change application port (still 3000).
+# - Does NOT change Neon connection string / DIRECT_URL / pooler config.
+# - Does NOT change Prisma schema or `binaryTargets` — the default
+#   `debian-openssl-3.0.x` target is correct; the missing piece was purely
+#   runtime library path, not engine selection.
+# - Does NOT change start command (`bun run start`).
+# - Does NOT add a Dockerfile — `nixLibs` is the native Nixpacks solution.
+# - Does NOT touch production data (Neon untouched).
+#
+# ─── FALLBACK (NOT NEEDED NOW) ───────────────────────────────────────────────
+#
+# If `openssl` in nixLibs does NOT expose libssl.so.3 (e.g. if a future Nixpkgs
+# revision splits the openssl package so libssl lives in a separate output),
+# the next escalation is `openssl.dev` per Nixpacks docs for shared-library
+# outputs. As of Nixpkgs 31fb21469e34b6b5c7be77b9a35bae43d0c598e9 (the pin
+# used by Nixpacks v1.41.0), `openssl` itself contains lib/libssl.so.3.
 
-# ─── Setup phase: apt packages available to ALL subsequent phases ─────────────
-# Nixpacks applies `aptPkgs` to both the builder image AND the final runtime
-# image (per Nixpacks docs: "Pkgs installed here will be available at runtime").
-# This is exactly what we need for Prisma: libssl must exist both when
-# `prisma generate` runs (build phase) and when the Next.js server boots
-# (runtime phase).
 [phases.setup]
-aptPkgs = ["openssl", "ca-certificates"]
+nixPkgs = ["...", "openssl"]
+nixLibs = ["...", "openssl"]
+aptPkgs = ["...", "ca-certificates"]
