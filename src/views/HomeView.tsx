@@ -66,76 +66,50 @@ export function HomeView() {
 
   return (
     <div className="overflow-x-hidden">
-      {/* ==================== HERO — Redesign Phase 1 ====================
-          Editorial, warm cream background, pet visual as primary element.
-          - No gradient mesh, no glassmorphism, no floating trust cards.
-          - Single primary CTA → /produk.
-          - Headline kept short (2 lines max on mobile).
-          - Image is the hero, not decoration. */}
+      {/* ==================== HERO — Phase 1.1 ====================
+          Image IS the hero surface. Copy overlays directly on the image at
+          the bottom-left, with a subtle dark scrim for legibility only.
+          No glass card, no eyebrow, no CTA button — Shop Cats / Shop Dogs
+          immediately below serve as the primary shopping entry.
 
-      <section className="relative bg-background pb-10 pt-6 md:pb-16 md:pt-10">
+          Image source: /hero-pets.webp (not /hero-pets-fresh.webp) — the older
+          composition has both pet faces nestled in the center of the frame,
+          so a portrait 4/5 crop on mobile shows both faces clearly instead
+          of cropping them out at the left/right edges. */}
+
+      <section className="relative bg-background pb-2 pt-3 md:pb-4 md:pt-6">
         <div className="container-page">
-          {/* Mobile-first vertical stack: image first (visual anchor),
-              then text + CTA below. Desktop inverts to text left, image right. */}
-          <div className="grid items-center gap-6 md:grid-cols-12 md:gap-10">
-            {/* IMAGE: top on mobile, RIGHT (cols 7-12) on desktop */}
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="md:col-span-7 md:order-2"
-            >
-              <div className="relative aspect-[4/5] w-full overflow-hidden rounded-3xl bg-muted md:aspect-[5/4]">
-                <OptImage
-                  src="/hero-pets-fresh.webp"
-                  alt="Anima Companion — suplemen & vitamin hewan peliharaan rekomendasi dokter hewan"
-                  fill
-                  priority
-                  sizes="(max-width: 768px) 100vw, 60vw"
-                  className="object-cover"
-                />
-              </div>
-            </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="relative aspect-[4/5] w-full overflow-hidden rounded-3xl bg-muted md:aspect-[5/4]"
+          >
+            <OptImage
+              src="/hero-pets.webp"
+              alt="Anima Companion — suplemen & vitamin hewan peliharaan"
+              fill
+              priority
+              sizes="(max-width: 768px) 100vw, 100vw"
+              className="object-cover"
+            />
 
-            {/* CONTENT: bottom on mobile, LEFT (cols 1-5) on desktop */}
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.05 }}
-              className="md:col-span-5 md:order-1"
-            >
-              {/* Eyebrow — single small accent, no pill/badge */}
-              <div className="mb-4 flex items-center gap-2 text-primary">
-                <PawPrint className="size-4" />
-                <span className="text-xs font-semibold uppercase tracking-[0.18em]">
-                  {settings?.heroEyebrow || 'Suplemen Rekomendasi Dokter Hewan'}
-                </span>
-              </div>
+            {/* Subtle dark scrim at the bottom — only behind the text area,
+                no glass card. Tapers to transparent so the upper image stays
+                crisp and pet faces stay clearly visible. */}
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-transparent" />
 
-              {/* Headline — editorial, max 2 lines on mobile (390px) */}
-              <h1 className="text-balance text-[28px] font-bold leading-[1.1] tracking-tight text-foreground sm:text-4xl lg:text-[44px]">
+            {/* Overlay copy — anchored bottom-left */}
+            <div className="absolute inset-x-0 bottom-0 p-5 md:p-10">
+              <h1 className="text-balance text-[28px] font-bold leading-[1.1] tracking-tight text-white sm:text-4xl lg:text-[44px]">
                 {settings?.heroTitle1 || 'Elevating'}{' '}
                 <span className="text-primary">{settings?.heroTitle2 || 'Animal Health'}</span>
               </h1>
-
-              {/* Supporting copy — max 2 short lines */}
-              <p className="mt-4 max-w-md text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
-                {settings?.heroDescription || 'Suplemen & vitamin hewan peliharaan premium dari Anima Companion — PT Sutan Vet Medika. Diformulasikan bersama dokter hewan, tersedia di 515+ klinik seluruh Indonesia.'}
+              <p className="mt-2 max-w-md text-pretty text-sm leading-relaxed text-white/85 sm:text-base">
+                Suplemen &amp; vitamin premium untuk hewan peliharaan.
               </p>
-
-              {/* Single primary CTA */}
-              <div className="mt-6">
-                <Button
-                  size="lg"
-                  onClick={() => navigate('/produk')}
-                  className="h-12 gap-2 bg-primary px-7 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-                >
-                  Belanja Sekarang
-                  <ArrowRight className="size-4" />
-                </Button>
-              </div>
-            </motion.div>
-          </div>
+            </div>
+          </motion.div>
         </div>
       </section>
 
