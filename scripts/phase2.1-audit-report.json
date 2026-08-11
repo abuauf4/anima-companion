@@ -1,0 +1,205 @@
+{
+  "generatedAt": "2026-08-11T03:40:33.587Z",
+  "totalProducts": 8,
+  "totalImages": 18,
+  "sourceBreakdown": {
+    "CLOUDINARY": 13,
+    "LOCAL_PRODUCTS": 0,
+    "LOCAL_OTHER": 0,
+    "REMOTE_OTHER": 5,
+    "EMPTY": 0,
+    "OTHER": 0
+  },
+  "products": [
+    {
+      "id": "cmqkumklt000hwz0umonun76i",
+      "name": "Felcover+ Immune Stimulant",
+      "slug": "felcover-plus-immune-stimulant",
+      "imageCount": 5,
+      "images": [
+        {
+          "id": "cmqmc72uf0000jv041oddmsly",
+          "order": 0,
+          "url": "https://res.cloudinary.com/dtitrsh8t/image/upload/v1781956632/felcover__11zon_2_xm9dne.webp",
+          "alt": "Felcover+ Immune Stimulant",
+          "source": "CLOUDINARY"
+        },
+        {
+          "id": "cmqmc72uf0001jv04nfanuwoi",
+          "order": 1,
+          "url": "https://res.cloudinary.com/dtitrsh8t/image/upload/v1781956628/felcover_5_11zon_pgpk2q.webp",
+          "alt": "Felcover+ Immune Stimulant",
+          "source": "CLOUDINARY"
+        },
+        {
+          "id": "cmqmc72uf0002jv04dnroyqss",
+          "order": 2,
+          "url": "https://res.cloudinary.com/dtitrsh8t/image/upload/v1781956631/felcover_2_11zon_euyebr.webp",
+          "alt": "Felcover+ Immune Stimulant",
+          "source": "CLOUDINARY"
+        },
+        {
+          "id": "cmqmc72uf0003jv0452a981ub",
+          "order": 3,
+          "url": "https://res.cloudinary.com/dtitrsh8t/image/upload/v1781956629/felcover_3_11zon_cpd60y.webp",
+          "alt": "Felcover+ Immune Stimulant",
+          "source": "CLOUDINARY"
+        },
+        {
+          "id": "cmqmc72uf0004jv04rb24ti9t",
+          "order": 4,
+          "url": "https://res.cloudinary.com/dtitrsh8t/image/upload/v1781956629/felcover_4_11zon_lsrwoq.webp",
+          "alt": "Felcover+ Immune Stimulant",
+          "source": "CLOUDINARY"
+        }
+      ]
+    },
+    {
+      "id": "cmqkumn03001nwz0u2f7w465j",
+      "name": "Forevet Stress Manajemen",
+      "slug": "forevet-stress-manajemen",
+      "imageCount": 4,
+      "images": [
+        {
+          "id": "cmqmdvgtf0009ie04c9dnlydu",
+          "order": 0,
+          "url": "https://res.cloudinary.com/dtitrsh8t/image/upload/v1781960886/id-11134207-81ztn-mfmscl1ixde511_resize_w900_nl_tmqmei.webp",
+          "alt": "Forevet Stress Manajemen",
+          "source": "CLOUDINARY"
+        },
+        {
+          "id": "cmqmdvgtf000aie044y7qub6t",
+          "order": 1,
+          "url": "https://res.cloudinary.com/dtitrsh8t/image/upload/v1781960886/id-11134207-7rbke-m9h0rqcelavy1a_pncfxt.webp",
+          "alt": "Forevet Stress Manajemen",
+          "source": "CLOUDINARY"
+        },
+        {
+          "id": "cmqmdvgtf000bie04j4pxpls7",
+          "order": 2,
+          "url": "https://res.cloudinary.com/dtitrsh8t/image/upload/v1781960886/id-11134207-7rbk4-m9h0rqceihr26f_aqjnqe.webp",
+          "alt": "Forevet Stress Manajemen",
+          "source": "CLOUDINARY"
+        },
+        {
+          "id": "cmqmdvgtf000cie04jxt20vyu",
+          "order": 3,
+          "url": "https://res.cloudinary.com/dtitrsh8t/image/upload/v1781960885/id-11134207-7rbke-m9h0rqcempge5b_jfpxd0.webp",
+          "alt": "Forevet Stress Manajemen",
+          "source": "CLOUDINARY"
+        }
+      ]
+    },
+    {
+      "id": "cmqkumls7000zwz0uff4l6aca",
+      "name": "Sioren Booster+",
+      "slug": "sioren-booster-plus",
+      "imageCount": 1,
+      "images": [
+        {
+          "id": "cmqmdnk9f0001l904yq3dairu",
+          "order": 0,
+          "url": "https://placehold.co/600x600/22C55E/ffffff?text=Sioren%20Booster%2B%201",
+          "alt": "Sioren Booster+",
+          "source": "REMOTE_OTHER"
+        }
+      ]
+    },
+    {
+      "id": "cmqkuml4n000nwz0u8d4d4139",
+      "name": "Sioren Cat Supplement — Nafsu Makan",
+      "slug": "sioren-nafsu-makan",
+      "imageCount": 1,
+      "images": [
+        {
+          "id": "cmqmdmlpg0004ie04a4mwx62d",
+          "order": 0,
+          "url": "https://placehold.co/600x600/F59E0B/ffffff?text=Sioren%20Cat%20Supplement%20%E2%80%94%20Nafsu%20Makan%201",
+          "alt": "Sioren Cat Supplement — Nafsu Makan",
+          "source": "REMOTE_OTHER"
+        }
+      ]
+    },
+    {
+      "id": "cmqkumlh7000twz0uuxnprcij",
+      "name": "Sioren Fish Oil",
+      "slug": "sioren-fish-oil",
+      "imageCount": 4,
+      "images": [
+        {
+          "id": "cmqmcxlu90000k304q4s2fiu0",
+          "order": 0,
+          "url": "https://res.cloudinary.com/dtitrsh8t/image/upload/v1781959795/cxkcvm8bb0w827zzbzk7_ybqlek.webp",
+          "alt": "Sioren Fish Oil",
+          "source": "CLOUDINARY"
+        },
+        {
+          "id": "cmqmcxlua0001k304vkpcomw9",
+          "order": 1,
+          "url": "https://res.cloudinary.com/dtitrsh8t/image/upload/v1781959795/kyziejye37sykcpn5jvx_o5iwkn.webp",
+          "alt": "Sioren Fish Oil",
+          "source": "CLOUDINARY"
+        },
+        {
+          "id": "cmqmcxlua0002k304ejdziunf",
+          "order": 2,
+          "url": "https://res.cloudinary.com/dtitrsh8t/image/upload/v1781959795/fb8yt4obyiugvwyipjnc_fbtqw4.webp",
+          "alt": "Sioren Fish Oil",
+          "source": "CLOUDINARY"
+        },
+        {
+          "id": "cmqmcxlua0003k3048d9n71m8",
+          "order": 3,
+          "url": "https://res.cloudinary.com/dtitrsh8t/image/upload/v1781959795/mwmjtosdzydgt3aevu8c_ziygv6.webp",
+          "alt": "Sioren Fish Oil",
+          "source": "CLOUDINARY"
+        }
+      ]
+    },
+    {
+      "id": "cmqkummp3001hwz0u5rgswoab",
+      "name": "Sioren Flu Support+",
+      "slug": "sioren-flu-support-plus",
+      "imageCount": 1,
+      "images": [
+        {
+          "id": "cmqmdooff0007ie04jm6fuyue",
+          "order": 0,
+          "url": "https://placehold.co/600x600/EF4444/ffffff?text=Sioren%20Flu%20Support%2B%201",
+          "alt": "Sioren Flu Support+",
+          "source": "REMOTE_OTHER"
+        }
+      ]
+    },
+    {
+      "id": "cmqkumm360015wz0ulz9wt5x7",
+      "name": "Sioren Pet Odor X",
+      "slug": "sioren-pet-odor-x",
+      "imageCount": 1,
+      "images": [
+        {
+          "id": "cmqmdnzmo0005ie04xvym34fx",
+          "order": 0,
+          "url": "https://placehold.co/600x600/475569/ffffff?text=Sioren%20Pet%20Odor%20X%201",
+          "alt": "Sioren Pet Odor X",
+          "source": "REMOTE_OTHER"
+        }
+      ]
+    },
+    {
+      "id": "cmqkumme4001bwz0u9q0tdu89",
+      "name": "Sioren Skin & Coat",
+      "slug": "sioren-skin-coat",
+      "imageCount": 1,
+      "images": [
+        {
+          "id": "cmqmdodca0006ie04fysfi7wh",
+          "order": 0,
+          "url": "https://placehold.co/600x600/EC4899/ffffff?text=Sioren%20Skin%20%26%20Coat%201",
+          "alt": "Sioren Skin & Coat",
+          "source": "REMOTE_OTHER"
+        }
+      ]
+    }
+  ]
+}

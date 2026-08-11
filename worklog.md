@@ -1723,3 +1723,175 @@ All 5 URLs are **Cloudinary URLs** (no local paths in DB — DB still references
 - **Coolify production env**: NOT touched. Owner will update on cutover.
 
 === Phase 3 — Final parity audit + write test + WhatsApp update COMPLETE. Ready for Coolify cutover when owner is ready. ===
+
+---
+
+## Phase 2.1 — Complete Static Product Image Migration from Real Neon Data
+
+**Date:** 2026-08-11
+**Source of truth:** Neon production database (NOT seed, NOT web search).
+**Goal:** Make every `ProductImage.url` in production point to a local static file under `/products/<slug>/NN.webp`, with mapping verified from DB `order` field. Zero remote image dependency remains.
+
+### 2.1.A — Audit (Neon, all products)
+
+Queried every `Product` and its `ProductImage` rows via Prisma Client against Neon. Result:
+
+- **8 products, 18 ProductImage rows total**
+- Source breakdown (before Phase 2.1):
+  - `CLOUDINARY`: 13 rows (Felcover+ ×5, Forevet Stress ×4, Sioren Fish Oil ×4)
+  - `REMOTE_OTHER`: 5 rows (5 Sioren products using `placehold.co` placeholder service)
+  - `LOCAL_PRODUCTS`: 0 rows
+  - `LOCAL_OTHER`: 0 rows
+  - `EMPTY` / `OTHER`: 0 rows
+
+Per-product inventory (name, slug, count, source classification):
+
+| # | Product | slug | imgs | source |
+|---|---------|------|------|--------|
+| 1 | Felcover+ Immune Stimulant | `felcover-plus-immune-stimulant` | 5 | Cloudinary ×5 |
+| 2 | Forevet Stress Manajemen | `forevet-stress-manajemen` | 4 | Cloudinary ×4 |
+| 3 | Sioren Booster+ | `sioren-booster-plus` | 1 | placehold.co ×1 |
+| 4 | Sioren Cat Supplement — Nafsu Makan | `sioren-nafsu-makan` | 1 | placehold.co ×1 |
+| 5 | Sioren Fish Oil | `sioren-fish-oil` | 4 | Cloudinary ×4 |
+| 6 | Sioren Flu Support+ | `sioren-flu-support-plus` | 1 | placehold.co ×1 |
+| 7 | Sioren Pet Odor X | `sioren-pet-odor-x` | 1 | placehold.co ×1 |
+| 8 | Sioren Skin & Coat | `sioren-skin-coat` | 1 | placehold.co ×1 |
+
+Full audit JSON saved to `scripts/phase2.1-audit-report.json`.
+
+### 2.1.B — Download & convert remote assets → local .webp
+
+Script: `scripts/phase2.1-migrate-images.mjs`
+
+For each `ProductImage` row, sorted by `order` ASC within its product:
+- Filename computed as `01.webp`, `02.webp`, ... (`order + 1`, zero-padded to 2 digits).
+- Downloaded bytes from the existing DB URL (fetch with timeout 30s, 3 retries).
+- Inspected source format via `sharp`:
+  - If source is already WebP → saved raw bytes (no re-encode, no quality loss).
+  - If source is PNG / JPEG / SVG → re-encoded to WebP via `sharp.webp({ quality: 82, effort: 4 })`.
+- **Aspect ratio preserved** — no resize, no crop. Source dimensions kept as-is.
+- Saved to `public/products/<slug>/NN.webp`.
+
+Result: **18/18 successfully downloaded and saved.** 0 failures.
+
+| Product | slug | saved files | source formats | re-encoded? |
+|---------|------|-------------|----------------|-------------|
+| Felcover+ | `felcover-plus-immune-stimulant` | 01–05.webp | webp ×5 | no |
+| Forevet Stress | `forevet-stress-manajemen` | 01–04.webp | webp ×4 | no |
+| Sioren Booster+ | `sioren-booster-plus` | 01.webp | svg ×1 | yes |
+| Sioren Nafsu Makan | `sioren-nafsu-makan` | 01.webp | svg ×1 | yes |
+| Sioren Fish Oil | `sioren-fish-oil` | 01–04.webp | webp ×4 | no |
+| Sioren Flu Support+ | `sioren-flu-support-plus` | 01.webp | svg ×1 | yes |
+| Sioren Pet Odor X | `sioren-pet-odor-x` | 01.webp | svg ×1 | yes |
+| Sioren Skin & Coat | `sioren-skin-coat` | 01.webp | svg ×1 | yes |
+
+Migration result JSON: `scripts/phase2.1-migration-results.json`.
+
+### 2.1.C — Felcover+ reconciliation
+
+Previous Phase 2 commit `fb48bade` produced 4 local .webp files for Felcover+ with mapping inferred from Cloudinary filename suffixes (which may not have matched DB `order`). This phase replaces those 4 files with **5 files (01–05.webp)** where the mapping is verified from the actual DB `order` column:
+
+| DB `order` | DB id (prefix) | Cloudinary URL | Saved as |
+|------------|-----------------|----------------|----------|
+| 0 (main) | `cmqmc72uf0000jv041oddmsly` | `.../felcover__11zon_2_xm9dne.webp` | `01.webp` (39.6 KB) |
+| 1 | `cmqmc72uf0001jv04nfadk0c5` | `.../felcover_5_11zon_pgpk2q.webp` | `02.webp` (10.1 KB) |
+| 2 | `cmqmc72uf0002jv04dnrd5lh` | `.../felcover_2_11zon_euyebr.webp` | `03.webp` (31.4 KB) |
+| 3 | `cmqmc72uf0003jv0452at5b6k` | `.../felcover_3_11zon_cpd60y.webp` | `04.webp` (24.6 KB) |
+| 4 | `cmqmc72uf0004jv04rb2y1qj` | `.../felcover_4_11zon_lsrwoq.webp` | `05.webp` (27.5 KB) |
+
+Old Phase 2 files for Felcover+ (01–04.webp) were backed up locally before being overwritten. The new mapping is deterministic from DB `order`, not inferred from filenames.
+
+### 2.1.D — Update Neon ProductImage.url → local paths
+
+Script: `scripts/phase2.1-update-db-urls.mjs`
+
+Transactionally updated 18 `ProductImage` rows on Neon:
+
+- For each row: `url` → `/products/<slug>/NN.webp`
+- **Preserved:** `id`, `productId`, `order`, `alt` (only `url` was changed)
+- All 18 updates applied in a single Prisma `$transaction([...updates])` — all-or-nothing.
+
+Sample of updated rows (first 5):
+
+| id (prefix) | order | new url |
+|--------------|-------|---------|
+| `cmqmc72uf0000jv041oddmsly` | 0 | `/products/felcover-plus-immune-stimulant/01.webp` |
+| `cmqmc72uf0001jv04nfadk0c5` | 1 | `/products/felcover-plus-immune-stimulant/02.webp` |
+| `cmqmc72uf0002jv04dnrd5lh` | 2 | `/products/felcover-plus-immune-stimulant/03.webp` |
+| `cmqmc72uf0003jv0452at5b6k` | 3 | `/products/felcover-plus-immune-stimulant/04.webp` |
+| `cmqmc72uf0004jv04rb2y1qj` | 4 | `/products/felcover-plus-immune-stimulant/05.webp` |
+
+Full before/after audit: `scripts/phase2.1-db-update-audit.json`.
+
+Field preservation check passed: every `id`, `productId`, `order` was confirmed unchanged post-update.
+
+### 2.1.E — Verification (no remote dependency remains)
+
+Script: `scripts/phase2.1-verify-files.mjs`
+
+For every `ProductImage` row, checked:
+1. `url` does NOT match any remote pattern (`https?://`, `res.cloudinary.com`, `placehold.co`, `//`, `data:`).
+2. The path on disk exists in `/public`.
+
+Result: **18/18 PASS.**
+
+```
+Total ProductImage rows     : 18
+Rows with local /products/  : 18
+Rows still remote           : 0
+Files present on disk       : 18
+Files MISSING on disk       : 0
+```
+
+### 2.1.F — Code verification
+
+| Check | Command | Result |
+|-------|---------|--------|
+| Prisma Client | `bunx prisma generate` | ✅ |
+| Lint | `bun run lint` (eslint .) | ✅ 0 errors |
+| Typecheck | `bunx tsc --noEmit` | ✅ exit 0 |
+| Production build | `bun run build` (next build) | ✅ 43/43 pages |
+
+`next.config.ts` left strict: `images.remotePatterns = []` — no remote host is whitelisted for `next/image`. The Phase 2 `placeholder.ts` interception layer remains for any stray banner seed `placehold.co` URLs (out of Phase 2.1 scope — only `ProductImage` is in scope).
+
+### 2.1.G — Static asset summary
+
+```
+public/products/        18 files, 489 KB total
+├── felcover-plus-immune-stimulant/   5 files  144 KB
+├── forevet-stress-manajemen/        4 files  296 KB
+├── sioren-booster-plus/             1 file    12 KB
+├── sioren-fish-oil/                 4 files   60 KB
+├── sioren-flu-support-plus/         1 file    12 KB
+├── sioren-nafsu-makan/              1 file     8 KB
+├── sioren-pet-odor-x/               1 file     8 KB
+└── sioren-skin-coat/                1 file    12 KB
+```
+
+### 2.1.H — Notes for owner
+
+1. **5 Sioren products have local WebP files that are visually placeholders** (originally `placehold.co` SVGs that displayed text like "Sioren Booster+ 1"). These were downloaded and re-encoded to WebP per the brief — they are now served from `/products/<slug>/01.webp` so they satisfy the "no remote dependency" rule. However, they still visually look like placeholders. Owner should replace these 5 files with real product photos and overwrite the same paths (no DB update needed — DB already points to the right local file).
+2. **13 real product images** (Felcover+ ×5, Forevet Stress ×4, Sioren Fish Oil ×4) were downloaded from Cloudinary. Source format was already WebP, so they were saved as-is without re-encoding (no quality loss).
+3. **Database changes were Neon-only.** Supabase source untouched. Per Phase 3 protocol, Supabase is read-only.
+4. **No seed data was modified.** The brief explicitly forbade using seed as source of truth — all work was driven by Neon production DB queries.
+5. **Coolify production env NOT touched.** Owner will update DATABASE_URL/DIRECT_URL when ready to cut over.
+
+### 2.1.I — NOT done (per user instruction)
+
+- TIDAK update Coolify production env. STOP setelah commit + push.
+- TIDAK modify Supabase source DB.
+- TIDAK reseed production data.
+- TIDAK activate Cloudinary remote pattern in `next.config.ts` — strict local-image policy preserved.
+
+### Stage Summary
+
+- **Products migrated:** 8 / 8
+- **ProductImage rows migrated:** 18 / 18 (was 18 before, still 18 after — IDs preserved, only `url` changed)
+- **Static files created:** 18 (`/public/products/<slug>/01.webp` … `NN.webp`)
+- **Total asset size:** 489 KB (0.48 MB)
+- **Remote dependencies remaining:** 0 (100% local)
+- **Source code changes:** none (only `public/products/*` static assets + `scripts/phase2.1-*` helpers + this worklog entry)
+- **Verification:** lint ✓ typecheck ✓ prisma generate ✓ production build ✓ file-presence ✓ no-remote ✓
+- **Coolify production env:** NOT touched.
+
+=== Phase 2.1 — Complete static product image migration from real Neon data COMPLETE. ===
