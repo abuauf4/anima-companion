@@ -3,22 +3,27 @@
 import { motion } from 'framer-motion'
 
 /**
- * DogSilhouette — simple, friendly sitting dog SVG.
+ * DogSilhouette — organic seated friendly dog in side profile.
  *
- * Design notes:
- *  - Sitting profile, head forward, floppy ears hanging down — the
- *    universal "good boy sitting" pose. Reads as a dog instantly
- *    without needing a face.
- *  - Curled tail over the back hip — animatable separately on hover
- *    via the `tail` variants (subtle rotate, no infinite motion).
- *  - Single solid fill, no gradient, no inner shadow.
- *  - viewBox 0 0 120 140 — matches CatSilhouette so the two icons
- *    visually balance side-by-side at the same height.
+ * Anatomy (side profile, facing left):
+ *  - Recognizable muzzle jutting forward from the head.
+ *  - SUBSTANTIAL floppy ear hanging DOWN from the back of the head.
+ *    The ear flap extends DOWN PAST the head into the neck region
+ *    (y=28-58), creating a clearly visible hanging flap that reads
+ *    as "floppy ear" at a glance.
+ *  - Compact body (similar proportions to the cat — not a wide blob).
+ *  - Two DISTINCT front legs with clear gap (valley) between them.
+ *  - Seated hindquarters with hind paw visible.
+ *  - Long natural tail curving up behind the body.
  *
- * The body is a single closed path so the silhouette reads as one
- * solid shape (not a stacked composite of separate primitives). Floppy
- * ears are separate paths so we can subtly bounce them on hover if
- * desired (currently they move with the body — kept simple).
+ *  Single solid fill (currentColor — brand orange set by parent).
+ *  No inner ear accents, no collar, no gradient.
+ *
+ * Microinteraction preserved exactly:
+ *  - bodyVariants drives whole-body lift/scale on hover/tap.
+ *  - tailVariants drives a subtle tail rotate on hover.
+ *  - MotionConfig reducedMotion='user' (set on <PetSelector>) strips
+ *    transforms automatically when the user prefers reduced motion.
  */
 const bodyVariants = {
   rest: { y: 0, scale: 1 },
@@ -42,81 +47,59 @@ export function DogSilhouette({ className }: { className?: string }) {
       focusable="false"
     >
       <motion.g variants={bodyVariants} initial="rest" style={{ transformOrigin: '60px 130px' }}>
-        {/* Tail — curled up over the right hip.
-            Drawn first so it sits behind the body. transform-origin is
-            near the tail base so the hover rotate pivots naturally. */}
+        {/* Tail — long natural tail curving up behind the body. Base
+            sits at (78, 100) which is INSIDE the rump silhouette so
+            the tail visually emerges from the rump. */}
         <motion.path
           variants={tailVariants}
-          style={{ transformOrigin: '84px 96px' }}
-          d="M82 96
-             C 96 88, 108 78, 102 64
-             C 100 58, 94 56, 92 60
-             C 90 64, 94 68, 92 72
-             C 90 78, 82 84, 76 92
+          style={{ transformOrigin: '78px 100px' }}
+          d="M 78 100
+             C 90 96, 102 88, 106 76
+             C 110 64, 106 54, 98 56
+             C 90 58, 88 66, 90 72
+             C 94 78, 90 86, 86 90
+             C 84 94, 82 96, 78 100
              Z"
           fill="currentColor"
         />
 
-        {/* Body — sitting silhouette:
-            broad chest → narrow waist → sits on haunches.
-            One closed path includes the back, rump, hind leg base, belly,
-            and front leg base. Head is separate (with ears attached). */}
+        {/* Body — single closed organic path. COMPACT body (not a
+            wide blob). SUBSTANTIAL floppy ear extending DOWN past
+            the head into the neck region (clearly visible hanging
+            flap, not upright). Pronounced muzzle juts forward. */}
         <path
-          d="M40 70
-             C 40 60, 44 54, 50 52
-             L 50 48
-             C 46 44, 44 38, 46 32
-             C 48 24, 54 20, 60 20
-             C 66 20, 72 24, 74 32
-             C 76 38, 74 44, 70 48
-             L 70 52
-             C 76 54, 80 60, 80 70
-             L 80 110
-             C 80 122, 74 130, 60 130
-             C 46 130, 40 122, 40 110
+          d="M 50 8
+             C 54 6, 60 8, 64 14
+             C 68 18, 72 22, 72 28
+             C 80 32, 86 42, 84 54
+             C 82 62, 76 62, 72 56
+             C 70 52, 68 48, 68 44
+             C 72 48, 76 52, 78 58
+             C 80 66, 82 74, 82 84
+             C 82 92, 80 100, 78 106
+             C 80 110, 82 114, 80 120
+             C 78 126, 74 128, 70 126
+             C 72 122, 74 118, 74 114
+             C 74 110, 72 108, 68 108
+             C 64 110, 60 110, 54 108
+             C 54 112, 54 118, 54 124
+             C 54 128, 52 130, 48 128
+             C 46 126, 46 122, 46 118
+             C 46 114, 46 110, 46 108
+             C 46 110, 46 116, 46 122
+             C 46 126, 44 128, 40 128
+             C 38 128, 36 128, 36 124
+             C 36 120, 36 116, 36 110
+             C 36 106, 38 102, 40 98
+             C 38 90, 36 82, 38 74
+             C 38 66, 40 58, 42 52
+             C 40 48, 34 46, 28 44
+             C 22 42, 22 36, 26 32
+             C 30 28, 36 28, 40 30
+             C 44 26, 48 18, 50 12
+             C 50 10, 50 8, 50 8
              Z"
           fill="currentColor"
-        />
-
-        {/* Floppy left ear — hangs from the left side of the head */}
-        <path
-          d="M44 38
-             C 38 42, 34 50, 36 58
-             C 38 64, 42 64, 46 60
-             C 48 56, 48 46, 48 40
-             Z"
-          fill="currentColor"
-        />
-        {/* Floppy right ear — hangs from the right side of the head */}
-        <path
-          d="M76 38
-             C 82 42, 86 50, 84 58
-             C 82 64, 78 64, 74 60
-             C 72 56, 72 46, 72 40
-             Z"
-          fill="currentColor"
-        />
-
-        {/* Inner ears — slightly deeper tone of the same hue (no gradient) */}
-        <path
-          d="M44 44 C 40 48, 38 54, 40 58 C 41 60, 43 60, 44 58 Z"
-          fill="oklch(0.55 0.20 45)"
-          opacity="0.55"
-        />
-        <path
-          d="M76 44 C 80 48, 82 54, 80 58 C 79 60, 77 60, 76 58 Z"
-          fill="oklch(0.55 0.20 45)"
-          opacity="0.55"
-        />
-
-        {/* Collar hint — a thin line at the neck, very subtle.
-            Just enough to suggest a collar without becoming a feature. */}
-        <line
-          x1="48" y1="54" x2="72" y2="54"
-          stroke="currentColor"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-          opacity="0.30"
         />
       </motion.g>
     </motion.svg>

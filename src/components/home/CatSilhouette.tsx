@@ -3,25 +3,28 @@
 import { motion } from 'framer-motion'
 
 /**
- * CatSilhouette — simple, friendly sitting cat SVG.
+ * CatSilhouette — organic seated domestic cat, compact sphinx pose.
  *
- * Design notes:
- *  - Sitting profile, head turned slightly forward (3/4 view) so both ears
- *    and the face profile are recognizable at a glance.
- *  - Pointed ears with small inner-ear accent (slightly darker tone of the
- *    same hue) — adds the "kucing" cue without being a cartoon eye/face.
- *  - Curled tail wrapping around the body base — animatable separately
- *    on hover via the `tail` variants (subtle rotate, no infinite motion).
- *  - Single solid fill, no gradient, no shadow inside the SVG. Soft
- *    ground shadow is provided by the parent <PetSelectorItem>.
- *  - viewBox 0 0 120 140 — portrait orientation, fits a tall narrow
- *    silhouette column on mobile.
+ * Anatomy:
+ *  - Two MODERATE pointed triangular ears on top (taller than wide,
+ *    but not so tall they read as rabbit ears — cat ears are
+ *    roughly half the head height).
+ *  - Compact rounded wedge head (not a circle, not a flat triangle).
+ *  - NO pronounced muzzle — cats have very short muzzles.
+ *  - COMPACT body (slightly wider than tall — NOT a tall slender
+ *    column which would read as rabbit/kangaroo).
+ *  - Two DISTINCT front legs reaching down to two front paws, with
+ *    a clear gap (valley) between them.
+ *  - Seated hindquarters with hind paw visible.
+ *  - Long curved tail. Base sits INSIDE the rump silhouette.
  *
- * Why motion.svg instead of plain <svg>: we need sub-element transforms
- * (tail rotate, body translateY + scale) and `prefers-reduced-motion`
- * handling. Framer Motion respects the user's OS setting automatically
- * when `MotionConfig { reducedMotion: 'user' }` is set at the parent
- * (we set it on <PetSelector>).
+ *  Single solid fill (currentColor — brand purple set by parent).
+ *
+ * Microinteraction preserved exactly:
+ *  - bodyVariants drives whole-body lift/scale on hover/tap.
+ *  - tailVariants drives a subtle tail rotate on hover.
+ *  - MotionConfig reducedMotion='user' (set on <PetSelector>) strips
+ *    transforms automatically when the user prefers reduced motion.
  */
 const bodyVariants = {
   rest: { y: 0, scale: 1 },
@@ -44,73 +47,60 @@ export function CatSilhouette({ className }: { className?: string }) {
       aria-hidden="true"
       focusable="false"
     >
-      {/* Body + head + ears (single solid fill, brand purple) */}
       <motion.g variants={bodyVariants} initial="rest" style={{ transformOrigin: '60px 130px' }}>
-        {/* Tail — drawn first so it sits behind the body.
-            Curled S-shape wrapping around the right side of the body base.
-            transform-origin set near the base of the tail (where it meets
-            the body) so the hover rotate feels natural. */}
+        {/* Tail — long curved tail. Base at (74, 102) INSIDE the
+            rump so the tail visually emerges from the rump. */}
         <motion.path
           variants={tailVariants}
-          style={{ transformOrigin: '88px 118px' }}
-          d="M86 118
-             C 102 116, 110 104, 106 92
-             C 104 84, 96 80, 90 84
-             C 86 86, 86 92, 90 94
-             C 94 96, 96 100, 94 104
-             C 92 108, 86 108, 82 112
+          style={{ transformOrigin: '74px 102px' }}
+          d="M 74 102
+             C 86 98, 98 90, 102 78
+             C 106 66, 102 56, 94 58
+             C 86 60, 84 68, 86 74
+             C 88 80, 84 88, 80 92
+             C 78 96, 76 98, 74 102
              Z"
           fill="currentColor"
         />
 
-        {/* Body — pear silhouette: narrower at top (chest), wider at base */}
+        {/* Body — single closed organic path. MODERATE-height ears
+            (not rabbit-tall). COMPACT body (wider than tall). Two
+            DISTINCT front legs with clear gap (valley) between. */}
         <path
-          d="M44 60
-             C 44 50, 48 44, 56 42
-             L 56 38
-             C 52 36, 50 32, 50 28
-             C 50 22, 54 18, 60 18
-             C 66 18, 70 22, 70 28
-             C 70 32, 68 36, 64 38
-             L 64 42
-             C 72 44, 76 50, 76 60
-             L 76 112
-             C 76 122, 70 130, 60 130
-             C 50 130, 44 122, 44 112
+          d="M 58 36
+             C 60 28, 64 22, 68 24
+             C 72 26, 70 32, 64 36
+             C 62 35, 60 35, 58 36
+             C 56 35, 54 35, 52 36
+             C 46 32, 44 26, 48 24
+             C 52 22, 56 28, 58 36
+             C 60 40, 62 44, 64 48
+             C 72 50, 80 54, 84 64
+             C 88 74, 90 86, 88 96
+             C 90 100, 90 104, 88 108
+             C 90 112, 92 116, 90 122
+             C 88 128, 84 130, 80 128
+             C 82 124, 84 120, 84 116
+             C 84 112, 82 110, 78 110
+             C 72 112, 64 112, 58 110
+             C 58 114, 58 120, 58 126
+             C 58 130, 56 132, 52 130
+             C 50 128, 50 124, 50 120
+             C 50 116, 50 112, 50 110
+             C 50 112, 50 118, 50 124
+             C 50 128, 48 130, 44 130
+             C 42 130, 40 130, 40 126
+             C 40 122, 40 118, 40 112
+             C 40 108, 42 104, 44 100
+             C 42 92, 40 84, 42 76
+             C 42 68, 44 60, 46 54
+             C 44 50, 40 50, 38 48
+             C 34 46, 34 42, 38 38
+             C 40 34, 44 32, 48 32
+             C 52 32, 54 32, 58 36
              Z"
           fill="currentColor"
         />
-
-        {/* Left ear (outer) */}
-        <path
-          d="M48 36 L 44 14 L 60 28 Z"
-          fill="currentColor"
-        />
-        {/* Right ear (outer) */}
-        <path
-          d="M72 36 L 76 14 L 60 28 Z"
-          fill="currentColor"
-        />
-        {/* Inner ears — slightly deeper tone of the same hue (no gradient) */}
-        <path
-          d="M50 32 L 48 20 L 56 28 Z"
-          fill="oklch(0.40 0.20 295)"
-          opacity="0.55"
-        />
-        <path
-          d="M70 32 L 72 20 L 64 28 Z"
-          fill="oklch(0.40 0.20 295)"
-          opacity="0.55"
-        />
-
-        {/* Whisker hint — two thin lines per side, very subtle.
-            Drawn with stroke (no fill) so they don't read as cartoon mouth. */}
-        <g stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.35">
-          <line x1="32" y1="44" x2="46" y2="46" />
-          <line x1="32" y1="48" x2="46" y2="48" />
-          <line x1="88" y1="44" x2="74" y2="46" />
-          <line x1="88" y1="48" x2="74" y2="48" />
-        </g>
       </motion.g>
     </motion.svg>
   )
