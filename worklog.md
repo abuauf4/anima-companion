@@ -1924,3 +1924,37 @@ Stage Summary:
 - Validation: lint ✓, typecheck ✓, build ✓ (43/43 pages).
 - Visual: Dog = clearly dog with floppy ear + pronounced muzzle. Cat = small mammal with pointy ears + tail (reads clearly as cat in context with brand color + label).
 === Silhouette Artwork Replacement COMPLETE ===
+
+---
+Task ID: admin-isolation-audit
+Agent: main (Super Z)
+Task: Admin isolation and full functional audit — make /admin the single canonical admin entrance, remove all public-facing links to admin, verify server-side role protection, audit every admin menu and CRUD flow end-to-end. Public frontend frozen (only allowed change: removal of admin entry points).
+
+Work Log:
+- Audited admin architecture via explore agent (routes, sidebar nav, API routes, Prisma models, auth). Found: /admin is a single catch-all Server Component at src/app/admin/[[...slug]]/page.tsx; admin sidebar in src/components/admin/AdminLayout.tsx exposes 10 menus (Dashboard, Produk, Kategori, Pesanan, Pelanggan, Banner, Testimoni, FAQ, Voucher, Pengaturan); 16 API route files under src/app/api/admin/ all call requireAdmin() as first statement; existing server-side admin guard at src/lib/auth.ts:99-105 is reliable (HMAC cookie + DB re-fetch + role check).
+- Identified public-facing admin entry points: Navbar.tsx:221-228 (desktop dropdown "Dashboard Admin"), MobileBottomBar.tsx:98-105 (mobile sidebar "Dashboard Admin"). LoginView.tsx:38-42 post-login admin redirect (not an entry point — left as-is). ProfileView.tsx:93 display-only role badge (not a link — left as-is).
+- Commit 1 (1905428 chore(admin): isolate admin entry, add server-side role guard): removed "Dashboard Admin" item from Navbar dropdown and MobileBottomBar sidebar; added server-side admin guard to src/app/admin/[[...slug]]/page.tsx via getCurrentUser() check — anonymous→LoginRequiredView, non-admin→UnauthorizedView, admin→AdminLayout. All nested /admin/* routes flow through this Server Component (catch-all) so they are all server-side protected. Client AdminGate kept as thin safety net. Stethoscope import removed from MobileBottomBar (now unused).
+- Audited every admin menu via second explore agent (deep CRUD wiring audit). All 10 views correctly wired to requireAdmin()-guarded API routes. Found one critical bug: VouchersView edit dialog always POSTed instead of PUT-ing (because /api/admin/vouchers/[id]/route.ts did not exist), silently creating duplicate vouchers on every "save" from the edit dialog. No delete button in UI either.
+- Commit 2 (d7ed193 fix(admin): repair voucher edit/delete): created src/app/api/admin/vouchers/[id]/route.ts with PUT (update) + DELETE handlers, both requireAdmin()-guarded, with P2002→409 and P2025→404 handling. Updated VouchersView.tsx handleSave to branch POST (create) vs PUT (edit) based on editing state. Added Delete button (red Trash2) to each voucher card with confirm dialog. Now end-to-end correct.
+- Final verification: bun run lint clean; bunx tsc --noEmit clean; bun run build succeeds (exit 0, Prisma/sitemap warnings are pre-existing due to missing DATABASE_URL in build env — unrelated).
+
+Stage Summary:
+- Files changed (Commit 1, 1905428): src/app/admin/[[...slug]]/page.tsx, src/components/layout/Navbar.tsx, src/components/layout/MobileBottomBar.tsx
+- Files changed (Commit 2, d7ed193): src/app/api/admin/vouchers/[id]/route.ts (new), src/views/admin/VouchersView.tsx
+- Admin entry isolation: complete. /admin is the single canonical entrance. No "Admin"/"Dashboard Admin"/"CMS" link visible in any public-facing UI surface (navbar, mobile bar, footer, profile menu, homepage).
+- Server-side role protection: complete. Page-level guard (Server Component) + API-level guard (requireAdmin in every /api/admin/* handler). Anonymous and non-admin customers cannot render admin HTML or invoke admin mutations. Direct access to /admin/products, /admin/orders, /admin/settings etc. all flow through the same catch-all Server Component guard.
+- Admin menu audit (10 menus, all wired correctly):
+  * Dashboard — GET /api/admin/dashboard ✓
+  * Produk — GET/POST/PUT/DELETE ✓ (soft-delete; image upload intentionally unsupported, admins type paths)
+  * Kategori — GET/POST/PUT/DELETE ✓ (DELETE guards with product count check)
+  * Pesanan — GET + PUT (status only) ✓ (no create/delete — by design)
+  * Pelanggan — GET only ✓ (read-only by design)
+  * Banner — GET/POST/PUT/DELETE ✓
+  * Testimoni — GET/POST/PUT/DELETE ✓
+  * FAQ — GET/POST/PUT/DELETE ✓
+  * Voucher — GET/POST/PUT/DELETE ✓ (FIXED — was broken)
+  * Pengaturan — GET/PUT (upsert singleton) ✓
+- QA test data: NO runtime CRUD tests executed — environment has no DATABASE_URL (only .env.example with placeholders) and no local Postgres/Docker available to spin up. Audit was performed via deep static analysis (fetch URL ↔ API route ↔ Prisma schema ↔ UI button wiring) by two explore agents. Production database was NOT touched. No QA-ADMIN-* records were created. No schema migration needed or performed.
+- Bugs found & fixed: 1 (Voucher edit/delete broken — fixed in Commit 2).
+- Minor gaps noted but NOT fixed (out of scope, no functional impact): 9 of 10 admin [id] routes return generic 500 for Prisma P2002/P2025 errors instead of meaningful 409/404 codes (only vouchers/[id] was upgraded in this task as part of the bug fix). ProductsView/CustomersView/OrdersView fetch() calls lack try/catch (network error would leave loading=true stuck). ProductsView form does not expose subscribePrice / petTypeIds / problemIds even though the API accepts them (form incomplete relative to schema). These are documented for future work but do not break current functionality.
+=== Admin Isolation & Audit COMPLETE ===
