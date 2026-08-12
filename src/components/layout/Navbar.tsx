@@ -63,8 +63,12 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border/60 glass shadow-sm">
-      {/* Main nav */}
-      <div className="container-page flex h-14 items-center gap-3 md:h-16 md:gap-6">
+      {/* Main nav.
+          Desktop (>= lg): aligns to container-wide (max-w 75rem / 1200px) so
+          the navbar feels proportionate to the wider hero composition below
+          it instead of the older max-w-7xl strip that left the hero artwork
+          visually orphaned. Mobile keeps container-page padding. */}
+      <div className="container-page flex h-14 items-center gap-3 md:h-16 md:gap-6 lg:container-wide lg:gap-8">
         <Logo />
 
         {/* Desktop search with autocomplete */}
@@ -271,7 +275,7 @@ export function Navbar() {
         </div>
       </div>
 
-      {/* Mobile search sheet */}
+      {/* Mobile search sheet — md:hidden, so container choice here is mobile-only. */}
       {searchOpen && (
         <div className="md:hidden border-t border-border bg-card">
           <div className="container-page py-3">

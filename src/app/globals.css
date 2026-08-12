@@ -219,6 +219,14 @@
   .container-narrow {
     @apply mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8;
   }
+  /* container-wide — desktop-first hero / navbar composition.
+     Capped at 75rem (1200px) so the two-column hero (~40% text / 60%
+     image) feels intentional rather than stretched. Below the lg
+     breakpoint it falls back to the same horizontal padding as
+     container-page so mobile layout is untouched. */
+  .container-wide {
+    @apply mx-auto w-full px-4 sm:px-6 lg:max-w-[75rem] lg:px-10;
+  }
 
   /* Brand gradients */
   .gradient-brand {

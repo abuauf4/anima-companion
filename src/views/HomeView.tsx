@@ -96,30 +96,51 @@ export function HomeView() {
 
   return (
     <div className="overflow-x-hidden">
-      {/* ==================== HERO — Phase 1.1 ====================
-          Image IS the hero surface. Copy overlays directly on the image at
-          the bottom-left, with a subtle dark scrim for legibility only.
-          No glass card, no eyebrow, no CTA button — Shop Cats / Shop Dogs
-          immediately below serve as the primary shopping entry.
+      {/* ==================== HERO ====================
+          Mobile (default → md → below lg):
+            Image IS the hero surface. Copy overlays directly on the image at
+            the bottom-left, with a subtle dark scrim for legibility only.
+            No glass card, no eyebrow, no CTA button — Shop Cats / Shop Dogs
+            immediately below serve as the primary shopping entry.
 
-          Image source: /hero-pets.webp (not /hero-pets-fresh.webp) — the older
-          composition has both pet faces nestled in the center of the frame,
-          so a portrait crop on mobile shows both faces clearly instead of
-          cropping them out at the left/right edges.
+            Image source: /hero-pets.webp. The older composition has both pet
+            faces nestled in the center of the frame, so a portrait crop on
+            mobile shows both faces clearly instead of cropping them out at
+            the left/right edges. Mobile aspect is square (1/1) — ~20%
+            shorter than the previous 4/5 portrait so the 'Pilih untuk siapa'
+            section is revealed sooner without as much scroll.
 
-          Mobile aspect: square (1/1) — ~20% shorter than the previous 4/5
-          portrait so the 'Pilih untuk siapa' section is revealed sooner
-          without as much scroll. Safe for pet faces because the source image
-          is landscape (1280x731) inside a portrait container, so the image
-          is scaled to container height with a horizontal center crop — at
-          1/1 we actually see a WIDER horizontal slice (~57% vs ~46% at 4/5)
-          so the nestled faces stay fully visible. Headline + supporting
-          copy remain anchored bottom-left and readable; rounded corners,
-          scrim, and overlay treatment are unchanged. Desktop keeps the
-          existing 5/4 landscape aspect. */}
+          Desktop (>= lg, intentional horizontal composition — NOT a stretched
+          mobile layout):
+            Two-column grid: ~40% text (left) / 60% image (right) inside a
+            centered container-wide (max-w 1200px) so the composition feels
+            proportionate and premium rather than oversized and dominating
+            the viewport.
 
-      <section ref={heroRef} className="relative bg-background pb-2 pt-3 md:pb-4 md:pt-6">
-        <div className="container-page">
+            - Hero total height locked to ~500px (h-[480px] xl:h-[520px]) —
+              well below one full viewport, so the 'Pilih untuk siapa'
+              section peeks into view on first paint at 1024–1440px.
+            - LEFT column: text on the warm cream homepage background, in
+              the existing brand colors/typography. Headline + supporting
+              line only — no 'Belanja Sekarang' CTA, no eyebrow, no badge.
+              Vertically centered so the headline aligns with the image's
+              visual midline. A subtle horizontal divider rule under the
+              headline gives editorial anchoring without crowding.
+            - RIGHT column: the existing cat + dog hero image inside a
+              rounded-3xl container with overflow-hidden. Image is
+              object-cover with object-center so both faces stay visible
+              and the image is never stretched. Same dark scrim treatment
+              at the bottom is kept (subtle, tapers up) — it preserves
+              brand consistency with the mobile hero even though desktop
+              text lives outside the image.
+            - Mobile hero is COMPLETELY UNCHANGED. The desktop two-column
+              markup only renders at lg+ (it is hidden below lg via
+              lg:flex / hidden lg:block toggles). The mobile hero markup
+              only renders below lg (hidden at lg via lg:hidden). */}
+
+      <section ref={heroRef} className="relative bg-background pb-2 pt-3 md:pb-4 md:pt-6 lg:pb-6 lg:pt-10">
+        {/* ---------- Mobile hero (default → below lg) — UNCHANGED ---------- */}
+        <div className="container-page lg:hidden">
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -152,7 +173,67 @@ export function HomeView() {
             </div>
           </motion.div>
         </div>
+
+        {/* ---------- Desktop hero (>= lg) — horizontal two-column composition ---------- */}
+        <div className="container-wide hidden lg:flex">
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="grid w-full grid-cols-[2fr_3fr] items-stretch gap-8 xl:gap-12"
+          >
+            {/* LEFT column — text on the warm cream homepage background.
+                Approx 40% width (2fr / 5fr total). No card, no CTA, just
+                the headline + supporting copy + a subtle accent divider.
+                Vertically centered so the text aligns with the image's
+                visual midline (~500px tall column). */}
+            <div className="flex flex-col justify-center py-6 xl:py-8">
+              <h1 className="text-balance text-[40px] font-bold leading-[1.05] tracking-tight text-foreground xl:text-[52px]">
+                {settings?.heroTitle1 || 'Elevating'}{' '}
+                <span className="text-primary">{settings?.heroTitle2 || 'Animal Health'}</span>
+              </h1>
+
+              {/* Editorial divider rule — short, accent-tinted. Acts as a
+                  visual anchor between the headline and the supporting
+                  copy. Single accent color (brand orange primary) so it
+                  ties to the brand system already used across the site. */}
+              <div className="my-5 h-px w-16 bg-primary/40 xl:my-6 xl:w-20" />
+
+              <p className="max-w-md text-pretty text-base leading-relaxed text-muted-foreground xl:text-lg">
+                Suplemen &amp; vitamin premium untuk hewan peliharaan.
+              </p>
+            </div>
+
+            {/* RIGHT column — existing hero image, ~60% width (3fr / 5fr).
+                Fixed height ~500px so the hero never dominates the desktop
+                viewport. Premium rounded-3xl corners + overflow-hidden.
+                Image is object-cover with object-center: the source is
+                landscape (1280x731) and both pet faces sit in the center
+                of the frame, so centering keeps both faces clearly visible
+                and uncropped on every desktop width (1024 / 1280 / 1440).
+                The same subtle bottom scrim as the mobile hero is kept for
+                brand consistency — it tapers up so the upper image stays
+                crisp even though no text overlays the image on desktop. */}
+            <div className="relative h-[480px] w-full overflow-hidden rounded-3xl bg-muted xl:h-[520px]">
+              <OptImage
+                src="/hero-pets.webp"
+                alt="Anima Companion — suplemen & vitamin hewan peliharaan"
+                fill
+                priority
+                sizes="(min-width: 1280px) 720px, 60vw"
+                className="object-cover object-center"
+              />
+              {/* Subtle bottom scrim — kept for brand consistency with the
+                  mobile hero. No text sits on the image on desktop, so the
+                  scrim is purely an aesthetic anchor that ties the image
+                  into the cream background and rounds the visual weight
+                  toward the bottom edge. */}
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
+            </div>
+          </motion.div>
+        </div>
       </section>
+
 
       {/* ==================== PET SELECTOR — floating silhouette CTAs (Phase 1.3) ====================
           Two floating visual CTAs (no card container): Kucing (purple

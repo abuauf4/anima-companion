@@ -33,17 +33,24 @@ export function PetSelector({ children }: { children: React.ReactNode }) {
     <MotionConfig reducedMotion="user">
       <section
         aria-label="Pilih kategori hewan"
-        className="bg-background px-5 py-10 md:px-8 md:py-14"
+        className="bg-background px-5 py-10 md:px-8 md:py-14 lg:py-16 xl:py-20"
       >
-        <div className="mx-auto w-full max-w-3xl">
+        {/* Mobile / md: keep the existing max-w-3xl centered column so the
+            mobile pet selector composition is COMPLETELY UNCHANGED.
+            Desktop (>= lg): widen to container-wide so the pet selector
+            aligns to the wider two-column hero above it and feels
+            intentionally spaced on desktop, not cramped. */}
+        <div className="mx-auto w-full max-w-3xl lg:max-w-[75rem] lg:px-2">
           {/* Small editorial section heading. Visually uppercase via CSS,
               letter-spaced for an editorial feel. */}
-          <h2 className="mb-8 text-center text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground md:mb-10 md:text-xs">
+          <h2 className="mb-8 text-center text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground md:mb-10 md:text-xs lg:mb-12">
             Pilih untuk siapa
           </h2>
 
-          {/* Two-column grid. No card container — pets float on background. */}
-          <div className="grid grid-cols-2 items-start gap-5 md:gap-12">
+          {/* Two-column grid. No card container — pets float on background.
+              Desktop gap widens slightly so the two pets breathe at the
+              wider container width. */}
+          <div className="grid grid-cols-2 items-start gap-5 md:gap-12 lg:gap-16 xl:gap-24">
             {children}
           </div>
         </div>
