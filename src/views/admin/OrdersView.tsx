@@ -14,6 +14,7 @@ import {
 import { ShoppingCart, ChevronLeft, ChevronRight, MessageCircle } from 'lucide-react'
 import { formatRupiah, formatDateTime, ORDER_STATUS } from '@/lib/format'
 import { whatsappAdminUrl } from '@/lib/config'
+import { toast } from 'sonner'
 
 interface Order {
   id: string
@@ -66,9 +67,19 @@ export function OrdersView() {
       body: JSON.stringify({ status }),
     })
     if (res.ok) {
-      // Update local state
-      setOrders(orders.map((o) => o.id === id ? { ...o, status } : o))
-      if (selected?.id === id) setSelected({ ...selected, status })
+      const data = await res.json()
+      const updatedOrder = data.order
+      // Update local state with the server's authoritative version of the
+      // order (includes refreshed items + status).
+      setOrders(orders.map((o) => o.id === id ? { ...o, ...updatedOrder } : o))
+      if (selected?.id === id) setSelected({ ...selected, ...updatedOrder })
+    } else {
+      // Server rejected the transition (e.g. CANCELLED → PENDING is forbidden,
+      // or unknown status value). Show the error message and reload so the
+      // local UI snaps back to the authoritative server state.
+      const data = await res.json().catch(() => ({}))
+      toast.error(data.error || 'Gagal mengubah status pesanan')
+      load()
     }
   }
 

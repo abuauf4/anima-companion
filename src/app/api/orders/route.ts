@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
-import { generateOrderNumber } from '@/lib/format'
+import { createOrder, OrderError } from '@/lib/orders'
 
+/**
+ * GET /api/orders — list orders for the authenticated customer.
+ *
+ * Customers see only their own orders. Admins are NOT special-cased here
+ * (they use /api/admin/orders which is role-guarded separately). If a user
+ * is not authenticated, return 401.
+ */
 export async function GET() {
   try {
     const user = await getCurrentUser()
@@ -21,110 +28,69 @@ export async function GET() {
   }
 }
 
+/**
+ * POST /api/orders — create a customer order.
+ *
+ * SECURITY INVARIANTS:
+ *
+ * 1. The customer is derived from the authenticated server session via
+ *    `getCurrentUser()`. The request body NEVER supplies a userId — any
+ *    `userId` field in the body is ignored. Unauthenticated requests
+ *    receive 401.
+ *
+ * 2. The body supplies only `{ items: [{productId, quantity}], ... }`.
+ *    Product name, SKU, price, salePrice, stock, and isActive are all
+ *    fetched server-side from PostgreSQL inside the create-order
+ *    transaction. Client-supplied values for these are NEVER used.
+ *
+ * 3. Stock check and decrement are atomic inside the transaction. If any
+ *    product is missing, inactive, or out of stock, the entire transaction
+ *    rolls back — no partial orders, no negative stock.
+ *
+ * 4. Order numbers are generated race-safely via unique constraint + retry.
+ *
+ * See src/lib/orders.ts for the full implementation.
+ */
 export async function POST(req: NextRequest) {
   try {
+    // ----- 1. Authenticate -----
     const user = await getCurrentUser()
-    const body = await req.json()
-    const { items, customerName, customerPhone, address, notes, voucherCode } = body
-
-    if (!items?.length || !customerName || !customerPhone || !address) {
+    if (!user) {
       return NextResponse.json(
-        { error: 'Data pesanan tidak lengkap' },
-        { status: 400 }
+        { error: 'Login diperlukan untuk checkout', code: 'UNAUTHENTICATED' },
+        { status: 401 }
       )
     }
 
-    // Verify products and compute totals
-    const productIds = items.map((i: any) => i.productId)
-    const products = await db.product.findMany({
-      where: { id: { in: productIds } },
-    })
+    // ----- 2. Parse body (only productId + quantity + delivery info + voucher) -----
+    const body = await req.json()
+    const { items, customerName, customerPhone, address, notes, voucherCode } = body
 
-    let subtotal = 0
-    const orderItems: {
-      productId: string
-      productName: string
-      productSku: string
-      price: number
-      quantity: number
-      subtotal: number
-    }[] = []
-    for (const item of items as Array<{ productId: string; quantity: number }>) {
-      const product = products.find((p) => p.id === item.productId)
-      if (!product) continue
-      const price = product.salePrice ?? product.price
-      const lineSubtotal = price * item.quantity
-      subtotal += lineSubtotal
-      orderItems.push({
-        productId: product.id,
-        productName: product.name,
-        productSku: product.sku,
-        price,
-        quantity: item.quantity,
-        subtotal: lineSubtotal,
-      })
-    }
-
-    if (!orderItems.length) {
-      return NextResponse.json({ error: 'Tidak ada item valid' }, { status: 400 })
-    }
-
-    // Validate voucher if provided
-    let discount = 0
-    let appliedVoucherCode: string | null = null
-    if (voucherCode) {
-      const voucher = await db.voucher.findUnique({
-        where: { code: voucherCode.toUpperCase().trim() },
-      })
-      if (voucher && voucher.isActive && subtotal >= voucher.minSpend) {
-        if (!voucher.validUntil || new Date(voucher.validUntil) > new Date()) {
-          discount =
-            voucher.type === 'PERCENTAGE'
-              ? Math.round((subtotal * voucher.value) / 100)
-              : voucher.value
-          appliedVoucherCode = voucher.code
-        }
-      }
-    }
-
-    const total = Math.max(0, subtotal - discount)
-
-    // Generate order number
-    const today = new Date()
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-    const todayCount = await db.order.count({
-      where: { createdAt: { gte: todayStart } },
-    })
-    const orderNumber = generateOrderNumber(todayCount + 1)
-
-    const order = await db.order.create({
-      data: {
-        orderNumber,
-        userId: user?.id || null,
-        status: 'PENDING',
-        customerName,
-        customerPhone,
-        address,
-        notes: notes || null,
-        subtotal,
-        discount,
-        total,
-        voucherCode: appliedVoucherCode,
-        items: { create: orderItems },
+    // ----- 3. Create the order (transactional stock integrity) -----
+    const order = await createOrder({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        phone: user.phone,
       },
-      include: { items: true },
+      items,
+      customerName,
+      customerPhone,
+      address,
+      notes,
+      voucherCode,
     })
-
-    // Reduce stock
-    for (const item of orderItems) {
-      await db.product.update({
-        where: { id: item.productId },
-        data: { stock: { decrement: item.quantity } },
-      })
-    }
 
     return NextResponse.json({ order })
-  } catch (e) {
+  } catch (e: any) {
+    // OrderError carries a structured status + code
+    if (e instanceof OrderError) {
+      return NextResponse.json(
+        { error: e.message, code: e.code },
+        { status: e.status }
+      )
+    }
     console.error('Create order error:', e)
     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 })
   }

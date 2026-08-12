@@ -11,7 +11,7 @@ import { Mail, Lock, User, Phone, Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
 
 export function RegisterView() {
-  const { navigate } = useHashRouter()
+  const { route, navigate } = useHashRouter()
   const { refresh } = useAuth()
   const [form, setForm] = useState({
     name: '',
@@ -22,6 +22,10 @@ export function RegisterView() {
   })
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  // Honor ?next=... so a customer sent from /checkout lands back on checkout
+  // after registering, instead of being dropped on the homepage.
+  const nextPath = route.query.get('next') || ''
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -53,7 +57,13 @@ export function RegisterView() {
       if (!res.ok) throw new Error(data.error)
       toast.success(`Akun dibuat! Selamat datang, ${data.user.name}!`)
       await refresh()
-      navigate('/')
+      // Go back to the page the user was trying to reach (e.g. /checkout),
+      // otherwise fall through to the homepage.
+      if (nextPath && nextPath.startsWith('/')) {
+        navigate(nextPath)
+      } else {
+        navigate('/')
+      }
     } catch (e: any) {
       toast.error(e.message || 'Gagal mendaftar')
     } finally {

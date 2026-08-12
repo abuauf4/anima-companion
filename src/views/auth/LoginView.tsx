@@ -19,11 +19,15 @@ import { toast } from 'sonner'
 const SHOW_DEMO_CREDENTIALS = process.env.NODE_ENV !== 'production'
 
 export function LoginView() {
-  const { navigate } = useHashRouter()
+  const { route, navigate } = useHashRouter()
   const { refresh } = useAuth()
   const [form, setForm] = useState({ email: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  // Honor ?next=... so users returning from /checkout land back on the page
+  // they came from after a successful login. Defaults to home or admin.
+  const nextPath = route.query.get('next') || ''
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -42,7 +46,11 @@ export function LoginView() {
       if (!res.ok) throw new Error(data.error)
       toast.success(`Selamat datang, ${data.user.name}!`)
       await refresh()
-      if (data.user.role === 'ADMIN') {
+      // If an explicit ?next= target was set (e.g. /checkout), go there.
+      // Otherwise admins go to /admin and customers go to /.
+      if (nextPath && nextPath.startsWith('/')) {
+        navigate(nextPath)
+      } else if (data.user.role === 'ADMIN') {
         navigate('/admin')
       } else {
         navigate('/')

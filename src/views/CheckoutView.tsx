@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Image as OptImage } from '@/components/common/Image'
-import { Check, MessageCircle, ShoppingBag, ArrowLeft, ChevronRight } from 'lucide-react'
+import { Check, MessageCircle, ShoppingBag, ArrowLeft, ChevronRight, LogIn } from 'lucide-react'
 import { formatRupiah, effectivePrice } from '@/lib/format'
 import { generateWhatsAppMessage, buildWhatsAppUrl } from '@/lib/whatsapp'
 import { SITE_CONFIG } from '@/lib/config'
@@ -52,6 +52,39 @@ export function CheckoutView() {
     )
   }
 
+  // Auth gate: cart is allowed without login (browsing/adding), but checkout
+  // requires an authenticated registered user. Cart is preserved in
+  // localStorage by useCartStore (zustand persist middleware) — after login,
+  // the user returns to /checkout and the cart is still there.
+  if (!user) {
+    return (
+      <div className="container-page flex min-h-[60vh] flex-col items-center justify-center py-20 text-center">
+        <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-accent">
+          <LogIn className="h-12 w-12 text-muted-foreground" />
+        </div>
+        <h1 className="mb-2 text-2xl font-bold">Login Diperlukan</h1>
+        <p className="mb-6 max-w-md text-muted-foreground">
+          Anda harus masuk ke akun untuk menyelesaikan checkout. Keranjang Anda
+          akan tetap tersimpan setelah login.
+        </p>
+        <div className="flex gap-3">
+          <Button onClick={() => navigate('/login?next=/checkout')} className="gap-2">
+            <LogIn className="h-4 w-4" /> Masuk
+          </Button>
+          <Button onClick={() => navigate('/register?next=/checkout')} variant="outline" className="gap-2">
+            Daftar
+          </Button>
+        </div>
+        <button
+          onClick={() => navigate('/cart')}
+          className="mt-4 text-sm text-muted-foreground hover:text-primary"
+        >
+          Kembali ke keranjang
+        </button>
+      </div>
+    )
+  }
+
   const handleSubmit = async () => {
     if (!form.customerName || !form.customerPhone || !form.address) {
       toast.error('Lengkapi data pengiriman terlebih dahulu')
@@ -76,7 +109,27 @@ export function CheckoutView() {
         }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
+      if (!res.ok) {
+        // Structured error handling based on server response.
+        // 401 — session expired mid-checkout
+        // 409 — out of stock (cart needs updating)
+        // 400 — invalid/inactive product or invalid quantity
+        // 500 — unexpected server error
+        if (res.status === 401) {
+          toast.error('Sesi login berakhir. Silakan masuk kembali.')
+          setTimeout(() => navigate('/login?next=/checkout'), 1500)
+          return
+        }
+        if (res.status === 409) {
+          toast.error(data.error || 'Stok produk tidak mencukupi. Keranjang Anda mungkin perlu diperbarui.')
+          return
+        }
+        if (res.status === 400) {
+          toast.error(data.error || 'Ada produk tidak valid di keranjang. Silakan periksa kembali.')
+          return
+        }
+        throw new Error(data.error || 'Gagal membuat pesanan')
+      }
 
       // Generate WhatsApp message
       const waMessage = generateWhatsAppMessage({
