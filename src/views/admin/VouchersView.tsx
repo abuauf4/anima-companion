@@ -51,6 +51,25 @@ export function VouchersView() {
     toast.success(`Kode ${code} disalin`)
   }
 
+  // Delete a voucher via DELETE /api/admin/vouchers/[id].
+  // Confirms first (irreversible). Voucher has no FK relations so
+  // deletion is safe — existing orders keep their voucherCode string
+  // snapshot, no cascade damage.
+  const handleDelete = async (v: Voucher) => {
+    if (!confirm(`Hapus voucher ${v.code}? Tindakan ini tidak dapat dibatalkan.`)) return
+    try {
+      const res = await fetch(`/api/admin/vouchers/${v.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Gagal menghapus')
+      }
+      toast.success(`Voucher ${v.code} dihapus`)
+      load()
+    } catch (e: any) {
+      toast.error(e?.message || 'Gagal menghapus voucher')
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -99,6 +118,15 @@ export function VouchersView() {
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditing(v); setDialogOpen(true) }}>
                         <Pencil className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive hover:text-destructive"
+                        aria-label={`Hapus voucher ${v.code}`}
+                        onClick={() => handleDelete(v)}
+                      >
+                        <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
                   </div>
@@ -181,20 +209,26 @@ function VoucherDialog({
         minSpend: parseInt(form.minSpend) || 0,
         validUntil: form.validUntil || null,
       }
-      // Note: this demo only supports create (POST). For edit, would need PUT endpoint.
-      const url = '/api/admin/vouchers'
-      const method = 'POST'
+      // Edit existing voucher via PUT /api/admin/vouchers/[id]; create new
+      // via POST /api/admin/vouchers. The [id] route was missing in the
+      // original implementation, which forced the UI to always POST and
+      // created duplicate vouchers on "save" — fixed.
+      const url = editing ? `/api/admin/vouchers/${editing.id}` : '/api/admin/vouchers'
+      const method = editing ? 'PUT' : 'POST'
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      if (!res.ok) throw new Error('Gagal menyimpan')
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Gagal menyimpan')
+      }
       toast.success(editing ? 'Voucher diperbarui' : 'Voucher ditambahkan')
       onOpenChange(false)
       onSaved()
-    } catch {
-      toast.error('Gagal menyimpan voucher')
+    } catch (e: any) {
+      toast.error(e?.message || 'Gagal menyimpan voucher')
     } finally {
       setSaving(false)
     }
