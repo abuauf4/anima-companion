@@ -104,8 +104,19 @@ export function HomeView() {
 
           Image source: /hero-pets.webp (not /hero-pets-fresh.webp) — the older
           composition has both pet faces nestled in the center of the frame,
-          so a portrait 4/5 crop on mobile shows both faces clearly instead
-          of cropping them out at the left/right edges. */}
+          so a portrait crop on mobile shows both faces clearly instead of
+          cropping them out at the left/right edges.
+
+          Mobile aspect: square (1/1) — ~20% shorter than the previous 4/5
+          portrait so the 'Pilih untuk siapa' section is revealed sooner
+          without as much scroll. Safe for pet faces because the source image
+          is landscape (1280x731) inside a portrait container, so the image
+          is scaled to container height with a horizontal center crop — at
+          1/1 we actually see a WIDER horizontal slice (~57% vs ~46% at 4/5)
+          so the nestled faces stay fully visible. Headline + supporting
+          copy remain anchored bottom-left and readable; rounded corners,
+          scrim, and overlay treatment are unchanged. Desktop keeps the
+          existing 5/4 landscape aspect. */}
 
       <section ref={heroRef} className="relative bg-background pb-2 pt-3 md:pb-4 md:pt-6">
         <div className="container-page">
@@ -113,7 +124,7 @@ export function HomeView() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="relative aspect-[4/5] w-full overflow-hidden rounded-3xl bg-muted md:aspect-[5/4]"
+            className="relative aspect-square w-full overflow-hidden rounded-3xl bg-muted md:aspect-[5/4]"
           >
             <OptImage
               src="/hero-pets.webp"
@@ -121,7 +132,7 @@ export function HomeView() {
               fill
               priority
               sizes="(max-width: 768px) 100vw, 100vw"
-              className="object-cover"
+              className="object-cover object-center"
             />
 
             {/* Subtle dark scrim at the bottom — only behind the text area,
