@@ -7,9 +7,16 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card } from '@/components/ui/card'
-import { Mail, Lock, Eye, EyeOff, MessageCircle } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
-import { SITE_CONFIG } from '@/lib/config'
+
+// Demo-credential helpers are only available when Next.js is running in
+// development mode. In production builds, `process.env.NODE_ENV === 'production'`
+// is inlined at build time, and the entire demo-credentials Card is excluded
+// from the bundle by the dead-code-elimination pass. This guarantees that
+// `admin@anima.id`, `budi@example.com`, `admin123`, and `customer123` can
+// never appear in the production client bundle.
+const SHOW_DEMO_CREDENTIALS = process.env.NODE_ENV !== 'production'
 
 export function LoginView() {
   const { navigate } = useHashRouter()
@@ -129,26 +136,32 @@ export function LoginView() {
           </p>
         </Card>
 
-        {/* Demo credentials */}
-        <Card className="mt-4 bg-accent/50 p-4">
-          <p className="mb-2 text-xs font-medium text-muted-foreground">Akun Demo (klik untuk isi otomatis):</p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => fillDemo('admin')}
-              className="rounded-lg border border-border bg-card p-2.5 text-left text-xs hover:border-primary/30"
-            >
-              <p className="font-semibold text-primary">Admin</p>
-              <p className="text-muted-foreground">admin@anima.id</p>
-            </button>
-            <button
-              onClick={() => fillDemo('customer')}
-              className="rounded-lg border border-border bg-card p-2.5 text-left text-xs hover:border-primary/30"
-            >
-              <p className="font-semibold text-secondary">Customer</p>
-              <p className="text-muted-foreground">budi@example.com</p>
-            </button>
-          </div>
-        </Card>
+        {/* Demo credentials — DEVELOPMENT ONLY.
+            Gated by process.env.NODE_ENV (inlined at build time). In production
+            builds, SHOW_DEMO_CREDENTIALS is `false` and this entire block is
+            tree-shaken out of the client bundle, so the demo email/password
+            strings can never appear in production. */}
+        {SHOW_DEMO_CREDENTIALS && (
+          <Card className="mt-4 bg-accent/50 p-4">
+            <p className="mb-2 text-xs font-medium text-muted-foreground">Akun Demo (klik untuk isi otomatis):</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => fillDemo('admin')}
+                className="rounded-lg border border-border bg-card p-2.5 text-left text-xs hover:border-primary/30"
+              >
+                <p className="font-semibold text-primary">Admin</p>
+                <p className="text-muted-foreground">admin@anima.id</p>
+              </button>
+              <button
+                onClick={() => fillDemo('customer')}
+                className="rounded-lg border border-border bg-card p-2.5 text-left text-xs hover:border-primary/30"
+              >
+                <p className="font-semibold text-secondary">Customer</p>
+                <p className="text-muted-foreground">budi@example.com</p>
+              </button>
+            </div>
+          </Card>
+        )}
       </div>
     </div>
   )
