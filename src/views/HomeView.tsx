@@ -10,19 +10,18 @@ import { Reveal, Stagger, StaggerItem } from '@/components/common/Reveal'
 import {
   Shield, Utensils, Sparkles, Bone, Activity, Eye, Heart, Sun,
   ArrowRight, MessageCircle, Star, ChevronRight, ChevronLeft,
+  PawPrint,
   Mail, Gift,
 } from 'lucide-react'
 import {
-  Product,
+  Product, PetType,
 } from '@/hooks/use-fetch'
 import { useHomeData } from '@/hooks/use-home-data'
 import { VetSection } from '@/components/home/VetSection'
 import { IngredientsReveal } from '@/components/home/IngredientsReveal'
-import { PetSelector, PetSelectorItem } from '@/components/home/PetSelector'
 import { motion, useMotionValue, useTransform } from 'framer-motion'
 import { toast } from 'sonner'
 import { formatRupiah } from '@/lib/format'
-import { useHomeHeroStore } from '@/lib/store'
 
 const PROBLEM_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   imunitas: Shield,
@@ -47,6 +46,7 @@ export function HomeView() {
     newProducts,
     problems,
     testimonials,
+    petTypes,
     settings,
   } = useHomeData()
 
@@ -61,208 +61,140 @@ export function HomeView() {
     setEmailValue('')
   }
 
-  // Redesign Phase 1.2 — Mobile nav hide/reveal.
-  // Observe the hero section; publish its visibility to a small zustand store
-  // so <MobileBottomBar /> (rendered globally by SiteShell) can slide off when
-  // the hero is on-screen and reveal with a slide-up/fade when it scrolls out.
-  const heroRef = useRef<HTMLElement>(null)
-  const setHeroVisible = useHomeHeroStore((s) => s.setVisible)
-  useEffect(() => {
-    const el = heroRef.current
-    if (!el) return
-    // Initialize as visible on mount (hero is at top of page).
-    setHeroVisible(true)
-    const obs = new IntersectionObserver(
-      (entries) => {
-        // Hero is large; track the top 30% as the "hero still visible" signal
-        // so the bar starts revealing once the hero headline area scrolls past.
-        for (const entry of entries) {
-          setHeroVisible(entry.isIntersecting)
-        }
-      },
-      // Trigger when the hero's top portion crosses below the threshold line.
-      // rootMargin top: 0, bottom: -60% so the hero is considered "out of view"
-      // when its bottom 40% reaches the viewport top — i.e. user has scrolled
-      // far enough to see Shop-by-Pet cards.
-      { threshold: 0, rootMargin: '0px 0px -60% 0px' }
-    )
-    obs.observe(el)
-    return () => {
-      obs.disconnect()
-      // Reset on unmount so other pages don't inherit a stale "hero visible" flag.
-      setHeroVisible(false)
-    }
-  }, [setHeroVisible])
+  // Only Kucing & Anjing — Anima Companion only sells cat & dog supplements
+  const mainPetTypes = petTypes.filter((p) => ['kucing', 'anjing'].includes(p.slug))
 
   return (
     <div className="overflow-x-hidden">
-      {/* ==================== HERO ====================
-          Mobile (default → md → below lg):
-            Image IS the hero surface. Copy overlays directly on the image at
-            the bottom-left, with a subtle dark scrim for legibility only.
-            No glass card, no eyebrow, no CTA button — Shop Cats / Shop Dogs
-            immediately below serve as the primary shopping entry.
+      {/* ==================== HERO — split with trust badge overlay ==================== */}
+      <section className="relative overflow-hidden gradient-mesh-warm pb-8 md:pb-12">
+        {/* Decorative blurred orbs */}
+        <div className="pointer-events-none absolute -right-24 -top-24 size-96 rounded-full bg-primary/15 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 -left-24 size-96 rounded-full bg-secondary/15 blur-3xl" />
 
-            Image source: /hero-pets.webp. The older composition has both pet
-            faces nestled in the center of the frame, so a portrait crop on
-            mobile shows both faces clearly instead of cropping them out at
-            the left/right edges. Mobile aspect is square (1/1) — ~20%
-            shorter than the previous 4/5 portrait so the 'Pilih untuk siapa'
-            section is revealed sooner without as much scroll.
-
-          Desktop (>= lg, intentional horizontal composition — NOT a stretched
-          mobile layout):
-            Two-column grid: ~40% text (left) / 60% image (right) inside a
-            centered container-wide (max-w 1200px) so the composition feels
-            proportionate and premium rather than oversized and dominating
-            the viewport.
-
-            - Hero total height locked to ~500px (h-[480px] xl:h-[520px]) —
-              well below one full viewport, so the 'Pilih untuk siapa'
-              section peeks into view on first paint at 1024–1440px.
-            - LEFT column: text on the warm cream homepage background, in
-              the existing brand colors/typography. Headline + supporting
-              line only — no 'Belanja Sekarang' CTA, no eyebrow, no badge.
-              Vertically centered so the headline aligns with the image's
-              visual midline. A subtle horizontal divider rule under the
-              headline gives editorial anchoring without crowding.
-            - RIGHT column: the existing cat + dog hero image inside a
-              rounded-3xl container with overflow-hidden. Image is
-              object-cover with object-center so both faces stay visible
-              and the image is never stretched. Same dark scrim treatment
-              at the bottom is kept (subtle, tapers up) — it preserves
-              brand consistency with the mobile hero even though desktop
-              text lives outside the image.
-            - Mobile hero is COMPLETELY UNCHANGED. The desktop two-column
-              markup only renders at lg+ (it is hidden below lg via
-              lg:flex / hidden lg:block toggles). The mobile hero markup
-              only renders below lg (hidden at lg via lg:hidden). */}
-
-      <section ref={heroRef} className="relative bg-background pb-2 pt-3 md:pb-4 md:pt-6 lg:pb-6 lg:pt-10">
-        {/* ---------- Mobile hero (default → below lg) ---------- */}
-        {/* Hero height: responsive clamp using svh so browser chrome / different
-            screen heights don't break the composition. 52svh at 844 = ~438px
-            (clamped to 430px max), at 740 = ~385px, at 932 = ~485px (also
-            clamped to 430px max). Min 360px guarantees the pet faces stay
-            clearly visible on very short viewports. The image is rendered
-            via object-cover object-center so it is NEVER stretched — only
-            horizontally center-cropped. Desktop hero is in a separate
-            lg:flex block below and is UNCHANGED. */}
-        <div className="container-page lg:hidden">
+        <div className="container-page relative grid items-center gap-4 py-4 md:grid-cols-2 md:gap-6 md:py-12 lg:py-16">
+          {/* CONTENT: bottom on mobile, LEFT on desktop */}
           <motion.div
-            initial={{ opacity: 0, y: 8 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="relative h-[clamp(360px,52svh,430px)] w-full overflow-hidden rounded-3xl bg-muted md:h-[clamp(380px,56svh,460px)]"
+            className="space-y-3 text-foreground md:space-y-4"
           >
-            <OptImage
-              src="/hero-pets.webp"
-              alt="Anima Companion — suplemen & vitamin hewan peliharaan"
-              fill
-              priority
-              sizes="(max-width: 768px) 100vw, 100vw"
-              className="object-cover object-center"
-            />
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
+              <PawPrint className="size-3" /> {settings?.heroEyebrow || 'Suplemen Rekomendasi Dokter Hewan'}
+            </span>
 
-            {/* Subtle dark scrim at the bottom — only behind the text area,
-                no glass card. Tapers to transparent so the upper image stays
-                crisp and pet faces stay clearly visible. */}
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-transparent" />
+            <h1 className="text-balance text-3xl font-extrabold leading-[1.05] tracking-tight sm:text-4xl lg:text-5xl">
+              {settings?.heroTitle1 || 'Elevating'}<br />
+              <span className="gradient-brand-text">{settings?.heroTitle2 || 'Animal Health'}</span>
+            </h1>
 
-            {/* Overlay copy — anchored bottom-left */}
-            <div className="absolute inset-x-0 bottom-0 p-5 md:p-10">
-              <h1 className="text-balance text-[28px] font-bold leading-[1.1] tracking-tight text-white sm:text-4xl lg:text-[44px]">
-                {settings?.heroTitle1 || 'Elevating'}{' '}
-                <span className="text-primary">{settings?.heroTitle2 || 'Animal Health'}</span>
-              </h1>
-              <p className="mt-2 max-w-md text-pretty text-sm leading-relaxed text-white/85 sm:text-base">
-                Suplemen &amp; vitamin premium untuk hewan peliharaan.
-              </p>
+            <p className="max-w-md text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
+              {settings?.heroDescription || 'Suplemen & vitamin hewan peliharaan premium dari Anima Companion — PT Sutan Vet Medika. Diformulasikan bersama dokter hewan, tersedia di 515+ klinik seluruh Indonesia.'}
+            </p>
+
+            {/* Hook text before CTAs — same typography as H1 */}
+            <div className="pt-1">
+              <h2 className="text-balance text-3xl font-extrabold leading-[1.05] tracking-tight sm:text-4xl lg:text-5xl">
+                {settings?.heroHookTitle1 || 'Belanja sesuai'}<br />
+                <span className="gradient-brand-text">{settings?.heroHookTitle2 || 'hewan peliharaanmu'}</span>
+              </h2>
+            </div>
+
+            {/* CTAs — 1 baris, Anjing kiri Kucing kanan */}
+            <div className="flex items-center gap-2.5">
+              <Button
+                size="lg"
+                onClick={() => navigate('/produk?pet=anjing')}
+                className="h-11 flex-1 gap-2 bg-primary px-4 text-sm font-bold shadow-md hover:bg-primary/90"
+              >
+                🐕 Anjing
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={() => navigate('/produk?pet=kucing')}
+                className="h-11 flex-1 gap-2 border-secondary/30 bg-card px-4 text-sm font-semibold text-secondary hover:bg-secondary/5 hover:text-secondary"
+              >
+                🐈 Kucing
+              </Button>
             </div>
           </motion.div>
-        </div>
 
-        {/* ---------- Desktop hero (>= lg) — horizontal two-column composition ---------- */}
-        <div className="container-wide hidden lg:flex">
+          {/* IMAGE: top on mobile, RIGHT on desktop */}
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="grid w-full grid-cols-[2fr_3fr] items-stretch gap-8 xl:gap-12"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.6, delay: 0.1 }}
+            className="relative order-first h-44 sm:h-80 md:order-last md:h-96"
           >
-            {/* LEFT column — text on the warm cream homepage background.
-                Approx 40% width (2fr / 5fr total). No card, no CTA, just
-                the headline + supporting copy + a subtle accent divider.
-                Vertically centered so the text aligns with the image's
-                visual midline (~500px tall column). */}
-            <div className="flex flex-col justify-center py-6 xl:py-8">
-              <h1 className="text-balance text-[40px] font-bold leading-[1.05] tracking-tight text-foreground xl:text-[52px]">
-                {settings?.heroTitle1 || 'Elevating'}{' '}
-                <span className="text-primary">{settings?.heroTitle2 || 'Animal Health'}</span>
-              </h1>
-
-              {/* Editorial divider rule — short, accent-tinted. Acts as a
-                  visual anchor between the headline and the supporting
-                  copy. Single accent color (brand orange primary) so it
-                  ties to the brand system already used across the site. */}
-              <div className="my-5 h-px w-16 bg-primary/40 xl:my-6 xl:w-20" />
-
-              <p className="max-w-md text-pretty text-base leading-relaxed text-muted-foreground xl:text-lg">
-                Suplemen &amp; vitamin premium untuk hewan peliharaan.
-              </p>
-            </div>
-
-            {/* RIGHT column — existing hero image, ~60% width (3fr / 5fr).
-                Fixed height ~500px so the hero never dominates the desktop
-                viewport. Premium rounded-3xl corners + overflow-hidden.
-                Image is object-cover with object-center: the source is
-                landscape (1280x731) and both pet faces sit in the center
-                of the frame, so centering keeps both faces clearly visible
-                and uncropped on every desktop width (1024 / 1280 / 1440).
-                The same subtle bottom scrim as the mobile hero is kept for
-                brand consistency — it tapers up so the upper image stays
-                crisp even though no text overlays the image on desktop. */}
-            <div className="relative h-[480px] w-full overflow-hidden rounded-3xl bg-muted xl:h-[520px]">
+            <div className="relative h-full w-full overflow-hidden rounded-3xl shadow-2xl ring-4 ring-white/60">
               <OptImage
                 src="/hero-pets.webp"
-                alt="Anima Companion — suplemen & vitamin hewan peliharaan"
+                alt="Anima Companion — Elevating Animal Health"
                 fill
                 priority
-                sizes="(min-width: 1280px) 720px, 60vw"
-                className="object-cover object-center"
+                sizes="(max-width: 768px) 100vw, 50vw"
+                className="object-cover"
               />
-              {/* Subtle bottom scrim — kept for brand consistency with the
-                  mobile hero. No text sits on the image on desktop, so the
-                  scrim is purely an aesthetic anchor that ties the image
-                  into the cream background and rounds the visual weight
-                  toward the bottom edge. */}
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-tr from-primary/10 via-transparent to-secondary/10" />
             </div>
+
+            {/* Floating card — top-right: rating (desktop only) */}
+            <motion.div
+              animate={{ y: [0, -8, 0] }}
+              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+              className="absolute -right-2 top-4 hidden items-center gap-2 rounded-2xl bg-card/95 p-2.5 shadow-xl ring-1 ring-border/30 backdrop-blur-sm sm:flex sm:-right-4 sm:top-6"
+            >
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100">
+                <Star className="size-5 fill-amber-400 text-amber-400" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-foreground">4.9★ 12rb+ ulasan</p>
+                <p className="text-[10px] text-muted-foreground">Rating pelanggan</p>
+              </div>
+            </motion.div>
+
+            {/* Floating card — bottom-left: BPOM (desktop only) */}
+            <motion.div
+              animate={{ y: [0, 8, 0] }}
+              transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
+              className="absolute -left-2 bottom-4 hidden items-center gap-2 rounded-2xl bg-card/95 p-2.5 shadow-xl ring-1 ring-border/30 backdrop-blur-sm sm:flex sm:-left-4 sm:bottom-8"
+            >
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100">
+                <Shield className="size-5 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-foreground">BPOM Terdaftar</p>
+                <p className="text-[10px] text-muted-foreground">100% Original</p>
+              </div>
+            </motion.div>
+
+            {/* Floating card — top-left small: vet */}
+            <motion.div
+              animate={{ y: [0, -6, 0] }}
+              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+              className="absolute left-4 top-4 hidden items-center gap-2 rounded-2xl bg-card/95 p-2.5 shadow-xl ring-1 ring-border/30 backdrop-blur-sm sm:flex"
+            >
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/10">
+                <MessageCircle className="size-5 text-secondary" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-foreground">Gratis Konsul Vet</p>
+                <p className="text-[10px] text-muted-foreground">Chat WhatsApp</p>
+              </div>
+            </motion.div>
           </motion.div>
         </div>
       </section>
 
-
-      {/* ==================== PET SELECTOR — floating silhouette CTAs (Phase 1.3) ====================
-          Two floating visual CTAs (no card container): Kucing (purple
-          silhouette) and Anjing (orange silhouette). Idle is static;
-          desktop hover lifts body + rotates tail; mobile tap navigates
-          within ~180ms. Routes/filter behavior preserved exactly. */}
-
-      <PetSelector>
-        <PetSelectorItem
-          type="cat"
-          label="Kucing"
-          ariaLabel="Lihat produk untuk kucing"
-          onActivate={() => navigate('/produk?pet=kucing')}
-        />
-        <PetSelectorItem
-          type="dog"
-          label="Anjing"
-          ariaLabel="Lihat produk untuk anjing"
-          onActivate={() => navigate('/produk?pet=anjing')}
-        />
-      </PetSelector>
+      {/* ==================== PET TYPE CARDS — no section header, directly after hero ==================== */}
+      <section className="container-page py-8 md:py-10">
+        <div className="grid gap-5 md:grid-cols-2">
+          <PetTypeTiltCard config={PET_CARDS[0]} productCount={mainPetTypes.find(p => p.slug === 'kucing')?._count?.products || 0} delay={0} />
+          <PetTypeTiltCard config={PET_CARDS[1]} productCount={mainPetTypes.find(p => p.slug === 'anjing')?._count?.products || 0} delay={0.05} />
+        </div>
+      </section>
 
       {/* ==================== BEST SELLERS ==================== */}
       <section className="container-page py-10 md:py-14">
@@ -434,6 +366,172 @@ export function HomeView() {
         </div>
       </section>
     </div>
+  )
+}
+
+/* ============== Pet Type Cards (3D tilt) ============== */
+
+interface PetCardConfig {
+  slug: 'kucing' | 'anjing'
+  emoji: string
+  badgeText: string
+  title: string
+  description: string
+  cardClass: string
+  badgeClass: string
+  pawColor: string
+  pawHoverClass: string
+  emojiBadgeClass: string
+}
+
+/**
+ * Visual config for the two main pet-type cards (Kucing & Anjing).
+ * The Kucing card uses warm orange tones; the Anjing card uses cool violet tones.
+ */
+const PET_CARDS: PetCardConfig[] = [
+  {
+    slug: 'kucing',
+    emoji: '🐈',
+    badgeText: 'Untuk Kucing',
+    title: 'Felcover+, Sioren &\nForevet untuk Kucing',
+    description:
+      'Imun booster, nafsu makan, fish oil, skin & coat, flu support, dan stress management.',
+    cardClass:
+      'bg-gradient-to-br from-orange-50 via-amber-50 to-rose-50 hover:shadow-orange-200/50',
+    badgeClass: 'bg-orange-500/10 text-orange-600',
+    pawColor: 'text-orange-200/60',
+    pawHoverClass: 'group-hover:scale-110 group-hover:rotate-6',
+    emojiBadgeClass: '',
+  },
+  {
+    slug: 'anjing',
+    emoji: '🐕',
+    badgeText: 'Untuk Anjing',
+    title: 'Felcover+, Sioren &\nForevet untuk Anjing',
+    description:
+      'Imun booster, nafsu makan, fish oil, skin & coat, flu support, dan stress management.',
+    cardClass:
+      'bg-gradient-to-br from-violet-50 via-purple-50 to-fuchsia-50 hover:shadow-violet-200/50',
+    badgeClass: 'bg-violet-500/10 text-violet-600',
+    pawColor: 'text-violet-200/60',
+    pawHoverClass: 'group-hover:-rotate-3 group-hover:scale-110',
+    emojiBadgeClass: '',
+  },
+]
+
+/**
+ * Pet Type card with a subtle 3D tilt on hover (desktop only — touch devices
+ * don't fire mousemove, so the card stays flat on mobile, which is fine).
+ *
+ * The card rotates around X and Y axes based on the cursor's position over
+ * the card. A decorative paw print inside parallaxes in the opposite
+ * direction for a layered, depth feel. On mouse leave, the card springs
+ * back to flat.
+ */
+function PetTypeTiltCard({
+  config,
+  productCount,
+  delay,
+}: {
+  config: PetCardConfig
+  productCount: number
+  delay: number
+}) {
+  const { navigate } = useHashRouter()
+
+  // Mouse position relative to card center, in pixels (-half..+half).
+  const x = useMotionValue(0)
+  const y = useMotionValue(0)
+
+  // Derive rotation from mouse position — subtle max ±3 degrees (was ±8, too dramatic).
+  const rotateX = useTransform(y, [-50, 50], [3, -3])
+  const rotateY = useTransform(x, [-50, 50], [-3, 3])
+
+  // Paw print parallax — subtle, opposite direction (was ±10, now ±4).
+  const pawX = useTransform(x, [-50, 50], [4, -4])
+  const pawY = useTransform(y, [-50, 50], [4, -4])
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const xPct = e.clientX - rect.left - rect.width / 2
+    const yPct = e.clientY - rect.top - rect.height / 2
+    x.set(xPct)
+    y.set(yPct)
+  }
+
+  const handleMouseLeave = () => {
+    x.set(0)
+    y.set(0)
+  }
+
+  // Split title on "\n" so each line breaks naturally (preserves the
+  // existing visual layout with the line break between brand list & pet type).
+  const titleLines = config.title.split('\n')
+
+  return (
+    <Reveal delay={delay}>
+      <motion.button
+        onClick={() => navigate(`/produk?pet=${config.slug}`)}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+        style={{ rotateX, rotateY, transformPerspective: 900 }}
+        // Spring transition so the tilt eases in/out smoothly
+        transition={{ type: 'spring', stiffness: 200, damping: 18 }}
+        className={`group relative flex h-72 w-full flex-col justify-end overflow-hidden rounded-3xl p-6 text-left shadow-sm transition-shadow duration-300 hover:shadow-xl sm:h-80 sm:p-8 ${config.cardClass}`}
+        aria-label={`Belanja untuk ${config.badgeText.replace('Untuk ', '')}`}
+      >
+        {/* Decorative paw print SVG (large, top-right, faded) — parallaxes on tilt */}
+        <motion.div
+          style={{ x: pawX, y: pawY }}
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-8 -top-8"
+        >
+          <svg
+            viewBox="0 0 100 100"
+            className={`size-48 transition-transform duration-500 sm:size-64 ${config.pawColor} ${config.pawHoverClass}`}
+            fill="currentColor"
+          >
+            <ellipse cx="30" cy="32" rx="9" ry="12" />
+            <ellipse cx="48" cy="22" rx="9" ry="12" />
+            <ellipse cx="66" cy="22" rx="9" ry="12" />
+            <ellipse cx="78" cy="32" rx="9" ry="12" />
+            <path d="M54 44c-12 0-22 9-22 21 0 9 6 15 12 15 3.6 0 6-1.2 8-2.4 2-1.2 3.2-1.2 5.2 0 2 1.2 4.4 2.4 8 2.4 6 0 12-6 12-15 0-12-11-21-23-21z" />
+          </svg>
+        </motion.div>
+
+        {/* Floating emoji badge (top-right) */}
+        <span className="absolute right-5 top-5 z-10 flex size-14 items-center justify-center rounded-2xl bg-white/80 text-3xl shadow-lg backdrop-blur-sm transition-transform duration-300 group-hover:scale-110 sm:right-7 sm:top-7 sm:size-16 sm:text-4xl">
+          {config.emoji}
+        </span>
+
+        {/* Content (bottom-left) */}
+        <div className="relative z-10">
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${config.badgeClass}`}
+          >
+            {config.badgeText}
+          </span>
+          <h3 className="mt-3 text-2xl font-extrabold leading-[1.1] tracking-tight text-foreground sm:text-3xl">
+            {titleLines.map((line, i) => (
+              <span key={i} className="block">
+                {line}
+              </span>
+            ))}
+          </h3>
+          <p className="mt-2 max-w-[80%] text-sm text-muted-foreground">
+            {config.description}
+          </p>
+          <div className="mt-4 flex items-center gap-4">
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background transition-transform group-hover:translate-x-1">
+              Jelajahi <ArrowRight className="size-4" />
+            </span>
+            <span className="text-xs font-medium text-muted-foreground">
+              {productCount} produk tersedia
+            </span>
+          </div>
+        </div>
+      </motion.button>
+    </Reveal>
   )
 }
 

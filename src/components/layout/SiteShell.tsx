@@ -14,22 +14,11 @@ import { MobileBottomBar } from '@/components/layout/MobileBottomBar'
  * can wrap its view in the same shared layout.
  *
  * Children are the page-specific view (e.g. <HomeView />).
- *
- * `hideAnnouncementBar` — when true, the AnnouncementBar is omitted. Currently
- * used by the homepage redesign (Redesign Phase 1) to give the homepage a
- * cleaner, more premium feel without the rotating promo bar. All other pages
- * keep the announcement bar.
  */
-export function SiteShell({
-  children,
-  hideAnnouncementBar = false,
-}: {
-  children: React.ReactNode
-  hideAnnouncementBar?: boolean
-}) {
+export function SiteShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
-      {!hideAnnouncementBar && <AnnouncementBar />}
+      <AnnouncementBar />
       <Navbar />
       <main className="flex-1 pb-[72px] md:pb-0">{children}</main>
       <Footer />

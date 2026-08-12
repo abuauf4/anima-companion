@@ -1,34 +1,21 @@
 'use client'
 
 import { whatsappAdminUrl } from '@/lib/config'
-import { useHashRouter } from '@/lib/router'
-import { useHomeHeroStore } from '@/lib/store'
 
 /**
  * Floating WhatsApp button — desktop only (hidden on mobile).
  *
  * Uses the official WhatsApp brand SVG logo (not a generic chat icon).
  * Mobile users interact with WhatsApp via the bottom bar's center button.
- *
- * Redesign Phase 1.2 — also fades out on desktop when the homepage hero is
- * on-screen, so the first viewport is fully clean. Mobile is already hidden
- * via `md:flex`, so the hero gating only affects desktop viewport.
  */
 export function WhatsAppFloatingButton() {
-  const { route } = useHashRouter()
-  const heroVisibleOnHome = useHomeHeroStore((s) => s.isVisible)
-  const hideForHero = route.path === '/' && heroVisibleOnHome
-
   return (
     <a
       href={whatsappAdminUrl('Halo Anima Companion! Saya ingin bertanya tentang produk 🐾')}
       target="_blank"
       rel="noopener noreferrer"
       aria-label="Chat WhatsApp"
-      aria-hidden={hideForHero}
-      className={`fixed bottom-6 right-6 z-40 hidden h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg shadow-emerald-500/30 transition-all duration-300 hover:scale-110 hover:bg-[#1fae54] md:flex ${
-        hideForHero ? 'pointer-events-none translate-y-4 opacity-0' : 'translate-y-0 opacity-100'
-      }`}
+      className="fixed bottom-6 right-6 z-40 hidden h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg shadow-emerald-500/30 transition-all hover:scale-110 hover:bg-[#1fae54] md:flex"
     >
       {/* Official WhatsApp glyph */}
       <svg

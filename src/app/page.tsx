@@ -13,9 +13,7 @@ export const metadata: Metadata = buildMetadata({
 
 export default function HomePage() {
   return (
-    // Redesign Phase 1: hide AnnouncementBar on homepage for cleaner, more
-    // premium feel. Other pages keep the announcement bar via default prop.
-    <SiteShell hideAnnouncementBar>
+    <SiteShell>
       <HomeView />
     </SiteShell>
   );
