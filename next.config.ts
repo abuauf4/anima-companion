@@ -9,17 +9,25 @@ const nextConfig: NextConfig = {
   images: {
     qualities: [70, 75, 80, 90],
     dangerouslyAllowSVG: true,
-    // Phase 2: static product images live in /public/products/<slug>/*.webp.
-    // No remote image host (Cloudinary / Vercel blob / S3 / etc.) is used for
-    // product images anymore. The wildcard `**` remotePattern that previously
-    // allowed any remote host has been REMOVED so next/image will reject any
-    // stray remote URL early — this is the strict static-image safety guarantee.
-    //
-    // Note: placehold.co URLs (still used by BANNER seed entries, out of Phase 2
-    // scope) are intercepted by src/lib/placeholder.ts BEFORE reaching next/image,
-    // so they do not need a remotePattern entry here. The interception replaces
-    // them with locally-generated SVG data URLs.
-    remotePatterns: [],
+    // Image strategy:
+    //   - Static local product images live in /public/products/<slug>/*.webp
+    //     (Phase 2 — kept as-is, NOT migrated).
+    //   - NEW product images uploaded from the Admin UI are pushed to Cloudinary
+    //     via signed uploads (see src/lib/cloudinary.ts). The returned
+    //     `https://res.cloudinary.com/...` URLs are stored in ProductImage.url
+    //     alongside the existing local paths — the two are fully interchangeable.
+    //   - Only `res.cloudinary.com` is whitelisted for next/image. We do NOT
+    //     re-open the wildcard `**` pattern — only Cloudinary delivery URLs
+    //     produced by the admin uploader pass through.
+    //   - placehold.co URLs (still used by some BANNER seed entries) are
+    //     intercepted by src/lib/placeholder.ts BEFORE reaching next/image,
+    //     so they do not need a remotePattern entry here.
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'res.cloudinary.com',
+      },
+    ],
   },
   // Redirect /favicon.ico to /logo.svg — browsers auto-request favicon.ico
   // regardless of <link rel="icon"> metadata. This prevents 404.

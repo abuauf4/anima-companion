@@ -15,9 +15,10 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { Plus, Pencil, Search, Trash2, Package } from 'lucide-react'
-import { formatRupiah, effectivePrice } from '@/lib/format'
+import { Plus, Pencil, Search, Trash2, Package, Star, ArrowLeft, ArrowRight, Link2 } from 'lucide-react'
+import { formatRupiah } from '@/lib/format'
 import { toast } from 'sonner'
+import { CloudinaryUploader } from '@/components/admin/CloudinaryUploader'
 
 interface AdminProduct {
   id: string
@@ -140,7 +141,6 @@ export function ProductsView() {
                       <div className="flex items-center gap-3">
                         <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
                           {p.images[0] && (
-                             
                             <img src={p.images[0].url} alt={p.name} className="h-full w-full object-cover" />
                           )}
                         </div>
@@ -235,6 +235,8 @@ function ProductDialog({
     categoryId: '', imageUrls: [] as string[],
   })
   const [saving, setSaving] = useState(false)
+  const [showManualUrl, setShowManualUrl] = useState(false)
+  const [manualUrl, setManualUrl] = useState('')
 
   useEffect(() => {
     if (editing) {
@@ -265,7 +267,41 @@ function ProductDialog({
         categoryId: categories[0]?.id || '', imageUrls: [],
       })
     }
+    setShowManualUrl(false)
+    setManualUrl('')
   }, [editing, open, categories])
+
+  const addImageUrl = (url: string) => {
+    if (!url) return
+    setForm((prev) => ({ ...prev, imageUrls: [...prev.imageUrls, url] }))
+  }
+
+  const removeImageUrl = (idx: number) => {
+    setForm((prev) => ({
+      ...prev,
+      imageUrls: prev.imageUrls.filter((_, i) => i !== idx),
+    }))
+  }
+
+  const moveImage = (idx: number, dir: -1 | 1) => {
+    setForm((prev) => {
+      const newIdx = idx + dir
+      if (newIdx < 0 || newIdx >= prev.imageUrls.length) return prev
+      const next = [...prev.imageUrls]
+      ;[next[idx], next[newIdx]] = [next[newIdx], next[idx]]
+      return { ...prev, imageUrls: next }
+    })
+  }
+
+  const setPrimary = (idx: number) => {
+    // Move the chosen image to position 0 (primary = first in list).
+    setForm((prev) => {
+      const next = [...prev.imageUrls]
+      const [item] = next.splice(idx, 1)
+      next.unshift(item)
+      return { ...prev, imageUrls: next }
+    })
+  }
 
   const handleSave = async () => {
     if (!form.name || !form.sku || !form.price || !form.categoryId) {
@@ -351,53 +387,157 @@ function ProductDialog({
               <Label>Stok</Label>
               <Input type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} className="mt-1.5" />
             </div>
+
+            {/* ============ Image upload section ============ */}
             <div className="col-span-2">
-              <Label>Path Gambar Produk (lokal)</Label>
-              <div className="mt-1.5 space-y-2">
-                {form.imageUrls.map((url, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <Input
-                      value={url}
-                      onChange={(e) => {
-                        const newUrls = [...form.imageUrls]
-                        newUrls[idx] = e.target.value
-                        setForm({ ...form, imageUrls: newUrls })
-                      }}
-                      placeholder="/products/<slug>/01.webp"
-                      className="flex-1 font-mono text-xs"
-                    />
-                    {form.imageUrls.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0 text-destructive"
-                        onClick={() => {
-                          const newUrls = form.imageUrls.filter((_, i) => i !== idx)
-                          setForm({ ...form, imageUrls: newUrls })
-                        }}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => setForm({ ...form, imageUrls: [...form.imageUrls, ''] })}
-                >
-                  <Plus className="size-4" /> Tambah Gambar
-                </Button>
-              </div>
+              <Label>Gambar Produk</Label>
               <p className="mt-1 text-xs text-muted-foreground">
-                Static image model — file gambar disimpan di repository di <code className="rounded bg-muted px-1">/public/products/&lt;slug&gt;/01.webp</code>.
-                Gambar pertama = gambar utama di product card. Tambah multiple untuk gallery di detail produk.
-                Upload gambar baru saat ini belum didukung — admin perlu menambah file ke repo via deploy.
+                Gambar pertama adalah <strong>gambar utama</strong> di product card & detail.
+                Upload langsung dari komputer/HP, atau tempel URL gambar manual.
+                Gambar lama tetap dipertahankan saat edit kecuali dihapus.
               </p>
+
+              {/* Preview grid */}
+              {form.imageUrls.length > 0 && (
+                <ul className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
+                  {form.imageUrls.map((url, idx) => (
+                    <li
+                      key={`${idx}-${url}`}
+                      className="group relative aspect-square overflow-hidden rounded-md border border-border bg-muted"
+                    >
+                      {/* Admin preview thumbnail — plain <img> is intentional:
+                          next/image optimization has no value for a 96x96 admin preview. */}
+                      <img
+                        src={url}
+                        alt={`Gambar ${idx + 1}`}
+                        className="h-full w-full object-cover"
+                      />
+                      {idx === 0 && (
+                        <Badge
+                          className="absolute left-1 top-1 gap-0.5 px-1 py-0 text-[9px] shadow-sm"
+                        >
+                          <Star className="size-2.5 fill-current" /> Utama
+                        </Badge>
+                      )}
+                      {/* Action bar */}
+                      <div className="absolute inset-x-0 bottom-0 flex justify-between gap-0.5 bg-black/60 px-1 py-1 opacity-0 transition group-hover:opacity-100">
+                        <div className="flex gap-0.5">
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 text-white hover:bg-white/20"
+                            disabled={idx === 0}
+                            onClick={() => moveImage(idx, -1)}
+                            title="Geser kiri"
+                          >
+                            <ArrowLeft className="size-3" />
+                          </Button>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 text-white hover:bg-white/20"
+                            disabled={idx === form.imageUrls.length - 1}
+                            onClick={() => moveImage(idx, 1)}
+                            title="Geser kanan"
+                          >
+                            <ArrowRight className="size-3" />
+                          </Button>
+                        </div>
+                        <div className="flex gap-0.5">
+                          {idx !== 0 && (
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6 text-white hover:bg-white/20"
+                              onClick={() => setPrimary(idx)}
+                              title="Jadikan utama"
+                            >
+                              <Star className="size-3" />
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 text-red-300 hover:bg-red-500/40 hover:text-white"
+                            onClick={() => removeImageUrl(idx)}
+                            title="Hapus"
+                          >
+                            <Trash2 className="size-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* Uploader */}
+              <div className="mt-3">
+                <CloudinaryUploader
+                  onUploaded={addImageUrl}
+                  disabled={saving}
+                />
+              </div>
+
+              {/* Manual URL fallback (collapsed by default) */}
+              <div className="mt-2">
+                {!showManualUrl ? (
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 text-xs text-muted-foreground"
+                    onClick={() => setShowManualUrl(true)}
+                  >
+                    <Link2 className="size-3" /> Tambah URL gambar manual (lanjutan)
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 p-2">
+                    <Input
+                      placeholder="https://... atau /products/slug/01.webp"
+                      value={manualUrl}
+                      onChange={(e) => setManualUrl(e.target.value)}
+                      className="flex-1 font-mono text-xs"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          if (manualUrl.trim()) {
+                            addImageUrl(manualUrl.trim())
+                            setManualUrl('')
+                          }
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        if (manualUrl.trim()) {
+                          addImageUrl(manualUrl.trim())
+                          setManualUrl('')
+                        }
+                      }}
+                    >
+                      Tambah
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setShowManualUrl(false)}
+                    >
+                      Tutup
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
+
             <div className="col-span-2">
               <Label>No. BPOM</Label>
               <Input value={form.bpomNumber} onChange={(e) => setForm({ ...form, bpomNumber: e.target.value })} placeholder="BPOM TR XXXXXXXXXXXX" className="mt-1.5" />

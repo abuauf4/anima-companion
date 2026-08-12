@@ -1958,3 +1958,53 @@ Stage Summary:
 - Bugs found & fixed: 1 (Voucher edit/delete broken — fixed in Commit 2).
 - Minor gaps noted but NOT fixed (out of scope, no functional impact): 9 of 10 admin [id] routes return generic 500 for Prisma P2002/P2025 errors instead of meaningful 409/404 codes (only vouchers/[id] was upgraded in this task as part of the bug fix). ProductsView/CustomersView/OrdersView fetch() calls lack try/catch (network error would leave loading=true stuck). ProductsView form does not expose subscribePrice / petTypeIds / problemIds even though the API accepts them (form incomplete relative to schema). These are documented for future work but do not break current functionality.
 === Admin Isolation & Audit COMPLETE ===
+
+---
+Task ID: cloudinary-product-upload
+Agent: main (Super Z)
+Task: Restore practical product image upload in Admin using Cloudinary. Admin should be able to upload product images from their phone/computer directly to Cloudinary, then automatically store the resulting image URL in the existing ProductImage data model. Existing local /public/products/... images must continue to work untouched.
+
+Work Log:
+- Audited existing state: ProductImage schema already has url (String) + order (Int) + alt (String?) — no DB migration needed. Existing POST/PUT admin product routes already accept `images: string[]` and rewrite all ProductImage rows on PUT (deleteMany → createMany). The missing piece was the admin UI workflow: only manual path paste existed.
+- Designed signed-upload architecture (no new dependency):
+    1. Browser (admin) → GET /api/admin/cloudinary/sign (requireAdmin-guarded) → returns {signature, timestamp, apiKey, cloudName, folder}
+    2. Browser builds FormData(file, api_key, timestamp, signature, folder) and POSTs directly to https://api.cloudinary.com/v1_1/<cloudName>/auto/upload (bytes never touch our server)
+    3. Cloudinary returns {secure_url, public_id, ...}
+    4. Browser calls addImageUrl(secure_url) → state pushes URL into ProductDialog.form.imageUrls[]
+    5. On Save, imageUrls[] is sent to existing /api/admin/products/[id] (PUT) which writes them as ProductImage rows
+- Security: CLOUDINARY_API_SECRET is read ONLY in src/lib/cloudinary.ts (server). No `process.env.CLOUDINARY_API_SECRET` reference exists in any client component. Verified by ripgrep. Only the public cloudName + apiKey + derived SHA-1 signature go to the browser. Signature is short-lived (single-use Cloudinary semantics + 1h expiry).
+- Implementation files added:
+    * src/lib/cloudinary.ts — server-only helpers: getCloudinaryConfig, signUploadParams (SHA-1 of sorted params + apiSecret via Node crypto), buildSignatureResponse, PRODUCT_UPLOAD_FOLDER='anima/products', isCloudinaryUrl
+    * src/app/api/admin/cloudinary/sign/route.ts — GET handler. requireAdmin() → if env vars missing → 503 {error:'CLOUDINARY_NOT_CONFIGURED'} (UI shows "Cloudinary belum dikonfigurasi"). Otherwise returns signed payload.
+    * src/components/admin/CloudinaryUploader.tsx — dropzone + "Upload Foto" button. Uses XHR for real progress events. Accepts JPEG/PNG/WebP/GIF/AVIF/HEIC/HEIF up to 8 MB. Multiple files. Mobile capture=environment. Per-file job card with progress bar, success/error state. Shows "not configured" banner when server returns 503.
+- Rewrote src/views/admin/ProductsView.tsx ProductDialog image section:
+    * Replaced manual path-only Inputs with thumbnail grid + CloudinaryUploader + collapsed "Tambah URL manual" fallback (still allows pasting /products/<slug>/01.webp for advanced users)
+    * Each thumbnail: 4-column grid, square aspect, group-hover action bar with move-left, move-right, set-primary (star), remove (trash)
+    * First thumbnail shows "Utama" (primary) badge
+    * Order = primary indicator (order 0 = primary). Existing POST/PUT already writes images[] in order with order=i, so primary selection maps directly to ProductImage.order
+    * On edit, existing images (local or Cloudinary) load into the same preview grid; untouched images are preserved because the existing PUT handler rewrites all rows from images[]
+- Updated next.config.ts images.remotePatterns to whitelist only `https://res.cloudinary.com` (no wildcard). Local /products/... paths continue to work without remote config. Existing placehold.co interception (placeholder.ts) untouched.
+- Updated .env.example with CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET documentation, marked secret as server-only.
+- Wrote scripts/verify-cloudinary-signature.ts — static unit test of signature algorithm. Confirms:
+    * signUploadParams output matches independent SHA-1 computation
+    * Signature is 40-char lowercase hex
+    * Deterministic for same inputs
+    * Different folders / different secrets produce different signatures
+    * getCloudinaryConfig returns null when any of the 3 env vars missing
+    All 16 assertions pass under `bun run scripts/verify-cloudinary-signature.ts`.
+- QA testing scope: live end-to-end upload test CANNOT be performed locally — workspace has NO CLOUDINARY_* env vars and NO DATABASE_URL (only .env.example placeholders). Per task spec, this is acceptable: implement + static-check, defer live upload testing to Coolify where the credentials are configured. No QA-ADMIN-* product records were created (would have required DB connection).
+- Did NOT migrate or modify existing /public/products/<slug>/*.webp images. Did NOT change the Prisma schema. Did NOT touch the public frontend components (Navbar, MobileBottomBar, HomeView, ProductCard, ProductDetailView). Did NOT add a Cloudinary public_id column — V1 stores secure_url only; Cloudinary-side deletion of orphaned uploads is deferred (acceptable per task spec).
+- Lint: `bun run lint` → 0 errors, 0 warnings ✓
+- Typecheck: `bunx tsc --noEmit` → 0 errors ✓
+- Build: `bun run build` → ✓ Compiled successfully in 18.8s, 44/44 pages generated ✓. New route /api/admin/cloudinary/sign present in build output. Pre-existing Prisma/sitemap warnings (DATABASE_URL missing in build env) are unrelated to this change.
+- Git: focused commit on the upload feature only.
+
+Stage Summary:
+- Files added (4): src/lib/cloudinary.ts, src/app/api/admin/cloudinary/sign/route.ts, src/components/admin/CloudinaryUploader.tsx, scripts/verify-cloudinary-signature.ts
+- Files modified (3): src/views/admin/ProductsView.tsx (replaced manual path UI with upload grid), next.config.ts (whitelist res.cloudinary.com), .env.example (Cloudinary env vars docs)
+- No DB migration: ProductImage.url already accepts any string. order column already encodes primary (0 = primary).
+- No new dependency: uses Node's built-in crypto for SHA-1 signature. Zero KB added to client bundle.
+- Security: CLOUDINARY_API_SECRET stays server-side. requireAdmin() reuses existing auth architecture (no second auth system). All signature endpoints require authenticated ADMIN role.
+- Public frontend: untouched. Both local /products/... paths and https://res.cloudinary.com/... URLs work in ProductCard and ProductDetailView via the existing Image component.
+- Live upload testing: deferred to Coolify (no local CLOUDINARY_* / DATABASE_URL available). Static verification of signature algorithm passed all 16 assertions.
+=== Cloudinary Product Image Upload COMPLETE (pending live test in Coolify) ===
