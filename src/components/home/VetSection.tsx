@@ -5,38 +5,43 @@ import { SectionHeader } from '@/components/common/SectionHeader'
 import { Reveal, Stagger, StaggerItem } from '@/components/common/Reveal'
 
 /**
- * Vet testimonials — NO PHOTOS (per user request).
- * Clean quote-card design with vet name, role, specialty, and quote.
+ * Brand trust section — distribution, BPOM, product lines, customer rating.
+ *
+ * NOTE: This section previously displayed fabricated veterinarian testimonials
+ * implying veterinary endorsement of Anima Companion products. Those claims
+ * have been removed. The section layout (stats grid + 3 quote-style cards +
+ * institutional badges) is preserved, but the cards now show factual
+ * product-line information sourced from existing verified brand data.
  */
 
-const VETS = [
+const PRODUCT_LINES = [
   {
-    name: 'drh. Sarah Wijaya, M.Vet',
-    role: 'Internal Medicine',
-    specialty: 'Spesialis Penyakit Dalam & Imunologi',
-    quote: 'Saya merekomendasikan Felcover+ dan Sioren Booster+ untuk klien dengan anabul yang butuh dukungan imunitas. Formulasi terstandar dan terdaftar BPOM.',
+    name: 'Felcover+',
+    role: 'Immune Stimulant',
+    specialty: 'Dukungan Imunitas Kucing & Anjing',
+    quote: 'Suplemen dengan kolostrum dan prebiotik untuk membantu meningkatkan daya tahan tubuh dan menjaga kesehatan pencernaan anabul.',
     color: 'from-orange-400 to-amber-500',
   },
   {
-    name: 'drh. Bayu Pratama',
-    role: 'Clinical Nutrition',
-    specialty: 'Spesialis Nutrisi & Gizi Hewan',
-    quote: 'Untuk anabul yang susah makan, Sioren Nafsu Makan jadi pilihan pertama saya. Aman untuk pemakaian harian dan terbukti meningkatkan nafsu makan.',
+    name: 'Sioren',
+    role: 'Lini Suplemen Harian',
+    specialty: 'Nafsu Makan, Skin & Coat, Fish Oil',
+    quote: 'Lini suplemen harian untuk dukungan nafsu makan, perawatan kulit & bulu, dan asupan minyak ikan untuk kucing dan anjing.',
     color: 'from-emerald-400 to-teal-500',
   },
   {
-    name: 'drh. Rina Kusuma',
-    role: 'Dermatology & Coat',
-    specialty: 'Spesialis Kulit & Bulu Hewan',
-    quote: 'Sioren Skin & Coat dan Sioren Fish Oil adalah kombinasi favorit saya untuk pasien dengan masalah bulu kusam dan kulit gatal.',
+    name: 'Forevet',
+    role: 'Lini Produk Veteriner',
+    specialty: 'Manajemen Stres & Perawatan Khusus',
+    quote: 'Lini produk veteriner untuk dukungan kondisi khusus seperti manajemen stres pada hewan peliharaan.',
     color: 'from-violet-400 to-purple-500',
   },
 ];
 
 const STATS = [
   { value: '515+', label: 'Klinik Resmi', icon: Stethoscope },
-  { value: '100%', label: 'Rekomendasi drh.', icon: Heart },
-  { value: '8', label: 'Produk Tervalidasi', icon: Award },
+  { value: '100%', label: 'BPOM Terdaftar', icon: Heart },
+  { value: '8', label: 'Produk Resmi', icon: Award },
   { value: '4.9★', label: 'Rating Pelanggan', icon: Star },
 ];
 
@@ -49,9 +54,9 @@ export function VetSection() {
 
       <div className="container-page relative">
         <SectionHeader
-          eyebrow="Kredibilitas & Rekomendasi"
-          title={<>Rekomendasi <span className="gradient-brand-text">Dokter Hewan</span></>}
-          subtitle="Setiap produk Anima Companion direkomendasikan oleh dokter hewan bersertifikat. Tersedia di 515+ klinik hewan seluruh Indonesia sebagai bagian dari standar perawatan anabul."
+          eyebrow="Kredibilitas Brand"
+          title={<>Dipercaya & <span className="gradient-brand-text">Terdistribusi</span></>}
+          subtitle="Suplemen & vitamin hewan peliharaan premium dari Anima Companion — PT Sutan Vet Medika. Tersedia di 515+ klinik hewan seluruh Indonesia sebagai distributor resmi."
           align="center"
         />
 
@@ -77,11 +82,11 @@ export function VetSection() {
           })}
         </Stagger>
 
-        {/* Vet testimonial cards — equal height on ALL breakpoints */}
+        {/* Product line cards — equal height on ALL breakpoints */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5 lg:gap-6">
-          {VETS.map((vet, i) => (
+          {PRODUCT_LINES.map((line, i) => (
             <motion.div
-              key={vet.name}
+              key={line.name}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: '-50px' }}
@@ -89,34 +94,34 @@ export function VetSection() {
               className="group relative flex flex-col rounded-2xl bg-card border border-border/60 p-5 md:p-6 shadow-sm hover:shadow-md transition-all duration-300 h-[280px] md:h-[300px]"
             >
               {/* Quote icon with gradient — top-left corner */}
-              <div className={`mb-4 inline-flex size-10 items-center justify-center rounded-xl bg-gradient-to-br ${vet.color} text-white shadow-sm`}>
+              <div className={`mb-4 inline-flex size-10 items-center justify-center rounded-xl bg-gradient-to-br ${line.color} text-white shadow-sm`}>
                 <Quote className="size-5" fill="currentColor" />
               </div>
 
-              {/* Quote text — clamped to fit fixed card height */}
+              {/* Product line description — clamped to fit fixed card height */}
               <p className="text-sm leading-relaxed text-foreground/80 italic mb-5 flex-1 overflow-hidden line-clamp-4">
-                &ldquo;{vet.quote}&rdquo;
+                &ldquo;{line.quote}&rdquo;
               </p>
 
               {/* Divider */}
               <div className="h-px bg-border/60 mb-4" />
 
-              {/* Vet info */}
+              {/* Product line info */}
               <div className="flex items-center gap-3">
-                <div className={`flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${vet.color} text-white font-bold text-sm shadow-sm`}>
-                  {vet.name.replace('drh. ', '').charAt(0)}
+                <div className={`flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${line.color} text-white font-bold text-sm shadow-sm`}>
+                  {line.name.charAt(0)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sm font-semibold text-foreground tracking-tight truncate">
-                    {vet.name}
+                    {line.name}
                   </h3>
                   <p className="text-xs text-primary font-medium mt-0.5 truncate">
-                    {vet.specialty}
+                    {line.specialty}
                   </p>
                 </div>
                 <div className="inline-flex items-center gap-1 rounded-full bg-secondary/10 px-2 py-0.5 text-[10px] font-medium text-secondary shrink-0">
                   <Shield className="size-2.5" />
-                  {vet.role}
+                  {line.role}
                 </div>
               </div>
             </motion.div>
@@ -127,7 +132,7 @@ export function VetSection() {
         <Reveal delay={0.2}>
           <div className="mt-12 flex flex-col items-center gap-5">
             <p className="text-xs uppercase tracking-widest text-muted-foreground font-medium">
-              Dipercaya & Direkomendasikan Oleh
+              Mitra Distribusi Resmi
             </p>
             <div className="grid w-full grid-cols-1 gap-3 md:grid-cols-3 md:gap-6">
               <div className="flex items-center gap-3 rounded-2xl bg-card border border-border/60 px-4 py-3 shadow-sm md:px-5">

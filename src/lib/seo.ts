@@ -41,7 +41,7 @@ export const BRAND = {
   legalName: 'PT Sutan Vet Medika',
   tagline: 'Elevating Animal Health',
   description:
-    'Anima Companion (PT Sutan Vet Medika) — suplemen & vitamin hewan peliharaan rekomendasi dokter hewan. Produk Felcover+, Sioren, dan Forevet. Tersedia di 515+ klinik hewan seluruh Indonesia.',
+    'Anima Companion (PT Sutan Vet Medika) — suplemen & vitamin hewan peliharaan premium. Produk Felcover+, Sioren, dan Forevet. Tersedia di 515+ klinik hewan seluruh Indonesia.',
   logoUrl: '/anima-logo.svg',
   ogImage: '/og-image.png',
   email: 'hello@animacompanion.id',

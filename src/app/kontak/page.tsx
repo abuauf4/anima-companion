@@ -7,11 +7,11 @@ import { buildMetadata } from "@/lib/seo";
 export const metadata: Metadata = buildMetadata({
   title: "Konsultasi & Kontak",
   description:
-    "Hubungi Anima Companion untuk konsultasi gratis bersama dokter hewan. Tersedia via WhatsApp, email, dan Instagram. Senin–Sabtu, 09.00–18.00 WIB.",
+    "Hubungi Anima Companion untuk konsultasi pemilihan produk hewan peliharaan. Tersedia via WhatsApp, email, dan Instagram. Senin–Sabtu, 09.00–18.00 WIB.",
   path: "/kontak",
   keywords: [
     "kontak anima companion",
-    "konsultasi dokter hewan",
+    "konsultasi suplemen hewan",
     "konsultasi gratis hewan",
     "WhatsApp anima companion",
     "FAQ suplemen hewan",

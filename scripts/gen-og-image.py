@@ -71,7 +71,7 @@ draw.text((text_x, 260), 'Animal Health', font=font_title, fill=ORANGE)
 
 # Tagline
 draw.text((text_x, 370), 'Suplemen & vitamin hewan peliharaan', font=font_tagline, fill=GRAY)
-draw.text((text_x, 420), 'rekomendasi dokter hewan.', font=font_tagline, fill=GRAY)
+draw.text((text_x, 420), 'untuk kucing & anjing.', font=font_tagline, fill=GRAY)
 
 # Trust badges
 badge_y = 500
@@ -89,6 +89,6 @@ for badge in badges:
 draw.text((text_x, 560), '#PawrentHebatAnabulSehat', font=font_small, fill=PURPLE)
 
 # Save
-img.save('/home/z/my-project/public/og-image.png', 'PNG', optimize=True)
-print('OG image saved: /home/z/my-project/public/og-image.png')
+img.save('/home/z/my-project/work/anima-companion/public/og-image.png', 'PNG', optimize=True)
+print('OG image saved: /home/z/my-project/work/anima-companion/public/og-image.png')
 print(f'Size: {img.size}')

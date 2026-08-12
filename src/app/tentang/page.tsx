@@ -33,7 +33,7 @@ export const metadata: Metadata = buildMetadata({
     "tentang anima companion",
     "PT Sutan Vet Medika",
     "brand suplemen hewan",
-    "suplemen dokter hewan",
+    "suplemen hewan peliharaan",
     "515 klinik hewan Indonesia",
   ],
 });

@@ -81,7 +81,7 @@ export function HomeView() {
             className="space-y-3 text-foreground md:space-y-4"
           >
             <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
-              <PawPrint className="size-3" /> {settings?.heroEyebrow || 'Suplemen Rekomendasi Dokter Hewan'}
+              <PawPrint className="size-3" /> {settings?.heroEyebrow || 'Suplemen & Vitamin Hewan Peliharaan'}
             </span>
 
             <h1 className="text-balance text-3xl font-extrabold leading-[1.05] tracking-tight sm:text-4xl lg:text-5xl">
@@ -90,7 +90,7 @@ export function HomeView() {
             </h1>
 
             <p className="max-w-md text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
-              {settings?.heroDescription || 'Suplemen & vitamin hewan peliharaan premium dari Anima Companion — PT Sutan Vet Medika. Diformulasikan bersama dokter hewan, tersedia di 515+ klinik seluruh Indonesia.'}
+              {settings?.heroDescription || 'Suplemen & vitamin hewan peliharaan premium dari Anima Companion — PT Sutan Vet Medika. Tersedia di 515+ klinik seluruh Indonesia.'}
             </p>
 
             {/* Hook text before CTAs — same typography as H1 */}
@@ -559,7 +559,7 @@ const POSTER_CONFIG: Record<string, { gradient: string; emoji: string; tagline: 
 const FALLBACK_POSTER = {
   gradient: 'from-orange-500 via-amber-500 to-rose-500',
   emoji: '🐾',
-  tagline: 'Suplemen premium rekomendasi dokter hewan',
+  tagline: 'Suplemen premium untuk hewan peliharaan',
 }
 
 /**

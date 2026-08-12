@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs'
 // ============================================================================
 // Anima Companion — Real Brand Seed
 // Brand: Anima Companion (PT Sutan Vet Medika, Bogor, Jawa Barat, Indonesia)
-// Tagline: "Elevating Animal Health" / "Suplemen Rekomendasi drh."
+// Tagline: "Elevating Animal Health"
 // Hashtag: #PawrentHebatAnabulSehat
 // Distribution: 515+ klinik hewan seluruh Indonesia
 // Marketplace: Shopee, Tokopedia, TikTok Shop
@@ -225,7 +225,7 @@ async function main() {
       description:
         'Felcover+ adalah suplemen immune stimulant yang dirancang khusus untuk hewan kesayangan yaitu kucing dan anjing. Produk mengandung kolostrum dan prebiotik yang membantu meningkatkan daya tahan tubuh dan menjaga kesehatan pencernaan anabul.',
       benefit:
-        'Meningkatkan daya tahan tubuh, membantu menjaga kesehatan pencernaan, mencegah diare, flu, dan virus. Rekomendasi dokter hewan untuk pemulihan setelah sakit.',
+        'Meningkatkan daya tahan tubuh, membantu menjaga kesehatan pencernaan, mencegah diare, flu, dan virus. Cocok untuk pemulihan setelah sakit.',
       usage:
         'Kucing: 1 kapsul sehari (isi bubuk ditabur ke makanan).\nAnjing kecil (<10kg): 1 kapsul sehari.\nAnjing besar (>10kg): 2 kapsul sehari.\nDiberikan setelah makan.',
       ingredients:
@@ -522,7 +522,7 @@ async function main() {
       userName: 'Sarah Wijaya',
       petType: 'Kucing',
       rating: 5,
-      comment: 'Milo (Persia) saya sering pilek dan diare. Setelah rutin pakai Felcover+ dari Anima Companion, jauh lebih sehat. Rekomendasi dokter hewan klinik saya.',
+      comment: 'Milo (Persia) saya sering pilek dan diare. Setelah rutin pakai Felcover+ dari Anima Companion, jauh lebih sehat. Sesuai kebutuhan imunitas kucing saya.',
     },
     {
       productSlug: 'felcover-plus-immune-stimulant',
@@ -643,7 +643,7 @@ async function main() {
     db.banner.create({
       data: {
         title: 'Elevating Animal Health',
-        subtitle: 'Suplemen hewan peliharaan rekomendasi dokter hewan. Tersedia di 515+ klinik seluruh Indonesia.',
+        subtitle: 'Suplemen hewan peliharaan premium dari Anima Companion. Tersedia di 515+ klinik seluruh Indonesia.',
         imageUrl: 'https://placehold.co/1400x500/3B82F6/ffffff?text=Anima+Companion+%E2%80%94+Elevating+Animal+Health',
         link: '#/shop',
         position: 'HOME',
@@ -654,7 +654,7 @@ async function main() {
     db.banner.create({
       data: {
         title: 'Felcover+ — Immune Stimulant Andalan',
-        subtitle: 'Meningkatkan daya tahan tubuh kucing & anjing. Rekomendasi dokter hewan.',
+        subtitle: 'Meningkatkan daya tahan tubuh kucing & anjing.',
         imageUrl: 'https://placehold.co/1400x300/22C55E/ffffff?text=Felcover%2B+Immune+Stimulant',
         link: '#/product/felcover-plus-immune-stimulant',
         position: 'PROMO',
@@ -683,7 +683,7 @@ async function main() {
         name: 'Sarah Wijaya',
         petName: 'Milo',
         petType: 'Kucing Persia',
-        message: 'Milo sering pilek dan diare. Setelah rutin pakai Felcover+ dari Anima Companion, jauh lebih sehat. Rekomendasi dokter hewan klinik saya.',
+        message: 'Milo sering pilek dan diare. Setelah rutin pakai Felcover+ dari Anima Companion, jauh lebih sehat. Sesuai kebutuhan imunitas kucing saya.',
         rating: 5,
         isActive: true,
       },
@@ -777,7 +777,7 @@ async function main() {
     db.fAQ.create({
       data: {
         question: 'Apakah tersedia konsultasi gratis?',
-        answer: 'Ya! Tim kami siap membantu via WhatsApp untuk konsultasi seputar kesehatan hewan peliharaan dan pemilihan produk yang tepat. Produk kami juga direkomendasikan oleh dokter hewan di 515+ klinik seluruh Indonesia.',
+        answer: 'Ya! Tim kami siap membantu via WhatsApp untuk konsultasi seputar kesehatan hewan peliharaan dan pemilihan produk yang tepat. Produk kami tersedia di 515+ klinik seluruh Indonesia.',
         order: 2,
         isActive: true,
       },

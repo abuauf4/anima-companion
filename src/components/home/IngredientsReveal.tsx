@@ -102,7 +102,7 @@ export function IngredientsReveal() {
           eyebrow="Diformulasikan dengan Sains"
           eyebrowIcon={<FlaskConical className="size-3" />}
           title={<>Bahan Aktif <span className="gradient-brand-text">Pilihan</span></>}
-          subtitle="Setiap produk Anima Companion diformulasikan dengan bahan aktif premium yang teruji klinis dan direkomendasikan dokter hewan."
+          subtitle="Setiap produk Anima Companion diformulasikan dengan bahan aktif premium dan terdaftar resmi di BPOM."
           action={
             <div className="hidden items-center gap-2 sm:flex">
               {/* Index indicator */}

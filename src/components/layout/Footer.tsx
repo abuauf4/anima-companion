@@ -36,8 +36,7 @@ export function Footer() {
           <div className="col-span-2 lg:col-span-2">
             <Logo showTagline />
             <p className="mt-4 max-w-sm text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground">Elevating Animal Health</span> — Suplemen Rekomendasi drh.
-              Vitamin & suplemen hewan peliharaan premium dari PT Sutan Vet Medika, tersedia di 515+ klinik seluruh Indonesia.
+              <span className="font-semibold text-foreground">Elevating Animal Health</span> — Vitamin & suplemen hewan peliharaan premium dari PT Sutan Vet Medika, tersedia di 515+ klinik seluruh Indonesia.
             </p>
             {/* Company info */}
             <div className="mt-4 space-y-1.5 text-sm text-muted-foreground">

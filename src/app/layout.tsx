@@ -71,7 +71,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: `${BRAND.name} — ${BRAND.tagline}`,
-    description: "Suplemen rekomendasi dokter hewan untuk kucing & anjing.",
+    description: "Suplemen & vitamin hewan peliharaan premium untuk kucing & anjing.",
     images: [BRAND.ogImage],
   },
   robots: ALLOW_INDEXING

@@ -2,7 +2,7 @@
 export const SITE_CONFIG = {
   name: 'Anima Companion',
   tagline: 'Elevating Animal Health',
-  description: 'Suplemen & vitamin hewan peliharaan rekomendasi dokter hewan. Produk Anima Companion — PT Sutan Vet Medika.',
+  description: 'Suplemen & vitamin hewan peliharaan premium. Produk Anima Companion — PT Sutan Vet Medika.',
   // Official WhatsApp number (PT Sutan Vet Medika / Anima Companion).
   // Stored in E.164-without-`+` form for wa.me links: 6282210846408.
   // Display form (local prefix, grouped 4-4-4): "0822 1084 6408".
