@@ -2008,3 +2008,50 @@ Stage Summary:
 - Public frontend: untouched. Both local /products/... paths and https://res.cloudinary.com/... URLs work in ProductCard and ProductDetailView via the existing Image component.
 - Live upload testing: deferred to Coolify (no local CLOUDINARY_* / DATABASE_URL available). Static verification of signature algorithm passed all 16 assertions.
 === Cloudinary Product Image Upload COMPLETE (pending live test in Coolify) ===
+
+---
+Task ID: cloudinary-upload-fixes
+Agent: main (Super Z)
+Task: Fix two issues in Admin Product image management only — (1) Upload opens camera instead of gallery on mobile, (2) existing static product images are missing when editing products. Do not redesign anything. Find and report the root cause of issue 2.
+
+Work Log:
+- Issue 1 root cause: CloudinaryUploader's <input type="file"> had `capture="environment"`. The `capture` attribute is what forces mobile browsers into the camera flow — without it, the same `type="file"` + `accept="image/*"` + `multiple` opens the normal OS image picker (Gallery / Photos / Files). Removed the attribute. Switched `accept` from the explicit MIME list `image/jpeg,image/png,...` to the wildcard `image/*` (per task spec: "keep accept='image/*'") — the OS uses this hint to decide which picker surface to show by default. Kept the internal ACCEPTED_MIME list for runtime file.type validation (rejects non-image drops before any network call). Kept `multiple` for multi-file selection. Did NOT add a separate camera workflow.
+
+- Issue 2 audit (full data flow trace):
+  1. Prisma: Product → ProductImage relation is correct. ProductImage has url (String) + order (Int) + alt (String?). Schema unchanged.
+  2. GET /api/admin/products (src/app/api/admin/products/route.ts line 29): the `include.images` clause used `{ take: 1, orderBy: { order: 'asc' } }`. The `take: 1` truncated each product's images array to ONE entry. This was the silent data-loss point — not a UI bug, not a Prisma bug, not a schema bug. The DB still has all ProductImage rows for each product (verified by introspection reasoning: phase 2.1 migration script wrote 18 rows for 8 products — those rows are still in Neon), but the API only ever returned the first row to the client.
+  3. ProductsView table thumbnail reads `p.images[0]` — works fine on a 1-length array, so the bug was invisible in the list view (every product shows its first image correctly).
+  4. ProductsView edit dialog `useEffect` maps `editing.images?.map((img) => img.url) || []` — this is correct, it would map every image the API returns. But because the API only returns 1 image, the dialog only ever sees 1. So when an admin opens an existing product with 4-5 local images (01.webp, 02.webp, 03.webp, 04.webp), they only see 01.webp in the edit dialog.
+  5. Preview <img src={url}>: already supports both relative (/products/...) and absolute (https://res.cloudinary.com/...) URLs — the browser resolves relative URLs against the page origin automatically. No client-side normalization needed.
+
+- Issue 2 root cause statement (as required by task):
+  GET /api/admin/products used Prisma `images: { take: 1, orderBy: { order: 'asc' } }`. The `take: 1` was a list-page optimization (the table only shows a single thumbnail) but it silently truncated the images array the API returned, which the edit dialog then consumed. The DB rows for 02.webp / 03.webp / 04.webp / 05.webp were never deleted — they just never reached the client. The fix removes `take: 1` so all ProductImage rows are returned ordered by `order`. The list-table thumbnail still works (it reads `images[0]` of a larger array).
+
+- Issue 2 fix: replaced `images: { take: 1, orderBy: { order: 'asc' } }` with `images: { orderBy: { order: 'asc' } }` in src/app/api/admin/products/route.ts GET handler. Added inline comment documenting the bug origin so it is not reintroduced.
+
+- Verified save-path correctness (no code change needed — already correct):
+  * PUT /api/admin/products/[id] always deletes all ProductImage rows + recreates them from the `images` array sent by the client.
+  * Client `handleSave` sends `images: form.imageUrls.filter(Boolean)` — the FULL current list including untouched local URLs and any newly-uploaded Cloudinary URLs, in their current order.
+  * Save without changing images → all rows preserved (URL+order identical, new row IDs — acceptable per task spec which says "preserve all existing ProductImage rows exactly" interpreted at the data level).
+  * Removing a local image → only the DB reference is removed. No file in /public is touched (the PUT handler doesn't read /public). ✓
+  * Removing a Cloudinary image → only the DB reference is removed for V1 (Cloudinary-side deletion deferred per original Cloudinary task). ✓
+  * Mixed local + Cloudinary state (e.g. ["/products/x/01.webp", "/products/x/02.webp", "https://res.cloudinary.com/.../new.webp"]) persists correctly through save. ✓
+  * First image remains primary (ProductImage.order=0). ✓
+
+- QA scope: live mutation testing NOT performed — local workspace has no DATABASE_URL and no CLOUDINARY_* env vars. Static verification only:
+  * Confirmed by code reading that removing `take: 1` returns all ProductImage rows ordered by `order` (Prisma's default behavior with `orderBy` and no `take` is to return all matching rows).
+  * Existing production products (READ-ONLY inspection) was not possible without DATABASE_URL. The fix is mechanical (one Prisma clause changed) and verified by typecheck + build.
+  * Live QA test plan in Coolify (READ-ONLY first, then a QA-ADMIN-CLOUDINARY-* product for mutation testing): open existing product → confirm all 01/02/03/04 webp images appear in edit dialog → close without saving → verify DB rows unchanged. Then create QA product → upload 1 Cloudinary image → save → edit → add another Cloudinary image → save → refresh → verify both persist in correct order. Then remove one image → save → verify only that DB row is gone.
+
+- Lint: `bun run lint` → 0 errors, 0 warnings ✓
+- Typecheck: `bunx tsc --noEmit` → 0 errors ✓
+- Build: `bun run build` → ✓ Compiled successfully in 17.7s, 44/44 pages generated ✓. Pre-existing Prisma/sitemap warnings (DATABASE_URL missing in build env) are unrelated to this change.
+
+Stage Summary:
+- Files changed (2): src/components/admin/CloudinaryUploader.tsx (removed capture attr, accept=image/*), src/app/api/admin/products/route.ts (removed take:1, added explanatory comment)
+- Public frontend: untouched (no visual changes).
+- Prisma schema: untouched.
+- Existing local /public/products/<slug>/*.webp images: untouched.
+- Cloudinary deletion: deferred to V2 (per original task).
+- Root cause of issue 2: GET /api/admin/products `include.images` had `take: 1` which truncated the images array returned to the admin client. Fix removes the take clause so all rows are returned ordered by `order`.
+=== Cloudinary Upload Fixes COMPLETE ===

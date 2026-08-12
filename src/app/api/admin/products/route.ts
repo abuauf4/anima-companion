@@ -26,7 +26,15 @@ export async function GET(req: NextRequest) {
         where,
         include: {
           category: true,
-          images: { take: 1, orderBy: { order: 'asc' } },
+          // Return ALL ProductImage rows ordered by their `order` field.
+          // The list-table thumbnail reads images[0] (still works — first of
+          // a larger array). The edit dialog needs the full array so it can
+          // populate the image gallery with every existing image (local
+          // /products/<slug>/0N.webp and Cloudinary URLs alike). Previously
+          // `take: 1` truncated the array to a single image, which silently
+          // hid the rest from the admin edit dialog — that was the bug
+          // behind "existing static product images are missing when editing".
+          images: { orderBy: { order: 'asc' } },
           _count: { select: { orderItems: true } },
         },
         orderBy: { createdAt: 'desc' },

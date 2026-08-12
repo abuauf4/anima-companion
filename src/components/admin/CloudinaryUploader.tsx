@@ -52,6 +52,13 @@ interface UploadJob {
   resultUrl?: string
 }
 
+// Accept the standard image/* wildcard so the OS shows its normal image
+// picker (Gallery / Photos / Files) instead of being forced into a
+// camera capture flow. Multiple file selection is enabled via the
+// `multiple` attribute on the <input>.
+const ACCEPT_ATTR = 'image/*'
+// We still keep a MIME allow-list for runtime validation (file.type) so
+// non-image drops are rejected client-side before any network call.
 const ACCEPTED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif', 'image/heic', 'image/heif']
 const MAX_FILE_SIZE = 8 * 1024 * 1024 // 8 MB per file
 
@@ -188,9 +195,8 @@ export function CloudinaryUploader({ onUploaded, disabled, compact }: Cloudinary
       <input
         ref={inputRef}
         type="file"
-        accept={ACCEPTED_MIME.join(',')}
+        accept={ACCEPT_ATTR}
         multiple
-        capture="environment"
         className="hidden"
         onChange={(e) => {
           if (e.target.files?.length) handleFiles(e.target.files)
