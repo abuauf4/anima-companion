@@ -33,7 +33,7 @@ export function PetSelector({ children }: { children: React.ReactNode }) {
     <MotionConfig reducedMotion="user">
       <section
         aria-label="Pilih kategori hewan"
-        className="bg-background px-5 py-10 md:px-8 md:py-14 lg:py-16 xl:py-20"
+        className="bg-background px-5 py-6 md:px-8 md:py-14 lg:py-16 xl:py-20"
       >
         {/* Mobile / md: keep the existing max-w-3xl centered column so the
             mobile pet selector composition is COMPLETELY UNCHANGED.
@@ -42,15 +42,18 @@ export function PetSelector({ children }: { children: React.ReactNode }) {
             intentionally spaced on desktop, not cramped. */}
         <div className="mx-auto w-full max-w-3xl lg:max-w-[75rem] lg:px-2">
           {/* Small editorial section heading. Visually uppercase via CSS,
-              letter-spaced for an editorial feel. */}
-          <h2 className="mb-8 text-center text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground md:mb-10 md:text-xs lg:mb-12">
+              letter-spaced for an editorial feel. Mobile margin is tighter
+              (mb-6) so the heading → artwork distance lands in the 24–32px
+              target band without excessive whitespace. */}
+          <h2 className="mb-6 text-center text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground md:mb-10 md:text-xs lg:mb-12">
             Pilih untuk siapa
           </h2>
 
           {/* Two-column grid. No card container — pets float on background.
-              Desktop gap widens slightly so the two pets breathe at the
-              wider container width. */}
-          <div className="grid grid-cols-2 items-start gap-5 md:gap-12 lg:gap-16 xl:gap-24">
+              Mobile gap-4 keeps the two pets visually balanced side-by-side
+              without reserving a tall empty section. Desktop gap widens
+              slightly so the two pets breathe at the wider container width. */}
+          <div className="grid grid-cols-2 items-start gap-4 md:gap-12 lg:gap-16 xl:gap-24">
             {children}
           </div>
         </div>
@@ -208,7 +211,7 @@ export function PetSelectorItem({
       onPointerUp={handlePointerUpOrLeave}
       onPointerLeave={handlePointerUpOrLeave}
       aria-label={ariaLabel}
-      className={`group flex w-full flex-col items-center justify-start gap-3 rounded-2xl px-2 py-4 outline-none focus-visible:ring-2 ${focusRing} md:gap-4 md:py-6`}
+      className={`group flex w-full flex-col items-center justify-start gap-2 rounded-2xl px-2 py-2 outline-none focus-visible:ring-2 ${focusRing} md:gap-4 md:py-6`}
     >
       {/* Pet image — motion.div drives the hover/tap. Image is rendered as
           a plain <img> to preserve the source WebP byte-for-byte (no
@@ -223,8 +226,11 @@ export function PetSelectorItem({
         />
 
         {/* The pet image itself.
-            - height-constrained to keep both items visually balanced
-              regardless of the slightly different source aspect ratios.
+            - Mobile height is responsive via clamp(125px, 17svh, 170px) so
+              the artwork adapts to actual viewport height (svh) instead of
+              reserving a fixed tall slot. 17svh at 844 = ~143px, at 740 =
+              ~126px, at 932 = ~158px — all within the 125–170 target band.
+              Desktop keeps the existing fixed md:h-[320px].
             - w-auto preserves natural proportions (no stretching).
             - object-contain is a safety net for any sizing edge cases.
             - drop-shadow on the <img> respects alpha so the silhouette
@@ -237,7 +243,7 @@ export function PetSelectorItem({
           whileHover="hover"
           whileTap={pressed ? 'tap' : 'rest'}
           animate={pressed ? 'tap' : 'rest'}
-          className="relative flex h-[220px] w-auto items-end justify-center md:h-[320px]"
+          className="relative flex h-[clamp(125px,17svh,170px)] w-auto items-end justify-center md:h-[320px]"
           style={{ transformOrigin: 'center bottom' }}
         >
           <img

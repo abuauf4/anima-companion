@@ -139,13 +139,21 @@ export function HomeView() {
               only renders below lg (hidden at lg via lg:hidden). */}
 
       <section ref={heroRef} className="relative bg-background pb-2 pt-3 md:pb-4 md:pt-6 lg:pb-6 lg:pt-10">
-        {/* ---------- Mobile hero (default → below lg) — UNCHANGED ---------- */}
+        {/* ---------- Mobile hero (default → below lg) ---------- */}
+        {/* Hero height: responsive clamp using svh so browser chrome / different
+            screen heights don't break the composition. 52svh at 844 = ~438px
+            (clamped to 430px max), at 740 = ~385px, at 932 = ~485px (also
+            clamped to 430px max). Min 360px guarantees the pet faces stay
+            clearly visible on very short viewports. The image is rendered
+            via object-cover object-center so it is NEVER stretched — only
+            horizontally center-cropped. Desktop hero is in a separate
+            lg:flex block below and is UNCHANGED. */}
         <div className="container-page lg:hidden">
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="relative aspect-square w-full overflow-hidden rounded-3xl bg-muted md:aspect-[5/4]"
+            className="relative h-[clamp(360px,52svh,430px)] w-full overflow-hidden rounded-3xl bg-muted md:h-[clamp(380px,56svh,460px)]"
           >
             <OptImage
               src="/hero-pets.webp"
