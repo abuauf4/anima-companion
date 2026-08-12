@@ -218,14 +218,10 @@ export function Navbar() {
                 <DropdownMenuItem onClick={() => navigate('/orders')}>
                   Riwayat Pesanan
                 </DropdownMenuItem>
-                {user.role === 'ADMIN' && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => navigate('/admin')} className="text-primary font-medium">
-                      Dashboard Admin
-                    </DropdownMenuItem>
-                  </>
-                )}
+                {/* Admin entry point intentionally removed from public navbar.
+                    /admin is the canonical admin entrance and is server-side
+                    protected (see src/app/admin/[[...slug]]/page.tsx). Admins
+                    navigate to /admin by typing the URL directly. */}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => logout()} className="text-destructive">
                   Keluar

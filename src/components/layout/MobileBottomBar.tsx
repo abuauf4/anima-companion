@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useHashRouter } from '@/lib/router'
 import { useWishlistStore } from '@/lib/store'
 import { whatsappAdminUrl } from '@/lib/config'
-import { Home, ShoppingBag, User, Menu, Heart, ChevronRight, PawPrint, Shield, Stethoscope, MessageCircle } from 'lucide-react'
+import { Home, ShoppingBag, User, Menu, Heart, ChevronRight, PawPrint, Shield, MessageCircle } from 'lucide-react'
 import {
   Sheet,
   SheetContent,
@@ -95,14 +95,10 @@ export function MobileBottomBar() {
                 >
                   <ShoppingBag className="size-4 text-muted-foreground" /> Riwayat Pesanan
                 </button>
-                {user.role === 'ADMIN' && (
-                  <button
-                    onClick={() => { navigate('/admin'); setSidebarOpen(false) }}
-                    className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium text-primary hover:bg-accent"
-                  >
-                    <Stethoscope className="size-4" /> Dashboard Admin
-                  </button>
-                )}
+                {/* Admin entry point intentionally removed from public mobile
+                    menu. /admin is the canonical admin entrance and is
+                    server-side protected. Admins navigate to /admin by typing
+                    the URL directly. */}
                 <button
                   onClick={() => { logout(); setSidebarOpen(false) }}
                   className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium text-destructive hover:bg-accent"
