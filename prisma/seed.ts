@@ -91,6 +91,12 @@ async function main() {
         name: 'Admin Anima',
         phone: '082210846408',
         role: 'ADMIN',
+        // Verified Identity V1 — demo users are marked verified so dev
+        // experience is frictionless. In production this branch is
+        // hard-disabled (no override).
+        provider: 'PASSWORD',
+        providerSubject: null,
+        emailVerifiedAt: new Date(),
       },
     })
     adminId = admin.id
@@ -109,6 +115,11 @@ async function main() {
           name: process.env.SEED_ADMIN_NAME || 'Administrator',
           phone: process.env.SEED_ADMIN_PHONE || null,
           role: 'ADMIN',
+          // Verified Identity V1 — bootstrap admin is marked verified
+          // because the operator chose the email and is the authority.
+          provider: 'PASSWORD',
+          providerSubject: null,
+          emailVerifiedAt: new Date(),
         },
       })
       adminId = admin.id
@@ -134,6 +145,11 @@ async function main() {
         name: 'Budi Santoso',
         phone: '081298765432',
         role: 'CUSTOMER',
+        // Verified Identity V1 — demo customer is marked verified for
+        // dev experience.
+        provider: 'PASSWORD',
+        providerSubject: null,
+        emailVerifiedAt: new Date(),
       },
     })
     customerId = customer.id

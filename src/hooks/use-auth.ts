@@ -9,6 +9,14 @@ export interface User {
   name: string
   phone: string | null
   role: 'CUSTOMER' | 'ADMIN'
+  // Verified Identity V1 — read-only fields surfaced to the client.
+  // These come from /api/auth/me; the client MUST NOT send them back
+  // to any mutation endpoint as a way to set state. The server ignores
+  // any client-supplied value for these fields (register hardcodes them;
+  // there is no profile-update endpoint that accepts them).
+  provider: 'PASSWORD' | 'GOOGLE'
+  providerSubject: string | null
+  emailVerifiedAt: string | null // ISO datetime
 }
 
 /**

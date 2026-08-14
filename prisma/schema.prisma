@@ -19,21 +19,76 @@ datasource db {
 
 // ==================== USER & AUTH ====================
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  password     String
-  name         String
-  phone        String?
-  role         String   @default("CUSTOMER") // CUSTOMER | ADMIN | SELLER
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(cuid())
+  email           String   @unique
+  password        String
+  name            String
+  phone           String?
+  role            String   @default("CUSTOMER") // CUSTOMER | ADMIN | SELLER
+  // === Verified Identity V1 ===
+  // Identity provider for this account:
+  //   PASSWORD — local email/password (default, backwards-compatible with
+  //              existing rows created before Verified Identity V1).
+  //   GOOGLE   — account created via Google Sign-In; email is considered
+  //              verified by Google's identity-provider assertion.
+  provider        String   @default("PASSWORD")
+  // For GOOGLE users: the stable Google `sub` claim. NULL for PASSWORD
+  // users. Unique when set, so a single Google identity can map to at
+  // most one Anima Companion account.
+  providerSubject  String?  @unique
+  // Authoritative email-verification timestamp. NULL means unverified.
+  // For PASSWORD users this is set ONLY by the email-verification flow
+  // (POST /api/auth/verify-email/confirm with a valid token). For GOOGLE
+  // users this is set at account-creation time, because Google's
+  // `email_verified` claim is the trusted authority.
+  // NEVER set this from a client request body — only from trusted server
+  // flows (token verification / OAuth callback).
+  emailVerifiedAt  DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  cart         Cart?
-  orders       Order[]
-  reviews      Review[]
-  petProfiles  PetProfile[]
-  wishlist     Wishlist[]
-  seller       Seller?
+  cart             Cart?
+  orders           Order[]
+  reviews          Review[]
+  petProfiles      PetProfile[]
+  wishlist         Wishlist[]
+  seller           Seller?
+  verificationTokens EmailVerificationToken[]
+}
+
+// ==================== EMAIL VERIFICATION TOKENS ====================
+// Single-use, time-limited tokens for proving control of an email address
+// during PASSWORD registration. GOOGLE users do not use this table — their
+// email is verified by Google's identity provider at account-creation
+// time and `emailVerifiedAt` is set directly.
+//
+// SECURITY CONTRACT:
+//   - The raw token is 32 bytes of CSPRNG output, hex-encoded (64 chars).
+//   - The DB stores only `sha256(rawToken)` as `tokenHash` — a DB
+//     compromise does NOT reveal active tokens.
+//   - `expiresAt` is 24h after creation.
+//   - `consumedAt` is NULL until the token is consumed by the verify
+//     route. Once non-NULL the token can never be used again.
+//   - On requesting a new verification email, all UNCONSUMED tokens for
+//     the same user are invalidated by setting `consumedAt = now()` —
+//     only the newest token is valid at any time.
+//   - Concurrency-safe consumption: the verify route uses
+//     `updateMany WHERE consumedAt IS NULL AND expiresAt > now()` and
+//     checks `count === 1` — only one of two concurrent requests with
+//     the same token can win. The loser returns the same success
+//     response (idempotent outcome: `emailVerifiedAt` is set either way).
+model EmailVerificationToken {
+  id          String    @id @default(cuid())
+  userId      String
+  // SHA-256 hex of the raw 32-byte token. Never store the raw token.
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model PetProfile {

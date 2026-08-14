@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { hashPassword, createSession, logAuthError } from '@/lib/auth'
+import { issueVerificationToken } from '@/lib/identity'
+import { sendVerificationEmail } from '@/lib/email'
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,6 +32,14 @@ export async function POST(req: NextRequest) {
     }
 
     const hashedPassword = await hashPassword(password)
+    // Verified Identity V1 — explicit provider + emailVerifiedAt fields:
+    //   - provider: 'PASSWORD' (hardcoded; NEVER read from body).
+    //   - emailVerifiedAt: null (user must verify via the email flow
+    //     before this is set).
+    //   - providerSubject: null (only set for GOOGLE users).
+    // The user is created UNVERIFIED. The verification email is sent
+    // immediately after creation so the user can verify before they
+    // forget about it.
     const user = await db.user.create({
       data: {
         email: email.toLowerCase(),
@@ -37,13 +47,37 @@ export async function POST(req: NextRequest) {
         name,
         phone: phone || null,
         role: 'CUSTOMER',
+        provider: 'PASSWORD',
+        providerSubject: null,
+        emailVerifiedAt: null,
       },
-      select: { id: true, email: true, name: true, phone: true, role: true },
+      select: {
+        id: true, email: true, name: true, phone: true, role: true,
+        provider: true, emailVerifiedAt: true,
+      },
     })
 
     await db.cart.create({ data: { userId: user.id } })
 
-    await createSession(user)
+    // Issue a verification token + send the verification email. Best-effort
+    // — if the email adapter fails (e.g. production without EMAIL_PROVIDER
+    // configured), the user is still registered and logged in; they can
+    // request another verification email from the profile page. We log
+    // the failure but don't fail the registration.
+    try {
+      const rawToken = await issueVerificationToken(user.id)
+      await sendVerificationEmail(user.email, rawToken, user.name)
+    } catch (emailErr) {
+      // Log but don't fail registration — the user can request another
+      // verification email from the profile page.
+      console.error('[register] Failed to send verification email:', emailErr instanceof Error ? emailErr.message : emailErr)
+    }
+
+    await createSession({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    })
     return NextResponse.json({ user })
   } catch (e) {
     // SECURITY: see login route — same sanitization applies. In production

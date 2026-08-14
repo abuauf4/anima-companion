@@ -2493,3 +2493,102 @@ Stage Summary:
   * Prisma enum role (currently a String @default("CUSTOMER")) — V2.
   * Runtime PostgreSQL HTTP integration tests — still 🟡 pending PostgreSQL-equipped QA env. Static tests cover all structural guarantees.
 === Auth & Authorization Security V1 CLEANUP COMPLETE ===
+
+---
+Task ID: verified-identity-v1
+Agent: main (Super Z)
+Task: Verified Identity V1 — tutup celah akun dengan email ngasal dan siapkan identity layer untuk eligibility doorprize berikutnya. Implementasikan Google Sign-In (compatible dengan auth architecture sekarang), simpan emailVerifiedAt sebagai authoritative verification state di DB, kirim verification email untuk password registration (token single-use + expiry + hashed), safe account-linking (no auto-link to unverified password accounts), guard identity fields against client payload. Jangan redesign auth system. Jangan invent email provider berbayar. Apple Login / Doorprize / Phone OTP / Payment / Loyalty — semua out of scope.
+
+Work Log:
+- Audit (baseline bbcb3ae): read prisma/schema.prisma (User model with no identity fields, no EmailVerificationToken table), src/lib/auth.ts (HMAC-SHA-256 signed session cookie anima_session, 7-day expiry, getCurrentUser + requireAuth + requireAdmin + lazy getSecret + logAuthError), src/app/api/auth/{login,register,logout,me}/route.ts (no identity state), src/hooks/use-auth.ts (Zustand User interface with id/email/name/phone/role only), src/views/auth/{Login,Register}View.tsx + ProfileView.tsx (no verification UI), prisma/seed.ts (demo + bootstrap admin/customer creation with no verification state).
+- Audit environment: nodemailer NOT installed (only peer-dep of next-auth); no SMTP service configured; no sendgrid/mailgun/resend/postmark SDK installed; z-ai-web-dev-sdk does NOT expose an email-send primitive. next-auth@4.24.13 is in package.json but NOT used anywhere in src/ — its transitive dep jose@4.15.9 IS available. google-auth-library NOT installed.
+- Design decision: stay on the custom HMAC session. Adopting NextAuth would mean replacing anima_session, migrating every requireAuth call site, and re-implementing the NODE_ENV gating — explicitly forbidden by the task spec ("Jangan redesign auth system"). Reuse jose for Google ID token verification (already available transitively). Manual OAuth 2.0 Authorization Code flow.
+
+- Schema changes (prisma/schema.prisma):
+  * Added to User: provider String @default("PASSWORD") (PASSWORD | GOOGLE), providerSubject String? @unique (Google sub), emailVerifiedAt DateTime? (NULL = unverified). Defaults are backwards-compatible with existing rows.
+  * Added new EmailVerificationToken model: id (cuid), userId (FK to User, onDelete: Cascade), tokenHash String @unique (SHA-256 hex of raw token — NEVER stores plaintext), expiresAt DateTime (24h TTL), consumedAt DateTime? (NULL until consumed; single-use), createdAt. Indexed on userId.
+  * Regenerated Prisma client. db push to sandbox DB fails (no DATABASE_URL — same runtime QA pending as previous tasks).
+
+- Identity helpers (src/lib/identity.ts):
+  * generateVerificationToken() — 32 bytes of CSPRNG via Node crypto.randomBytes, hex-encoded (64 chars).
+  * hashToken(rawToken) — SHA-256 hex. Sufficient because input is high-entropy (32 bytes), not a low-entropy password. No slow KDF needed.
+  * issueVerificationToken(userId) — atomically invalidates all previous unconsumed tokens for the user (sets consumedAt = now) AND inserts the new one, in a single $transaction. Returns the RAW token (caller must deliver via email, never log).
+  * consumeVerificationToken(rawToken) — looks up by hash, returns one of: OK / ALREADY_VERIFIED / ALREADY_CONSUMED / EXPIRED / NOT_FOUND. Atomic claim via updateMany WHERE consumedAt IS NULL AND expiresAt > now(); concurrent calls race safely (one wins count=1, other gets count=0 → ALREADY_CONSUMED).
+  * markEmailVerified(userId) — idempotent (updateMany WHERE emailVerifiedAt IS NULL). Returns the authoritative emailVerifiedAt (read back from DB in case a concurrent request set it first).
+
+- Email adapter (src/lib/email.ts):
+  * Pluggable EmailAdapter interface (send(message)).
+  * DevConsoleEmailAdapter (default): logs the email body to stdout in dev. In production, REFUSES to send — logs a loud CONFIG-MISSING error so the operator must wire a real provider. This is the honest "no fake email-delivery" path.
+  * Stub adapters for resend/sendgrid/ses/smtp — each throws NOT_IMPLEMENTED with a clear "install the SDK and wire it in src/lib/email.ts" message. V2 work.
+  * sendVerificationEmail(to, rawToken, userName) — builds the verification URL using NEXT_PUBLIC_SITE_URL (canonical origin, NOT the request's Host header — host-header-injection defense), hands off to the adapter.
+  * Verified Identity V1 does NOT add a runtime email provider. The dev adapter is the only working implementation. In production with EMAIL_PROVIDER unset, password users will be UNVERIFIED until the operator wires a real provider in V2. This is a known limitation, documented in .env.example.
+
+- Google OAuth (src/lib/google.ts):
+  * verifyGoogleIdToken(idToken, clientId) — uses jose.createRemoteJWKSet(Google's discovery URL) + jwtVerify. Verifies iss, aud, exp. Returns { sub, email, emailVerified, name, picture }.
+  * exchangeGoogleCodeForTokens(code, redirectUri, clientId, clientSecret) — POST to https://oauth2.googleapis.com/token. Returns { idToken, accessToken }.
+  * buildGoogleAuthUrl(clientId, redirectUri, state) — constructs the consent-screen URL with scope=openid email profile and prompt=select_account.
+  * getGoogleOAuthConfig() — reads GOOGLE_OAUTH_CLIENT_ID + GOOGLE_OAUTH_CLIENT_SECRET from env. Returns null if not configured. The login page hides the Google button in this case (no fake behavior).
+
+- OAuth state token (src/lib/auth.ts): added createOAuthState(next) + verifyOAuthState(state). HMAC-signed with the SAME getSecret() used for the session cookie. Carries { next: string|null, nonce: string, exp: number }, 10-minute TTL. The `next` field is validated via safeInternalPath() before signing AND after verifying (defense-in-depth).
+
+- New API routes:
+  * GET /api/auth/google — entry point. Validates ?next= via safeInternalPath(). Signs the safe-next into an OAuth state token. Redirects to Google consent. Returns 503 GOOGLE_OAUTH_NOT_CONFIGURED if env vars missing.
+  * GET /api/auth/google/callback — Google redirects here. Verifies state, exchanges code, verifies ID token. ACCOUNT-LINKING POLICY: looks up by providerSubject first (existing Google user → sign in). If not found, looks up by email: (a) if existing is PASSWORD + emailVerifiedAt non-null + Google email_verified=true → LINK atomically via updateMany WHERE providerSubject IS NULL (race-safe). (b) if existing is PASSWORD + emailVerifiedAt null → REFUSE with unverified_password_account (takeover defense). (c) if existing is GOOGLE with different sub → REFUSE with email_conflict. (d) if no match → CREATE new GOOGLE user with emailVerifiedAt = now() (Google verified the email — trusted authority) and a random 32-byte password (never logged; Google users can't use the password flow). Issues the SAME anima_session HMAC cookie used by the password flow. No session-layer change.
+  * GET /api/auth/google-config — public { enabled: boolean } check. The login page uses this to decide whether to show the Google button.
+  * POST /api/auth/verify-email/request — auth-required. If user is GOOGLE → 400 GOOGLE_USER_NO_VERIFICATION_NEEDED. If user.emailVerifiedAt non-null → 200 { alreadyVerified: true }. Otherwise issues a new token (invalidates previous unconsumed tokens) + sends the verification email. Returns { sent: true } — NEVER includes the raw token.
+  * POST /api/auth/verify-email/confirm — public (the token IS the proof). Body: { token }. Maps to: OK (200), ALREADY_VERIFIED (200), ALREADY_CONSUMED (200, idempotent), TOKEN_EXPIRED (410), TOKEN_NOT_FOUND (404), TOKEN_EMPTY (400). On OK/ALREADY_VERIFIED, calls markEmailVerified(userId). Best-effort sends a confirmation email.
+
+- Updated src/app/api/auth/{login,register}/route.ts:
+  * register now hardcodes provider: 'PASSWORD', providerSubject: null, emailVerifiedAt: null. Body destructuring does NOT include provider/providerSubject/emailVerifiedAt/role — explicitly tested via SRC1/SRC2. After user creation, issues a verification token + sends the email (best-effort; failure logged but doesn't fail registration).
+  * login safeUser now includes provider/providerSubject/emailVerifiedAt. Body destructuring still does NOT include provider/emailVerifiedAt/role.
+  * getCurrentUser select expanded to include provider/providerSubject/emailVerifiedAt. password still excluded.
+
+- UI updates:
+  * New GoogleSignInButton component (src/components/auth/GoogleSignInButton.tsx) — fetches /api/auth/google-config; renders button only if enabled=true; passes ?next=<safePath> using safeInternalPath() (same open-redirect defense as password flow).
+  * LoginView + RegisterView: Google button + "atau" divider added above the email/password form. Hidden when Google OAuth is unconfigured (button returns null).
+  * New VerifyEmailView (src/views/auth/VerifyEmailView.tsx) + /verify-email page — reads ?token= from URL, POSTs to /api/auth/verify-email/confirm, shows verifying/ok/already_verified/already_consumed/expired/not_found/error states.
+  * ProfileView: shows "Terverifikasi" badge (green) if user.emailVerifiedAt is set, or "Belum terverifikasi" badge (destructive) + "Kirim ulang" button (calls /api/auth/verify-email/request). For Google users, shows "via Google" next to the verified badge.
+
+- Updated src/hooks/use-auth.ts User interface: added provider ('PASSWORD' | 'GOOGLE'), providerSubject (string | null), emailVerifiedAt (string | null — ISO datetime). These are READ-ONLY on the client; no mutation endpoint accepts them.
+
+- Updated prisma/seed.ts: demo admin + demo customer + bootstrap admin now set provider: 'PASSWORD', providerSubject: null, emailVerifiedAt: new Date() (verified for dev experience + because operator is the authority for bootstrap). Placeholder users (random-password fallback) leave emailVerifiedAt unset (they're not a login surface anyway).
+
+- Updated .env.example: documented GOOGLE_OAUTH_CLIENT_ID + GOOGLE_OAUTH_CLIENT_SECRET (optional; defaults to hidden Google button + 503 on /api/auth/google) and EMAIL_PROVIDER (optional; defaults to "dev" — dev console adapter, refuses to send in production).
+
+- New tests (scripts/test-verified-identity.ts):
+  * TOK1: generateVerificationToken returns 64-char hex.
+  * TOK2: hashToken returns 64-char SHA-256 hex; deterministic; differs from input.
+  * TOK3: 1000-sample token uniqueness (no collisions); 1000-sample hash uniqueness.
+  * SRC1: register route hardcodes provider='PASSWORD' + emailVerifiedAt=null.
+  * SRC2: register route does NOT destructure provider/providerSubject/emailVerifiedAt/role from body.
+  * SRC3: login response includes provider/providerSubject/emailVerifiedAt; login route does NOT read these from body.
+  * SRC4: getCurrentUser select includes identity fields; excludes password.
+  * SRC5: verify-email/request route does NOT log raw token.
+  * SRC6: verify-email/confirm route does NOT log raw token.
+  * SRC7: google/callback uses safeInternalPath(statePayload.next); does NOT redirect to raw statePayload.next.
+  * SRC8: google/callback links only when existing user is PASSWORD AND emailVerifiedAt non-null; returns unverified_password_account error when refusing to link.
+  * HTTP integration (BASE_URL set, requires PostgreSQL): VREG (registration starts unverified), VREQ (request returns sent:true, no token leak), VCONF1-alt (empty token → 400), VCONF3 (invalid token → 404), VESC1 (client cannot submit emailVerifiedAt via body), VESC2 (client cannot register as ADMIN), VESC3 (covered by VESC1).
+  * DB-direct tests (DATABASE_URL set): VCONF1 (valid token succeeds → emailVerifiedAt set), VCONF2 (expired token → EXPIRED), VCONF3-DB (invalid token → NOT_FOUND), VCONF4 (reused token → ALREADY_CONSUMED idempotent), VCONF-ALREADY-VERIFIED (fresh token for verified user → ALREADY_VERIFIED), VCONF5 (two concurrent consumeVerificationToken() calls — one OK, one ALREADY_CONSUMED; both userIds match; markEmailVerified idempotent).
+
+- Verification:
+  * `bun x tsc --noEmit`: clean.
+  * `bun run lint`: clean.
+  * `bun run build`: succeeded. All new routes generated: /api/auth/google, /api/auth/google/callback, /api/auth/google-config, /api/auth/verify-email/request, /api/auth/verify-email/confirm, /verify-email. Existing routes unchanged.
+  * `bun run scripts/test-verified-identity.ts`: 2040 passed, 0 failed. DB-direct tests skipped (no DATABASE_URL — same runtime QA pending as previous tasks).
+  * `bun run scripts/test-auth-integrity.ts`: 96 passed, 0 failed — no regression to existing Auth V1 cleanup.
+  * Build warnings: only the pre-existing sandbox-only Prisma errors (DATABASE_URL not set) — also present at baseline bbcb3ae. NOT introduced by this task.
+
+Stage Summary:
+- Schema: 3 new columns on User (provider, providerSubject, emailVerifiedAt) + 1 new table (EmailVerificationToken). Backwards-compatible defaults.
+- Identity provider support: PASSWORD (existing) + GOOGLE (new). Apple Login is V2 — out of scope.
+- Verification state is authoritative in the DB: `User.emailVerifiedAt !== null` is the single source of truth that the Doorprize Integrity task can use for eligibility.
+- Token security: 32-byte CSPRNG, SHA-256 hashed in DB (no plaintext), 24h TTL, single-use (atomic updateMany claim), request-time invalidation of previous unconsumed tokens, concurrency-safe (idempotent outcome for racing requests).
+- Account-linking policy: no auto-link to unverified password accounts. An attacker who controls victim@gmail.com cannot take over an unverified password account for victim@gmail.com. Verified password accounts CAN be linked to Google (both providers then work for the same account).
+- Client cannot submit emailVerifiedAt, provider, providerSubject, or role via any route body — register hardcodes them; no profile-update endpoint exists that accepts them.
+- Google Sign-In is OPTIONAL — if GOOGLE_OAUTH_CLIENT_ID/SECRET are not set, the button is hidden and /api/auth/google returns 503 with a clear config-missing message. No fake behavior.
+- Email delivery is the honest V1 limitation: the dev console adapter works in dev; in production with EMAIL_PROVIDER unset, the adapter logs a CONFIG-MISSING error and does NOT send. Password users will be UNVERIFIED until the operator wires a real provider (V2). Google users are verified at account-creation time regardless.
+- Order/Stock/Voucher integrity from commits 84c4e4b + d0212aa + 8caf2c1: UNTOUCHED. No business-logic changes. No Prisma schema changes to Order/OrderItem/Product/Voucher/Cart/CartItem.
+- Existing Auth V1 (commits fd91037 + bbcb3ae): UNTOUCHED. AuthError, handleAuthError, requireAuth, requireAdmin, getCurrentUser, createSession, destroySession, safeInternalPath, logAuthError, OAuth state helpers — all preserved. The 96 existing auth tests still pass.
+- Runtime PostgreSQL QA: still 🟡 pending (no DATABASE_URL in sandbox). Static tests cover all structural guarantees (2040 + 96 = 2136 assertions pass).
+- Remaining limitations explicitly deferred (per task spec): Doorprize system, Apple Login, phone OTP/WhatsApp verification, session revocation store, Prisma enum role, rate limiting, real email provider (resend/sendgrid/ses/smtp) — all V2 or later.
+=== Verified Identity V1 COMPLETE (runtime PostgreSQL QA still pending — same as previous tasks) ===

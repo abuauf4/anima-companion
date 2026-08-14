@@ -30,12 +30,19 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Verified Identity V1 — include `provider`, `providerSubject`, and
+    // `emailVerifiedAt` in the response. These are READ-ONLY fields; the
+    // client cannot modify them via this route (they're set ONLY by the
+    // register / verify-email / Google-callback routes).
     const safeUser = {
       id: user.id,
       email: user.email,
       name: user.name,
       phone: user.phone,
       role: user.role,
+      provider: user.provider,
+      providerSubject: user.providerSubject,
+      emailVerifiedAt: user.emailVerifiedAt,
     }
 
     await createSession(safeUser)

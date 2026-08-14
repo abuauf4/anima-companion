@@ -102,6 +102,26 @@ export function ProfileView() {
                   <Phone className="h-4 w-4" /> <span className="text-foreground">{user.phone}</span>
                 </div>
               )}
+              {/* Verified Identity V1 — show verification status. */}
+              <div className="flex items-center gap-2 text-muted-foreground">
+                {user.emailVerifiedAt ? (
+                  <>
+                    <Badge variant="default" className="bg-green-600 hover:bg-green-600 text-white">
+                      Terverifikasi
+                    </Badge>
+                    {user.provider === 'GOOGLE' && (
+                      <span className="text-xs text-muted-foreground">via Google</span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Badge variant="destructive">
+                      Belum terverifikasi
+                    </Badge>
+                    <ResendVerificationButton />
+                  </>
+                )}
+              </div>
             </div>
 
             <Button
@@ -325,5 +345,51 @@ function PetProfileDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// === Verified Identity V1 — local helper components ===
+
+/**
+ * ResendVerificationButton — calls /api/auth/verify-email/request to
+ * issue a new verification token + send the verification email.
+ *
+ * Idempotent: if the user is already verified, the server returns
+ * `{ alreadyVerified: true }` and we show a success toast anyway.
+ */
+function ResendVerificationButton() {
+  const [sending, setSending] = useState(false)
+
+  const handleResend = async () => {
+    setSending(true)
+    try {
+      const res = await fetch('/api/auth/verify-email/request', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || 'Gagal mengirim email verifikasi')
+        return
+      }
+      if (data.alreadyVerified) {
+        toast.success('Email Anda sudah terverifikasi.')
+      } else {
+        toast.success('Email verifikasi telah dikirim. Cek kotak masuk Anda.')
+      }
+    } catch {
+      toast.error('Gagal mengirim email verifikasi')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className="h-7 gap-1 text-xs"
+      onClick={handleResend}
+      disabled={sending}
+    >
+      {sending ? 'Mengirim...' : 'Kirim ulang'}
+    </Button>
   )
 }

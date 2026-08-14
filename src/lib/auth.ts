@@ -188,9 +188,22 @@ export async function getCurrentUser() {
   if (!token) return null
   const payload = await verify(token)
   if (!payload) return null
+  // Verified Identity V1 — select the new identity fields so
+  // /api/auth/me exposes `provider` and `emailVerifiedAt` to the client.
+  // The `password` field is intentionally NOT selected — same defense
+  // as before Verified Identity V1.
   const user = await db.user.findUnique({
     where: { id: payload.userId },
-    select: { id: true, email: true, name: true, phone: true, role: true },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      phone: true,
+      role: true,
+      provider: true,
+      providerSubject: true,
+      emailVerifiedAt: true,
+    },
   })
   return user
 }
@@ -249,4 +262,52 @@ export function logAuthError(event: string, e: unknown, status = 500): void {
   const errId = e instanceof Error ? e.constructor.name : typeof e
   const errMsg = e instanceof Error ? e.message : String(e)
   console.error(`${event}:`, { id: errId, message: errMsg.slice(0, 200) })
+}
+
+// ============================================================================
+// OAuth state token — short-lived, HMAC-signed, tamper-proof.
+//
+// Used by the Google OAuth flow to carry the safe-internal `next` path
+// (and a nonce + expiry) through the Google consent-screen redirect.
+// Without this, the OAuth flow would be vulnerable to CSRF: an attacker
+// could trick a logged-in user into clicking a "Login with Google"
+// button that points at our callback with an attacker-chosen code.
+//
+// The state token is signed with the SAME `getSecret()` used for the
+// session cookie, so an attacker who can forge one can forge the other
+// — they're the same trust boundary.
+//
+// Format: base64url(payload).base64url(signature)
+//   payload: { next: string|null, nonce: string, exp: number }
+//   signature: HMAC-SHA-256 of the payload bytes, using getSecret().
+//
+// The `next` field MUST be a safe-internal path (validated via
+// safeInternalPath() before signing). We re-validate after verifying
+// the signature too, because defense-in-depth.
+// ============================================================================
+
+export interface OAuthStatePayload {
+  next: string | null
+  nonce: string
+  exp: number
+}
+
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000 // 10 minutes — long enough to complete Google consent, short enough to limit CSRF window
+
+export async function createOAuthState(next: string | null): Promise<string> {
+  const payload: OAuthStatePayload = {
+    next,
+    // 16 bytes of CSPRNG, hex-encoded → 32 chars. Prevents replay of
+    // an old state token even within its TTL.
+    nonce: crypto.randomUUID().replace(/-/g, ''),
+    exp: Date.now() + OAUTH_STATE_TTL_MS,
+  }
+  return await sign(payload)
+}
+
+export async function verifyOAuthState(state: string): Promise<OAuthStatePayload | null> {
+  const payload = await verify(state)
+  if (!payload) return null
+  // verify() already checks exp. Re-shape to the public type.
+  return payload as OAuthStatePayload
 }
