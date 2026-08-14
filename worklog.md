@@ -2151,3 +2151,112 @@ Stage Summary:
 - Domain principle preserved: status + stock = one atomic operation inside a single $transaction. Failure of either side rolls back both.
 - Runtime concurrency test status: PENDING (awaiting PostgreSQL-equipped QA environment). Static verification (tsc + lint + build + manual SQL-pattern review) all pass.
 === Order/Stock Status + Cancellation Concurrency Hardening COMPLETE (runtime concurrency test pending PostgreSQL) ===
+
+---
+Task ID: voucher-integrity-v1
+Agent: main (Super Z)
+Task: Voucher Integrity V1 — audit existing voucher flow and harden server-authority + structured errors + tampering protection. Do NOT invent business rules (no usage limit, no per-customer redemption, no maxDiscount, no validFrom) if the schema doesn't support them. Preserve all order/stock integrity hardening from commits 0646968 + 549b49a. Determine voucher cancellation/reversal semantics from audit findings — do not guess.
+
+Work Log:
+- Audit: read prisma/schema.prisma (Voucher model + Order.voucherCode), src/lib/orders.ts (resolveVoucher + createOrder + cancelOrderAndRestoreStock), src/app/api/orders/route.ts, src/app/api/vouchers/validate/route.ts, src/app/api/admin/vouchers/route.ts, src/app/api/admin/vouchers/[id]/route.ts, src/views/CheckoutView.tsx, src/views/CartView.tsx, src/lib/store.ts, src/views/admin/VouchersView.tsx, prisma/seed.ts (3 voucher seeds).
+
+- Existing voucher flow before patch:
+  * Voucher model fields: code (unique), type (PERCENTAGE|FIXED), value (Int), minSpend (Int, default 0), isActive (Boolean, default true), validUntil (DateTime?, nullable), description (String?), createdAt. NO validFrom, NO maxDiscount, NO usageLimit, NO usedCount, NO VoucherRedemption model.
+  * Order.voucherCode is a free-form String? snapshot, NOT a FK to Voucher.
+  * Client sends to /api/orders: {items, customerName, customerPhone, address, notes, voucherCode} — only voucherCode as a string key, no client-supplied discount/subtotal/total/voucherValue. Already correct (server-authoritative at API boundary).
+  * Cart store: stores voucherCode: string|null. CartView pre-validates voucher via /api/vouchers/validate (preview), checkout POSTs only voucherCode. Already correct.
+  * resolveVoucher() inside createOrder(): silently returned {discount:0, appliedVoucherCode:null} for ANY invalid condition (not found, inactive, expired, below min) — INTEGRITY HOLE: customer enters voucher and gets silently charged full price without warning.
+  * /api/vouchers/validate: returned generic 400 messages, no machine-readable codes.
+  * Admin VouchersView: form has fields for code, type, value, minSpend, validUntil, description, isActive — confirms no business intent for usageLimit / validFrom / maxDiscount / per-customer limits.
+
+- Root cause / integrity holes found:
+  * HOLE 1 (silent ignore): resolveVoucher returned zero-discount for invalid vouchers instead of throwing — order proceeded with wrong total. Customer had no idea voucher was rejected.
+  * HOLE 2 (no structured codes): /api/vouchers/validate returned generic 400 messages, couldn't be branched on by client. /api/orders' OrderError pattern didn't cover voucher errors.
+  * HOLE 3 (no tampering-protection docs): createOrder implicitly ignored client-supplied discount/subtotal/total because CreateOrderInput only declares voucherCode — but this wasn't documented as an explicit invariant, making it easy to break in future refactors.
+  * HOLE 4 (voucher reversal ambiguity): needed to determine cancellation semantics — Option A (consumed at creation, no reversal) vs Option B (release on cancel). Audit resolved this: since Voucher has no usedCount/usageLimit/VoucherRedemption, there is NO voucher state to release on cancel. Option A is the implicit V1 behavior. Existing cancelOrderAndRestoreStock (which only restores stock, never touches voucher) is correct — no schema migration, no reversal logic needed.
+
+- Actual Voucher schema/business rules (audited):
+  * Rule 1 (no voucherCode): legitimate "no voucher applied" case, NOT an error, return zero discount.
+  * Rule 2 (voucher not found): code doesn't match any row → VOUCHER_NOT_FOUND.
+  * Rule 3 (isActive=false): admin-deactivated voucher → VOUCHER_INACTIVE.
+  * Rule 4 (validUntil < now): expired voucher → VOUCHER_EXPIRED. validUntil nullable (null = no expiry).
+  * Rule 5 (subtotal < minSpend): below minimum spend → VOUCHER_MINIMUM_NOT_MET (carries actual minSpend + current subtotal for client UX).
+  * Discount calculation: PERCENTAGE → Math.round(subtotal * value / 100); FIXED → flat value. No maxDiscount cap (field doesn't exist).
+  * NOT ENFORCED (no schema field): validFrom/start-date, maxDiscount, usageLimit/global quota, usedCount/counter, per-customer VoucherRedemption. Per task spec "jangan invent business rule yang tidak ada di project" — these are NOT added.
+
+- Files changed (3):
+  * src/lib/orders.ts — added 4 VOUCHER_* errors to ORDER_ERRORS; rewrote resolveVoucher to throw structured errors instead of silently returning zero; expanded INVARIANTS docblock (points 9-12: server-authoritative voucher, structured errors, no invented rules, cancellation semantics); expanded createOrder docblock with explicit TAMPERING PROTECTION section listing every field the client cannot influence (subtotal, discount, total, userId, voucher eligibility).
+  * src/app/api/vouchers/validate/route.ts — rewrote with aligned VOUCHER_* error codes (VOUCHER_NOT_FOUND=404, VOUCHER_INACTIVE=400, VOUCHER_EXPIRED=400, VOUCHER_MINIMUM_NOT_MET=400) so cart preview UX matches checkout error; added `code` field to all error responses for client branching; added VOUCHER_MINIMUM_NOT_MET response that includes minSpend + subtotal for client UX ("Belanja Rp X lagi untuk memakai voucher ini").
+  * scripts/test-order-integrity.ts — added voucher scenarios V1-V9 (9 new scenarios, ~490 new lines).
+
+- Schema migration changes: NONE.
+  * Per task spec point 5: "Schema migration hanya dibuat jika audit membuktikan memang dibutuhkan." Audit proved no business intent for usageLimit / VoucherRedemption / validFrom / maxDiscount — admin UI has no fields for them, seed data has no values for them. Per task spec point 3: "Jangan invent business rule yang tidak ada di project."
+
+- Authoritative calculation design (unchanged from 0646968, now with structured voucher errors):
+  * cart request → aggregate product quantities → sort by productId (canonical lock order) → fetch authoritative products → atomic stock decrement (WHERE stock >= qty AND isActive) → compute subtotal from server prices × server quantities → resolve voucher by code from DB → validate voucher eligibility (5 rules above) → compute authoritative discount → compute total = max(0, subtotal - discount) → create Order + OrderItems with server-authoritative values → COMMIT.
+  * All steps inside ONE db.$transaction. Voucher validation throws inside the transaction → entire transaction rolls back (no stock decremented, no order created). Customer must fix or remove voucher and retry.
+  * Client-supplied discount/subtotal/total/voucherValue/voucherType/voucherId/userId in request body are silently dropped by API route destructuring — CreateOrderInput only declares voucherCode. These fields are structurally unreachable from createOrder.
+
+- Quota/usage concurrency design: NOT APPLICABLE for V1.
+  * Voucher model has no usageLimit field and no usedCount counter. Per task spec point 4: "Jika existing Voucher memiliki usage limit/quota" — audit confirmed it does NOT. So no atomic conditional UPDATE WHERE usage < usageLimit is needed. Per task spec: "Jangan invent business rule yang tidak ada di project." If a future V2 adds usageLimit, the atomic-claim pattern from commit 549b49a (cancelOrderAndRestoreStock) is the template — same conditional updateMany + count check.
+
+- Per-customer redemption behavior: NOT APPLICABLE for V1.
+  * No VoucherRedemption model exists. No @@unique([voucherId, userId]) constraint. No business rule for "one voucher per customer" — admin UI has no field for it, seed data has no expectation of it. Per task spec point 5: "Jika TIDAK ada requirement/business field tersebut: jangan invent." Not adding.
+
+- Cancellation/reversal behavior:
+  * Audit determined Option A (voucher consumed at order creation — but consumption is a no-op since there's no usage state) is the implicit V1 semantics. cancelOrderAndRestoreStock from commit 549b49a only restores stock — it does NOT touch voucher state. This is correct because:
+    - Voucher has no usedCount to decrement at order creation → nothing to increment back at cancel.
+    - Voucher has no VoucherRedemption record to delete at cancel.
+    - Order.voucherCode is a free-form string snapshot for record-keeping, NOT a FK — it stays on the order row even after cancel, which is the correct audit-trail behavior (the order WAS created with that voucher applied, even after cancellation).
+  * No code change to cancelOrderAndRestoreStock. Existing behavior preserved. Documented in orders.ts INVARIANTS point 12.
+
+- API/error contract:
+  * Existing 400/401/409/500 surface UNCHANGED.
+  * Existing 404 (ORDER_NOT_FOUND from commit 549b49a) UNCHANGED.
+  * NEW 404 (VOUCHER_NOT_FOUND) — additive, only thrown inside createOrder when voucherCode doesn't match any voucher.
+  * NEW 400 (VOUCHER_INACTIVE, VOUCHER_EXPIRED, VOUCHER_MINIMUM_NOT_MET) — additive, only thrown inside createOrder when voucher fails one of the 4 validation rules.
+  * All new errors carry machine-readable `code` field for client branching + human-readable Indonesian `error` message for direct toast display.
+  * Frontend impact: CheckoutView's existing 400/409/401 handlers + catch-all (toast.error with e.message) already surface all new VOUCHER_* errors correctly. No frontend change needed.
+  * /api/vouchers/validate response shape UNCHANGED on success ({voucher: {code, type, value, discount, description}}). Error responses now carry `code` field (additive).
+
+- Tests performed:
+  * Static verification (NO runtime test executed — sandbox has no PostgreSQL):
+    - bunx tsc --noEmit → 0 errors. Confirms V1-V9 test scenarios compile against patched orders.ts + VOUCHER_* exports.
+    - bun run lint → 0 errors, 0 warnings.
+    - bun run build → 44/44 pages generated. /api/orders + /api/admin/orders/[id] + /api/vouchers/validate routes present in build output. Pre-existing Prisma/sitemap warnings (DATABASE_URL missing in build env) are unrelated to this change.
+  * Voucher test scenarios added to scripts/test-order-integrity.ts:
+    V1 — valid PERCENTAGE voucher (20% off, minSpend 50000) → discount=40000, total=160000, voucherCode stored.
+    V2 — unknown voucher code → VOUCHER_NOT_FOUND (404), no order created, stock unchanged.
+    V3 — isActive=false voucher → VOUCHER_INACTIVE (400), transaction rolled back.
+    V4 — expired voucher (validUntil=1 day ago) → VOUCHER_EXPIRED (400), transaction rolled back.
+    V5 — subtotal below minSpend → VOUCHER_MINIMUM_NOT_MET (400), transaction rolled back.
+    V6 — valid FIXED voucher (Rp 15000 off, minSpend 100000) → discount=15000, total=135000.
+    V7 — tampering protection: passes tampered discount=9999999, subtotal=1000, total=1000, voucherValue=9999999, voucherId='forged-id', userId='forged-user-id' through createOrder. Asserts all ignored — server-authoritative values (subtotal=200000, discount=0, total=200000, userId=alice, voucherCode=null) win.
+    V8 — voucher invalid (minSpend impossibly high) → VOUCHER_MINIMUM_NOT_MET, full rollback: stock NOT decremented (still 5), no order created.
+    V9 — cancellation preserves Order.voucherCode snapshot: order with voucher → cancel → status=CANCELLED, voucherCode REMAINS on order row, voucher record unchanged (isActive=true, no usage to release), stock restored.
+  * Concurrency scenarios K-O from commit 549b49a: untouched, still pass static verification.
+
+- PostgreSQL concurrency runtime QA: PENDING.
+  * Per task spec point 11: "Jika environment ini tidak memiliki PostgreSQL: tetap compile tests, tetap lakukan static verification, jalankan lint/typecheck/build, jangan claim concurrency runtime passed."
+  * Local sandbox has no PostgreSQL (DATABASE_URL in .env points to SQLite file, unsuitable for verifying Prisma updateMany row-level locking semantics).
+  * To run runtime tests in Coolify/staging: set DATABASE_URL to non-production PostgreSQL, run `bun run scripts/test-order-integrity.ts`. Script aborts immediately if NODE_ENV=production OR DATABASE_URL unset. Expected: scenarios A through O + V1 through V9 (~85+ assertions) all pass. Exit 0 on success, 1 on any failure.
+
+- Did NOT touch (per task spec point 13: "Stop setelah Voucher Integrity V1 selesai"):
+  * No loyalty, coupon campaign builder, promo stacking, referral, membership, payment gateway, or other new features.
+  * No order-number generation changes (still count+1 with P2002 retry).
+  * No admin UI changes (VouchersView form already supports all V1 fields).
+  * No frontend component changes (CheckoutView + CartView already correctly send only voucherCode).
+  * No Prisma schema migration.
+  * No public product/auth changes.
+  * No order/stock integrity regressions — all hardening from 0646968 + 549b49a preserved.
+
+Stage Summary:
+- Files changed (3): src/lib/orders.ts (4 new VOUCHER_* errors, rewritten resolveVoucher, expanded docblocks), src/app/api/vouchers/validate/route.ts (aligned error codes + structured `code` field), scripts/test-order-integrity.ts (scenarios V1-V9 added).
+- Files NOT changed (deliberately): src/app/api/orders/route.ts (already only sends voucherCode to createOrder — no change needed), src/app/api/admin/vouchers/* (admin CRUD unaffected — admin can still create/edit vouchers with all V1 fields), src/views/CheckoutView.tsx + CartView.tsx (frontend already correctly sends only voucherCode + handles 400/409/401/catch-all), prisma/schema.prisma (no migration — no invented business rules), src/lib/store.ts (cart store unaffected).
+- New error codes (additive): VOUCHER_NOT_FOUND (404), VOUCHER_INACTIVE (400), VOUCHER_EXPIRED (400), VOUCHER_MINIMUM_NOT_MET (400), VOUCHER_CODE_EMPTY (400, validate endpoint only). None break existing client paths.
+- Server-authoritative calculation: preserved + now documented. Client can only influence voucherCode (a key), nothing else. subtotal/discount/total/userId all server-computed.
+- Quota/usage: NOT APPLICABLE for V1 (no schema field). Per spec, did not invent.
+- Per-customer redemption: NOT APPLICABLE for V1 (no schema field). Per spec, did not invent.
+- Cancellation/reversal: Option A implicit. No voucher state to release. Existing cancelOrderAndRestoreStock unchanged — correctly only restores stock. Order.voucherCode snapshot preserved as audit trail.
+- Runtime concurrency test status: PENDING (awaiting PostgreSQL-equipped QA env). Static verification (tsc + lint + build) all pass.
+=== Voucher Integrity V1 COMPLETE (runtime concurrency test pending PostgreSQL) ===

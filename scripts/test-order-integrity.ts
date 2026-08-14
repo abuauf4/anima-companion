@@ -1,13 +1,13 @@
 /**
- * Order integrity integration tests — scenarios A through O.
+ * Order integrity integration tests — scenarios A through O + voucher scenarios V1-V9.
  *
  * Run with:
  *   DATABASE_URL="postgresql://..." bun run scripts/test-order-integrity.ts
  *
  * IMPORTANT:
  * - This script creates temporary QA records (Users, Categories, Products,
- *   Orders) and deletes them at the end. NEVER run this against a production
- *   database — the cleanup step will delete any QA records matching its
+ *   Vouchers, Orders) and deletes them at the end. NEVER run this against a
+ *   production database — the cleanup step will delete any QA records matching its
  *   prefix, and could disturb real data if the prefix collides.
  * - The script aborts immediately if it detects `NODE_ENV=production` or
  *   if DATABASE_URL is not set, to prevent accidental execution in a
@@ -33,6 +33,17 @@
  *   M. repeated CANCEL sequentially → stock restored once (sanity check)
  *   N. concurrent checkout for last unit (qty=1 each, stock=1) → one wins, one OUT_OF_STOCK
  *   O. multi-product concurrent checkout → no negative stock / no partial order
+ *
+ * Voucher integrity scenarios (Voucher Integrity V1 hardening):
+ *   V1. valid PERCENTAGE voucher succeeds, discount applied correctly, voucherCode stored
+ *   V2. unknown voucher code → VOUCHER_NOT_FOUND (404)
+ *   V3. isActive=false voucher → VOUCHER_INACTIVE (400)
+ *   V4. expired voucher (validUntil in past) → VOUCHER_EXPIRED (400)
+ *   V5. subtotal below minSpend → VOUCHER_MINIMUM_NOT_MET (400)
+ *   V6. valid FIXED voucher succeeds, discount applied correctly
+ *   V7. tampering protection — client-supplied discount/subtotal/total in body ignored by server
+ *   V8. voucher invalid → entire order rolls back, NO stock decremented, NO order created
+ *   V9. cancellation preserves Order.voucherCode snapshot (no voucher state to release)
  *
  * The script uses the same `createOrder()`, `cancelOrderAndRestoreStock()`,
  * and `updateOrderStatus()` helpers that the API routes use, so it tests the
@@ -1038,6 +1049,497 @@ async function main() {
     await db.order.delete({ where: { id: winner.id } })
     await db.product.delete({ where: { id: p1.id } })
     await db.product.delete({ where: { id: p2.id } })
+  }
+
+  // ============================================================
+  // Scenario V1: valid PERCENTAGE voucher succeeds, discount applied correctly
+  // ============================================================
+  console.log('\n[V1] Valid PERCENTAGE voucher → discount applied, voucherCode stored')
+  {
+    const p = await makeQaProduct({
+      name: 'QA Product V1',
+      slug: 'product-v1',
+      sku: 'sku-v1',
+      price: 100000,
+      stock: 10,
+      categoryId: cat.id,
+    })
+    // Subtotal will be 100000 * 2 = 200000.
+    // Voucher: 20% off, min spend 50000 → discount = 40000, total = 160000.
+    const voucher = await db.voucher.create({
+      data: {
+        code: `${QA_PREFIX}V1PCT`,
+        type: 'PERCENTAGE',
+        value: 20,
+        minSpend: 50000,
+        isActive: true,
+        description: 'V1: 20% off QA voucher',
+      },
+    })
+
+    const order = await createOrder({
+      user: { id: alice.id, email: alice.email, name: alice.name, phone: alice.phone },
+      items: [{ productId: p.id, quantity: 2 }],
+      customerName: 'Alice QA',
+      customerPhone: '08123456789',
+      address: 'QA Address',
+      voucherCode: voucher.code,
+    })
+
+    assertEqual(order.subtotal, 200000, 'Subtotal = 2 × 100000 = 200000 (server-authoritative)')
+    assertEqual(order.discount, 40000, 'Discount = 20% × 200000 = 40000')
+    assertEqual(order.total, 160000, 'Total = 200000 - 40000 = 160000')
+    assertEqual(order.voucherCode, voucher.code, 'Order.voucherCode stores the applied code')
+
+    await db.orderItem.deleteMany({ where: { orderId: order.id } })
+    await db.order.delete({ where: { id: order.id } })
+    await db.product.delete({ where: { id: p.id } })
+    await db.voucher.delete({ where: { id: voucher.id } })
+  }
+
+  // ============================================================
+  // Scenario V2: unknown voucher code → VOUCHER_NOT_FOUND (404)
+  // ============================================================
+  console.log('\n[V2] Unknown voucher code → VOUCHER_NOT_FOUND (404)')
+  {
+    const p = await makeQaProduct({
+      name: 'QA Product V2',
+      slug: 'product-v2',
+      sku: 'sku-v2',
+      price: 50000,
+      stock: 5,
+      categoryId: cat.id,
+    })
+
+    let threw = false
+    let status = 0
+    let code = ''
+    try {
+      await createOrder({
+        user: { id: alice.id, email: alice.email, name: alice.name, phone: alice.phone },
+        items: [{ productId: p.id, quantity: 1 }],
+        customerName: 'Alice QA',
+        customerPhone: '08123456789',
+        address: 'QA Address',
+        voucherCode: `${QA_PREFIX}DOES-NOT-EXIST`,
+      })
+    } catch (e: any) {
+      threw = true
+      status = e?.status ?? 0
+      code = e?.code ?? ''
+    }
+
+    assert(threw, 'Unknown voucher code caused createOrder to throw')
+    assertEqual(status, 404, 'Status is 404 (VOUCHER_NOT_FOUND)')
+    assertEqual(code, 'VOUCHER_NOT_FOUND', 'Code is VOUCHER_NOT_FOUND')
+
+    // Verify NO order was created and stock was NOT decremented.
+    const orders = await db.order.findMany({
+      where: { customerName: 'Alice QA', voucherCode: `${QA_PREFIX}DOES-NOT-EXIST` },
+    })
+    assertEqual(orders.length, 0, 'No order was created with unknown voucher')
+
+    const after = await db.product.findUnique({ where: { id: p.id }, select: { stock: true } })
+    assertEqual(after?.stock, 5, 'Stock unchanged (transaction rolled back)')
+
+    await db.product.delete({ where: { id: p.id } })
+  }
+
+  // ============================================================
+  // Scenario V3: isActive=false voucher → VOUCHER_INACTIVE (400)
+  // ============================================================
+  console.log('\n[V3] Inactive voucher → VOUCHER_INACTIVE (400)')
+  {
+    const p = await makeQaProduct({
+      name: 'QA Product V3',
+      slug: 'product-v3',
+      sku: 'sku-v3',
+      price: 50000,
+      stock: 5,
+      categoryId: cat.id,
+    })
+    const voucher = await db.voucher.create({
+      data: {
+        code: `${QA_PREFIX}V3INACTIVE`,
+        type: 'PERCENTAGE',
+        value: 10,
+        minSpend: 0,
+        isActive: false,
+        description: 'V3: deactivated voucher',
+      },
+    })
+
+    let threw = false
+    let status = 0
+    let code = ''
+    try {
+      await createOrder({
+        user: { id: alice.id, email: alice.email, name: alice.name, phone: alice.phone },
+        items: [{ productId: p.id, quantity: 1 }],
+        customerName: 'Alice QA',
+        customerPhone: '08123456789',
+        address: 'QA Address',
+        voucherCode: voucher.code,
+      })
+    } catch (e: any) {
+      threw = true
+      status = e?.status ?? 0
+      code = e?.code ?? ''
+    }
+
+    assert(threw, 'Inactive voucher caused createOrder to throw')
+    assertEqual(status, 400, 'Status is 400 (VOUCHER_INACTIVE)')
+    assertEqual(code, 'VOUCHER_INACTIVE', 'Code is VOUCHER_INACTIVE')
+
+    const after = await db.product.findUnique({ where: { id: p.id }, select: { stock: true } })
+    assertEqual(after?.stock, 5, 'Stock unchanged (transaction rolled back)')
+
+    await db.product.delete({ where: { id: p.id } })
+    await db.voucher.delete({ where: { id: voucher.id } })
+  }
+
+  // ============================================================
+  // Scenario V4: expired voucher (validUntil in past) → VOUCHER_EXPIRED (400)
+  // ============================================================
+  console.log('\n[V4] Expired voucher → VOUCHER_EXPIRED (400)')
+  {
+    const p = await makeQaProduct({
+      name: 'QA Product V4',
+      slug: 'product-v4',
+      sku: 'sku-v4',
+      price: 50000,
+      stock: 5,
+      categoryId: cat.id,
+    })
+    const voucher = await db.voucher.create({
+      data: {
+        code: `${QA_PREFIX}V4EXPIRED`,
+        type: 'FIXED',
+        value: 10000,
+        minSpend: 0,
+        isActive: true,
+        validUntil: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
+        description: 'V4: expired voucher',
+      },
+    })
+
+    let threw = false
+    let status = 0
+    let code = ''
+    try {
+      await createOrder({
+        user: { id: alice.id, email: alice.email, name: alice.name, phone: alice.phone },
+        items: [{ productId: p.id, quantity: 1 }],
+        customerName: 'Alice QA',
+        customerPhone: '08123456789',
+        address: 'QA Address',
+        voucherCode: voucher.code,
+      })
+    } catch (e: any) {
+      threw = true
+      status = e?.status ?? 0
+      code = e?.code ?? ''
+    }
+
+    assert(threw, 'Expired voucher caused createOrder to throw')
+    assertEqual(status, 400, 'Status is 400 (VOUCHER_EXPIRED)')
+    assertEqual(code, 'VOUCHER_EXPIRED', 'Code is VOUCHER_EXPIRED')
+
+    const after = await db.product.findUnique({ where: { id: p.id }, select: { stock: true } })
+    assertEqual(after?.stock, 5, 'Stock unchanged (transaction rolled back)')
+
+    await db.product.delete({ where: { id: p.id } })
+    await db.voucher.delete({ where: { id: voucher.id } })
+  }
+
+  // ============================================================
+  // Scenario V5: subtotal below minSpend → VOUCHER_MINIMUM_NOT_MET (400)
+  // ============================================================
+  console.log('\n[V5] Subtotal below minSpend → VOUCHER_MINIMUM_NOT_MET (400)')
+  {
+    const p = await makeQaProduct({
+      name: 'QA Product V5',
+      slug: 'product-v5',
+      sku: 'sku-v5',
+      price: 50000,
+      stock: 5,
+      categoryId: cat.id,
+    })
+    // Subtotal will be 50000 * 1 = 50000.
+    // Voucher: minSpend 100000 → 50000 < 100000 → reject.
+    const voucher = await db.voucher.create({
+      data: {
+        code: `${QA_PREFIX}V5MIN`,
+        type: 'FIXED',
+        value: 15000,
+        minSpend: 100000,
+        isActive: true,
+        description: 'V5: min spend 100000 voucher',
+      },
+    })
+
+    let threw = false
+    let status = 0
+    let code = ''
+    try {
+      await createOrder({
+        user: { id: alice.id, email: alice.email, name: alice.name, phone: alice.phone },
+        items: [{ productId: p.id, quantity: 1 }],
+        customerName: 'Alice QA',
+        customerPhone: '08123456789',
+        address: 'QA Address',
+        voucherCode: voucher.code,
+      })
+    } catch (e: any) {
+      threw = true
+      status = e?.status ?? 0
+      code = e?.code ?? ''
+    }
+
+    assert(threw, 'Below-min-spend voucher caused createOrder to throw')
+    assertEqual(status, 400, 'Status is 400 (VOUCHER_MINIMUM_NOT_MET)')
+    assertEqual(code, 'VOUCHER_MINIMUM_NOT_MET', 'Code is VOUCHER_MINIMUM_NOT_MET')
+
+    const after = await db.product.findUnique({ where: { id: p.id }, select: { stock: true } })
+    assertEqual(after?.stock, 5, 'Stock unchanged (transaction rolled back)')
+
+    await db.product.delete({ where: { id: p.id } })
+    await db.voucher.delete({ where: { id: voucher.id } })
+  }
+
+  // ============================================================
+  // Scenario V6: valid FIXED voucher succeeds, discount applied correctly
+  // ============================================================
+  console.log('\n[V6] Valid FIXED voucher → discount applied, voucherCode stored')
+  {
+    const p = await makeQaProduct({
+      name: 'QA Product V6',
+      slug: 'product-v6',
+      sku: 'sku-v6',
+      price: 75000,
+      stock: 10,
+      categoryId: cat.id,
+    })
+    // Subtotal = 75000 * 2 = 150000.
+    // Voucher: FIXED Rp 15000 off, minSpend 100000 → discount = 15000, total = 135000.
+    const voucher = await db.voucher.create({
+      data: {
+        code: `${QA_PREFIX}V6FIXED`,
+        type: 'FIXED',
+        value: 15000,
+        minSpend: 100000,
+        isActive: true,
+        description: 'V6: 15000 off QA voucher',
+      },
+    })
+
+    const order = await createOrder({
+      user: { id: alice.id, email: alice.email, name: alice.name, phone: alice.phone },
+      items: [{ productId: p.id, quantity: 2 }],
+      customerName: 'Alice QA',
+      customerPhone: '08123456789',
+      address: 'QA Address',
+      voucherCode: voucher.code,
+    })
+
+    assertEqual(order.subtotal, 150000, 'Subtotal = 2 × 75000 = 150000 (server-authoritative)')
+    assertEqual(order.discount, 15000, 'Discount = FIXED 15000')
+    assertEqual(order.total, 135000, 'Total = 150000 - 15000 = 135000')
+    assertEqual(order.voucherCode, voucher.code, 'Order.voucherCode stores the applied code')
+
+    await db.orderItem.deleteMany({ where: { orderId: order.id } })
+    await db.order.delete({ where: { id: order.id } })
+    await db.product.delete({ where: { id: p.id } })
+    await db.voucher.delete({ where: { id: voucher.id } })
+  }
+
+  // ============================================================
+  // Scenario V7: tampering protection — client-supplied discount/subtotal/total
+  //              in request body are ignored by server
+  // ============================================================
+  console.log('\n[V7] Tampering — client-supplied discount/subtotal/total ignored')
+  {
+    const p = await makeQaProduct({
+      name: 'QA Product V7',
+      slug: 'product-v7',
+      sku: 'sku-v7',
+      price: 100000,
+      stock: 10,
+      categoryId: cat.id,
+    })
+
+    // Simulate a malicious client sending tampered values in the request body.
+    // The API route destructures ONLY `items, customerName, customerPhone,
+    // address, notes, voucherCode` — any other fields (discount, subtotal,
+    // total, voucherValue, voucherType, voucherId, userId) are silently
+    // dropped by destructuring and never reach createOrder().
+    //
+    // We test this by passing the tampered values DIRECTLY to createOrder()
+    // via the input object. Since CreateOrderInput only declares `voucherCode`,
+    // TypeScript would reject extra fields at compile time — but at runtime,
+    // extra fields on the object are simply ignored by createOrder()
+    // because it never reads them. We verify the server's authoritative
+    // calculation wins.
+    //
+    // The simulated body the API route would have built:
+    const tamperedBody = {
+      user: { id: alice.id, email: alice.email, name: alice.name, phone: alice.phone },
+      items: [{ productId: p.id, quantity: 2 }],
+      customerName: 'Alice QA',
+      customerPhone: '08123456789',
+      address: 'QA Address',
+      voucherCode: null,
+      // ----- tampered fields (should be IGNORED by server) -----
+      // Cast to any because CreateOrderInput doesn't declare these — the
+      // API route's destructuring drops them, but we want to verify that
+      // even if they reached createOrder, they'd be ignored.
+      discount: 9999999,
+      subtotal: 1000,
+      total: 1000,
+      voucherValue: 9999999,
+      voucherType: 'PERCENTAGE',
+      voucherId: 'forged-id',
+      userId: 'forged-user-id',
+    } as any
+
+    const order = await createOrder(tamperedBody)
+
+    // Server-authoritative values — tampered fields had ZERO effect.
+    assertEqual(order.subtotal, 200000, 'Server-authoritative subtotal (200000), tampered subtotal(1000) ignored')
+    assertEqual(order.discount, 0, 'Server-authoritative discount (0), tampered discount(9999999) ignored')
+    assertEqual(order.total, 200000, 'Server-authoritative total (200000), tampered total(1000) ignored')
+    assertEqual(order.userId, alice.id, 'Server-authoritative userId (alice), tampered userId(forged) ignored')
+    assertEqual(order.voucherCode, null, 'voucherCode null, no voucher applied (tampered voucherId ignored)')
+
+    await db.orderItem.deleteMany({ where: { orderId: order.id } })
+    await db.order.delete({ where: { id: order.id } })
+    await db.product.delete({ where: { id: p.id } })
+  }
+
+  // ============================================================
+  // Scenario V8: voucher invalid → entire order rolls back, NO stock
+  //              decremented, NO order created
+  // ============================================================
+  console.log('\n[V8] Voucher invalid → entire transaction rolls back, no stock touched')
+  {
+    const p = await makeQaProduct({
+      name: 'QA Product V8',
+      slug: 'product-v8',
+      sku: 'sku-v8',
+      price: 50000,
+      stock: 5,
+      categoryId: cat.id,
+    })
+
+    // Voucher with minSpend higher than subtotal — will fail Rule 5.
+    const voucher = await db.voucher.create({
+      data: {
+        code: `${QA_PREFIX}V8ROLLBACK`,
+        type: 'FIXED',
+        value: 5000,
+        minSpend: 999999, // impossibly high
+        isActive: true,
+        description: 'V8: minSpend too high — always fails',
+      },
+    })
+
+    let threw = false
+    let code = ''
+    try {
+      await createOrder({
+        user: { id: alice.id, email: alice.email, name: alice.name, phone: alice.phone },
+        items: [{ productId: p.id, quantity: 2 }],
+        customerName: 'Alice QA',
+        customerPhone: '08123456789',
+        address: 'QA Address',
+        voucherCode: voucher.code,
+      })
+    } catch (e: any) {
+      threw = true
+      code = e?.code ?? ''
+    }
+
+    assert(threw, 'Voucher validation failed as expected')
+    assertEqual(code, 'VOUCHER_MINIMUM_NOT_MET', 'Error code is VOUCHER_MINIMUM_NOT_MET')
+
+    // CRITICAL: the entire transaction must roll back.
+    // - Stock NOT decremented (still 5, not 3)
+    // - No order created
+    const after = await db.product.findUnique({ where: { id: p.id }, select: { stock: true } })
+    assertEqual(after?.stock, 5, 'Stock NOT decremented (full rollback)')
+
+    const orders = await db.order.findMany({
+      where: { customerName: 'Alice QA', voucherCode: voucher.code },
+    })
+    assertEqual(orders.length, 0, 'No order created (full rollback)')
+
+    await db.product.delete({ where: { id: p.id } })
+    await db.voucher.delete({ where: { id: voucher.id } })
+  }
+
+  // ============================================================
+  // Scenario V9: cancellation preserves Order.voucherCode snapshot
+  //              (no voucher state to release — Voucher has no usage tracking)
+  // ============================================================
+  console.log('\n[V9] Cancellation preserves Order.voucherCode snapshot, no voucher state to release')
+  {
+    const p = await makeQaProduct({
+      name: 'QA Product V9',
+      slug: 'product-v9',
+      sku: 'sku-v9',
+      price: 100000,
+      stock: 10,
+      categoryId: cat.id,
+    })
+    const voucher = await db.voucher.create({
+      data: {
+        code: `${QA_PREFIX}V9SNAPSHOT`,
+        type: 'PERCENTAGE',
+        value: 10,
+        minSpend: 0,
+        isActive: true,
+        description: 'V9: voucher snapshot test',
+      },
+    })
+
+    // Create order with voucher. Stock 10 → 8, voucher applied.
+    const order = await createOrder({
+      user: { id: alice.id, email: alice.email, name: alice.name, phone: alice.phone },
+      items: [{ productId: p.id, quantity: 2 }],
+      customerName: 'Alice QA',
+      customerPhone: '08123456789',
+      address: 'QA Address',
+      voucherCode: voucher.code,
+    })
+    assertEqual(order.voucherCode, voucher.code, 'Order created with voucherCode snapshot')
+
+    // Cancel the order. Stock should be restored (8 → 10).
+    // Order.voucherCode should REMAIN on the order row (it's a snapshot for
+    // record-keeping, not a FK to Voucher). Voucher itself has no usage
+    // state (no usedCount, no VoucherRedemption) so there is nothing to
+    // release. This is the V1 cancellation semantics — no voucher reversal.
+    const cancelResult = await cancelOrderAndRestoreStock(order.id)
+    assertEqual(cancelResult.alreadyCancelled, false, 'First CANCEL wins the claim')
+    assertEqual(cancelResult.order.status, 'CANCELLED', 'Order status is CANCELLED')
+    assertEqual(
+      cancelResult.order.voucherCode,
+      voucher.code,
+      'Order.voucherCode snapshot PRESERVED after cancellation (not cleared)'
+    )
+
+    // Stock restored exactly once.
+    const after = await db.product.findUnique({ where: { id: p.id }, select: { stock: true } })
+    assertEqual(after?.stock, 10, 'Stock restored to 10 after cancellation')
+
+    // Voucher record is UNCHANGED — no usage counter to release.
+    const voucherAfter = await db.voucher.findUnique({ where: { id: voucher.id } })
+    assert(!!voucherAfter, 'Voucher record still exists')
+    assertEqual(voucherAfter?.isActive, true, 'Voucher isActive unchanged (no reversal logic)')
+
+    await db.orderItem.deleteMany({ where: { orderId: order.id } })
+    await db.order.delete({ where: { id: order.id } })
+    await db.product.delete({ where: { id: p.id } })
+    await db.voucher.delete({ where: { id: voucher.id } })
   }
 
   // ============================================================

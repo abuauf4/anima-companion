@@ -28,6 +28,32 @@
  * 8. Multi-product stock mutations (decrement at order creation, increment at
  *    cancellation) lock product rows in canonical `productId` order to avoid
  *    deadlocks between concurrent multi-product checkouts.
+ * 9. Voucher is server-authoritative. The client may only send `voucherCode`
+ *    (a string key) — server resolves the voucher record from DB inside the
+ *    create-order transaction and computes the authoritative discount from
+ *    the server-computed subtotal. Client-supplied `discount`/`subtotal`/
+ *    `total`/`voucherValue`/`voucherType`/`voucherId` fields in the request
+ *    body are structurally unreachable from `createOrder()` — the input type
+ *    only declares `voucherCode: string | null`, so any other voucher-related
+ *    fields are silently dropped by destructuring.
+ * 10. Invalid voucher is rejected EXPLICITLY with a structured error code
+ *     (VOUCHER_NOT_FOUND / VOUCHER_INACTIVE / VOUCHER_EXPIRED /
+ *     VOUCHER_MINIMUM_NOT_MET). The previous flow silently returned
+ *     `{ discount: 0 }` for any invalid condition, which meant the customer
+ *     entered a voucher and was charged full price without warning. The
+ *     whole transaction rolls back on any voucher error — no partial order.
+ * 11. Voucher rules enforced are ONLY those the schema supports: `isActive`,
+ *     `validUntil`, `minSpend`, `type` (PERCENTAGE|FIXED), `value`. No
+ *     `validFrom`, `maxDiscount`, `usageLimit`, `usedCount`, or per-customer
+ *     `VoucherRedemption` model exists in the schema, so those rules are
+ *     not enforced (and not invented).
+ * 12. Voucher cancellation semantics: the existing Voucher model has no usage
+ *     counter (`usedCount`) and no redemption record (`VoucherRedemption`),
+ *     so there is no voucher state to restore on order CANCEL. The existing
+ *     `cancelOrderAndRestoreStock` only restores stock — this is correct
+ *     because voucher consumption is a no-op at the DB level. The
+ *     `Order.voucherCode` field is a free-form string snapshot preserved
+ *     on the order row for record-keeping, not a FK to Voucher.
  */
 
 import { Prisma, PrismaClient } from '@prisma/client'
@@ -92,6 +118,28 @@ export const ORDER_ERRORS = {
     new OrderError(400, 'INVALID_TRANSITION', `Tidak dapat mengubah status dari ${from} ke ${to}`),
   ORDER_NUMBER_CONFLICT: () =>
     new OrderError(500, 'ORDER_NUMBER_CONFLICT', 'Gagal membuat nomor pesanan unik, coba lagi'),
+  // ----- Voucher errors -----
+  // Structured errors for invalid vouchers. The previous implementation silently
+  // returned { discount: 0, appliedVoucherCode: null } for ANY invalid condition
+  // (not found / inactive / expired / below min spend), which meant the customer
+  // entered a voucher code and was silently charged full price without warning.
+  // These errors force explicit rejection so the customer gets a clear message
+  // and the order is NOT created with the wrong total.
+  //
+  // VOUCHER_MINIMUM_NOT_MET carries the actual minSpend and current subtotal so
+  // the client can render a helpful message ("Belanja Rp X lagi untuk pakai voucher ini").
+  VOUCHER_NOT_FOUND: (code: string) =>
+    new OrderError(404, 'VOUCHER_NOT_FOUND', `Kode voucher tidak ditemukan: ${code}`),
+  VOUCHER_INACTIVE: (code: string) =>
+    new OrderError(400, 'VOUCHER_INACTIVE', `Voucher tidak aktif: ${code}`),
+  VOUCHER_EXPIRED: (code: string, expiredAt: Date) =>
+    new OrderError(400, 'VOUCHER_EXPIRED', `Voucher sudah kedaluwarsa: ${code} (berlaku hingga ${expiredAt.toISOString().slice(0, 10)})`),
+  VOUCHER_MINIMUM_NOT_MET: (code: string, minSpend: number, subtotal: number) =>
+    new OrderError(
+      400,
+      'VOUCHER_MINIMUM_NOT_MET',
+      `Minimal belanja ${minSpend} untuk voucher ${code}. Subtotal Anda ${subtotal}. Tambah belanja ${Math.max(0, minSpend - subtotal)} lagi untuk memakai voucher ini.`
+    ),
 } as const
 
 // =====================================================
@@ -268,41 +316,85 @@ async function atomicStockDecrement(
 }
 
 // =====================================================
-// Internal: voucher validation (preserved from previous flow)
+// Internal: voucher validation (server-authoritative, structured errors)
 // =====================================================
 
 /**
- * Resolve voucher by code. Returns {discount, appliedCode} or zero discount
- * if the voucher is invalid/expired/below min spend. Does NOT mutate voucher
- * state — voucher usage tracking is out of scope for V1.
+ * Resolve voucher by code. Returns {discount, appliedVoucherCode, voucher} on
+ * success. Throws OrderError on any invalid condition — the previous flow
+ * silently returned zero discount and let the order proceed at full price,
+ * which meant the customer entered a voucher code and was charged full price
+ * without any warning that the voucher was invalid.
+ *
+ * RULES ENFORCED (only those the schema actually supports — no invented rules):
+ *   1. voucherCode falsy → no voucher applied, return zero discount (NOT an error)
+ *   2. voucher not found by code → throw VOUCHER_NOT_FOUND (404)
+ *   3. isActive === false → throw VOUCHER_INACTIVE (400)
+ *   4. validUntil exists AND validUntil < now → throw VOUCHER_EXPIRED (400)
+ *   5. subtotal < minSpend → throw VOUCHER_MINIMUM_NOT_MET (400)
+ *
+ * NOT ENFORCED (no schema field for these — do not invent):
+ *   - validFrom / start date — Voucher has no validFrom column
+ *   - maxDiscount cap — Voucher has no maxDiscount column
+ *   - usageLimit / global quota — Voucher has no usageLimit column
+ *   - per-customer redemption — no VoucherRedemption model exists
+ *
+ * DISCOUNT CALCULATION:
+ *   - PERCENTAGE: Math.round(subtotal * value / 100)
+ *   - FIXED: value (flat rupiah off)
+ *   - No maxDiscount cap (field doesn't exist)
+ *   - The `subtotal` argument is the server-authoritative subtotal computed
+ *     from server product prices × server quantities, NEVER a client-supplied
+ *     value. The client cannot influence this calculation except by choosing
+ *     which products and quantities to put in the cart.
  *
  * Server-side authoritative. The client-sent voucherCode is just a key; the
- * discount value comes from the DB.
+ * discount value comes from the DB. The caller (createOrder) passes the
+ * server-computed subtotal, so client-supplied subtotal/discount/total fields
+ * in the request body are structurally unreachable from this code path.
  */
 async function resolveVoucher(
   tx: Prisma.TransactionClient,
   voucherCode: string | null | undefined,
   subtotal: number
 ): Promise<{ discount: number; appliedVoucherCode: string | null }> {
+  // Rule 1: no voucher code supplied — legitimate "no voucher" case, NOT an error.
   if (!voucherCode) {
     return { discount: 0, appliedVoucherCode: null }
   }
+
+  const normalizedCode = voucherCode.toUpperCase().trim()
   const voucher = await tx.voucher.findUnique({
-    where: { code: voucherCode.toUpperCase().trim() },
+    where: { code: normalizedCode },
   })
-  if (!voucher || !voucher.isActive) {
-    return { discount: 0, appliedVoucherCode: null }
+
+  // Rule 2: code doesn't match any voucher.
+  if (!voucher) {
+    throw ORDER_ERRORS.VOUCHER_NOT_FOUND(normalizedCode)
   }
+
+  // Rule 3: voucher exists but isActive=false (admin deactivated it).
+  if (!voucher.isActive) {
+    throw ORDER_ERRORS.VOUCHER_INACTIVE(normalizedCode)
+  }
+
+  // Rule 4: voucher has expired. validUntil is nullable — null means "no expiry".
   if (voucher.validUntil && new Date(voucher.validUntil) < new Date()) {
-    return { discount: 0, appliedVoucherCode: null }
+    throw ORDER_ERRORS.VOUCHER_EXPIRED(normalizedCode, new Date(voucher.validUntil))
   }
+
+  // Rule 5: subtotal below minimum spend threshold.
+  // `subtotal` here is the server-authoritative subtotal, never client-supplied.
   if (subtotal < voucher.minSpend) {
-    return { discount: 0, appliedVoucherCode: null }
+    throw ORDER_ERRORS.VOUCHER_MINIMUM_NOT_MET(normalizedCode, voucher.minSpend, subtotal)
   }
+
+  // Discount calculation. No maxDiscount cap (field doesn't exist in schema).
   const discount =
     voucher.type === 'PERCENTAGE'
       ? Math.round((subtotal * voucher.value) / 100)
       : voucher.value
+
   return { discount, appliedVoucherCode: voucher.code }
 }
 
@@ -357,26 +449,58 @@ function buildOrderItemRecords(
 const MAX_ORDER_NUMBER_RETRIES = 5
 
 /**
- * Create a customer order with full transactional stock integrity.
+ * Create a customer order with full transactional stock + voucher integrity.
  *
  * Flow:
  * 1. Validate input (auth enforced by caller; items non-empty; quantities
  *    are positive integers).
- * 2. Aggregate duplicate productId entries.
+ * 2. Aggregate duplicate productId entries, then sort by productId for
+ *    canonical row-lock order (deadlock avoidance).
  * 3. Inside `db.$transaction`:
  *    a. For each unique productId: atomicStockDecrement() — this fetches
  *       authoritative product data AND atomically checks+decrements stock.
  *       If any product is missing/inactive/out-of-stock, throw → rollback.
- *    b. Compute subtotal from authoritative prices.
- *    c. Resolve voucher server-side.
- *    d. Generate order number.
- *    e. Create Order + OrderItems.
- * 4. If step 3e fails with Prisma P2002 on orderNumber, retry the whole
+ *    b. Compute subtotal from authoritative server prices × server quantities.
+ *    c. Resolve voucher server-side using the server-computed subtotal.
+ *       If voucher is invalid (not found / inactive / expired / below min),
+ *       throw OrderError(VOUCHER_*) → rollback. NO silent ignore.
+ *    d. Compute total = max(0, subtotal - authoritativeDiscount).
+ *    e. Generate order number.
+ *    f. Create Order + OrderItems with authoritative values.
+ * 4. If step 3f fails with Prisma P2002 on orderNumber, retry the whole
  *    transaction (with a fresh count-based order number) up to
  *    MAX_ORDER_NUMBER_RETRIES times.
  *
- * The transaction guarantees: ALL stock decrements + Order creation succeed,
- * OR NONE do. Stock can never go negative. No partial orders.
+ * TRANSACTION GUARANTEES:
+ * - All stock decrements + voucher validation + Order creation succeed, OR
+ *   NONE do. Stock can never go negative. No partial orders. No voucher
+ *   consumed without a successful order (voucher has no usage state to consume
+ *   in V1, but the pattern holds for future quota support).
+ *
+ * TAMPERING PROTECTION (server-authoritative calculation):
+ * - The CreateOrderInput type only declares `voucherCode: string | null` for
+ *   voucher-related fields. Any other voucher-related fields the client might
+ *   send in the request body (e.g. `discount`, `subtotal`, `total`,
+ *   `voucherValue`, `voucherType`, `voucherId`) are silently dropped by the
+ *   destructuring at the API route layer — they never reach this function.
+ * - `subtotal` is computed from server-fetched product prices × server-aggregated
+ *   quantities. The client CANNOT influence this value.
+ * - `discount` is computed from the server-resolved voucher record × the
+ *   server-computed subtotal. The client CANNOT influence this value.
+ * - `total` is computed as `max(0, subtotal - discount)`. The client CANNOT
+ *   influence this value.
+ * - `userId` is derived from the authenticated session at the API route layer,
+ *   NEVER from the request body. The body's `userId` field (if sent) is
+ *   silently dropped by destructuring.
+ *
+ * VOUCHER ERROR HANDLING:
+ * - VOUCHER_NOT_FOUND (404): code doesn't match any voucher in DB.
+ * - VOUCHER_INACTIVE (400): voucher.isActive === false.
+ * - VOUCHER_EXPIRED (400): voucher.validUntil < now.
+ * - VOUCHER_MINIMUM_NOT_MET (400): subtotal < voucher.minSpend.
+ * - All voucher errors throw inside the transaction → entire transaction
+ *   rolls back. No stock is decremented, no order is created. The customer
+ *   must fix the voucher (or remove it) and retry.
  */
 export async function createOrder(input: CreateOrderInput): Promise<any> {
   // ----- 1. Validate input -----
