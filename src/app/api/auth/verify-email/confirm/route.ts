@@ -24,20 +24,33 @@ import { db } from '@/lib/db'
  *   - If the token was successfully consumed AND this is a fresh
  *     verification → 200 with `{ code: 'OK', emailVerifiedAt: <date> }`.
  *
- * TRANSACTION BOUNDARY (Verified Identity V1 cleanup):
+ * TRANSACTION BOUNDARY (Verified Identity V1 cleanup v2 — interactive tx):
  *   The token consumption AND the `emailVerifiedAt` write happen in the
- *   SAME `db.$transaction` inside `consumeVerificationToken`. There is
- *   NO separate `markEmailVerified` call from this route. Either both
- *   commit (token consumed + user verified) or neither commits (token
- *   remains valid, user remains unverified — user can retry). This
- *   closes the unrecoverable window from the V1 baseline (`61983c8`)
- *   where the two operations were sequential and a failure between them
- *   would permanently consume the token without verifying the user.
+ *   SAME interactive `db.$transaction(async (tx) => { ... })` inside
+ *   `consumeVerificationToken`. There is NO separate `markEmailVerified`
+ *   call from this route. The transaction:
+ *     (1) looks up the token row inside the tx
+ *     (2) atomically claims the token via `updateMany WHERE consumedAt IS
+ *         NULL AND expiresAt > now` (only one concurrent request can win)
+ *     (3) GATES: if `claim.count !== 1`, returns `ALREADY_CONSUMED` and
+ *         DOES NOT write `emailVerifiedAt` — this is the critical fix
+ *         over the v1 array-form `$transaction([...])`, which could not
+ *         short-circuit on `count: 0` and would let the user write fire
+ *         even when the token claim lost the race
+ *     (4) ONLY if `claim.count === 1`: idempotently writes
+ *         `emailVerifiedAt` via `updateMany WHERE emailVerifiedAt IS NULL`
+ *
+ *   Atomicity: if anything throws between the token claim and the user
+ *   write, the entire transaction rolls back — the token is NOT consumed
+ *   and the user is NOT verified. The user can retry. This closes the
+ *   unrecoverable window from the V1 baseline (`61983c8`) where the two
+ *   operations were sequential.
  *
  * CONCURRENCY:
  *   - Two requests with the same valid token race. Only one wins the
  *     atomic `updateMany WHERE consumedAt IS NULL` — the loser gets
- *     `count=0` and we surface that as `ALREADY_CONSUMED`.
+ *     `count=0` and we surface that as `ALREADY_CONSUMED` (NO user
+ *     write fires for the loser — the v2 gate ensures this).
  *   - Two requests with DIFFERENT tokens for the same user cannot
  *     happen, because requesting a new token invalidates all previous
  *     unconsumed tokens. Only one valid token per user exists at a time.
@@ -59,12 +72,17 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // consumeVerificationToken atomically:
-    //   (1) claims the token (updateMany WHERE consumedAt IS NULL AND
-    //       expiresAt > now — only one concurrent request can win), AND
-    //   (2) sets User.emailVerifiedAt = now() (idempotent).
-    // Both mutations commit in the SAME Prisma $transaction. If (2)
-    // throws, (1) is rolled back — no unrecoverable window.
+    // consumeVerificationToken atomically (interactive $transaction):
+    //   (1) looks up the token row
+    //   (2) atomically claims the token (updateMany WHERE consumedAt IS
+    //       NULL AND expiresAt > now — only one concurrent request can win)
+    //   (3) GATES on claim.count === 1: if the claim lost the race
+    //       (count=0), returns ALREADY_CONSUMED WITHOUT writing
+    //       emailVerifiedAt — this is the v2 fix over the v1 array-form
+    //       $transaction which could not short-circuit on count=0
+    //   (4) ONLY if claim.count === 1: idempotently sets User.emailVerifiedAt
+    // Both mutations commit in the SAME Prisma $transaction. If (4)
+    // throws, (2) is rolled back — no unrecoverable window.
     const result = await consumeVerificationToken(token)
 
     let emailVerifiedAt: Date | null = null

@@ -104,36 +104,57 @@ export async function issueVerificationToken(userId: string): Promise<string> {
  *   - 'ALREADY_CONSUMED'         — token hash matches a row but
  *                                  `consumedAt` is already set (concurrent
  *                                  request won the race, OR the user clicked
- *                                  the link twice). Idempotent — caller
- *                                  should treat as success if user is already
- *                                  verified.
- *   - 'EXPIRED'                  — token hash matches but `expiresAt < now`.
+ *                                  the link twice, OR a fresh
+ *                                  `issueVerificationToken` invalidated the
+ *                                  token between the lookup and the claim).
+ *                                  Idempotent — caller should treat as
+ *                                  success if user is already verified.
+ *   - 'EXPIRED'                  — token hash matches but `expiresAt <= now`.
  *   - 'NOT_FOUND'                — no row matches this token hash. Either
  *                                  the token is malformed, was never issued,
  *                                  or was issued for a user who has since
  *                                  been deleted (cascade).
  *
- * TRANSACTION BOUNDARY (Verified Identity V1 cleanup):
- *   In V1 baseline (`61983c8`), `consumeVerificationToken` and
- *   `markEmailVerified` were separate operations called sequentially
- *   from the /confirm route. If the DB connection failed between the
- *   two operations, the token was permanently consumed but the user
- *   remained unverified — a retry would only return ALREADY_CONSUMED.
- *   That unrecoverable window is closed by performing BOTH the atomic
- *   claim of the token AND the idempotent `emailVerifiedAt` write
- *   inside a single `db.$transaction([...])`. Either both commit or
- *   neither commits — there is no intermediate state.
+ * TRANSACTION BOUNDARY (Verified Identity V1 cleanup v2 — interactive tx):
+ *   v1 (commit 75634b2) used the array form `db.$transaction([...])` with
+ *   two `updateMany` calls — one to claim the token, one to set
+ *   `emailVerifiedAt`. The array form does NOT short-circuit when an
+ *   `updateMany` returns `{ count: 0 }`: `count: 0` is a successful
+ *   operation that simply matched no rows. The next operation in the
+ *   array STILL executes. That means if the token claim lost the race
+ *   (concurrent consume, or `issueVerificationToken` invalidated the
+ *   token between the lookup and the claim, or the token just expired
+ *   between the lookup and the claim), the `User.emailVerifiedAt` write
+ *   would STILL fire — verifying the user through a token that was not
+ *   actually claimable. That violates the core identity invariant:
+ *
+ *     valid + unconsumed + unexpired token
+ *               ↓
+ *     atomic claim succeeds (count === 1)
+ *               ↓
+ *     emailVerifiedAt may be written
+ *
+ *   v2 (this commit) switches to the INTERACTIVE form
+ *   `db.$transaction(async (tx) => { ... })` so we can branch on
+ *   `claim.count` BEFORE issuing the user write. If `claim.count !== 1`,
+ *   the function returns `ALREADY_CONSUMED` WITHOUT writing
+ *   `emailVerifiedAt`. Only when `claim.count === 1` (this request
+ *   atomically won the claim) do we proceed to the user write.
+ *
+ *   Atomicity is preserved: if anything throws between the token claim
+ *   and the user write, the entire transaction rolls back — the token
+ *   is NOT consumed and the user is NOT verified. The user can retry.
  *
  * CONCURRENCY:
- *   - The atomic claim is `updateMany WHERE consumedAt IS NULL AND
- *     expiresAt > now()`. Two concurrent requests with the same valid
- *     token will race: exactly one returns `count=1` (OK / ALREADY_VERIFIED
- *     depending on prior state), the other returns `count=0` (which we
- *     surface as `ALREADY_CONSUMED` — the idempotent outcome).
- *   - The `emailVerifiedAt` write is `updateMany WHERE emailVerifiedAt IS
- *     NULL` — idempotent. Two concurrent requests for the same user can
- *     both write `now` without conflict; the conditional WHERE ensures
- *     only one actually mutates, and the surviving value is read back.
+ *   - The atomic claim is `updateMany WHERE id = row.id AND consumedAt
+ *     IS NULL AND expiresAt > now()`. Two concurrent requests with the
+ *     same valid token will race: exactly one returns `count=1` (OK
+ *     or ALREADY_VERIFIED depending on prior user state), the other
+ *     returns `count=0` (surfaced as ALREADY_CONSUMED — the idempotent
+ *     outcome, NO user write fires).
+ *   - The `emailVerifiedAt` write is `updateMany WHERE emailVerifiedAt
+ *     IS NULL` — idempotent. If a concurrent request already set it,
+ *     this is a no-op with `count=0`, surfaced as ALREADY_VERIFIED.
  *
  * On `OK` or `ALREADY_VERIFIED`, the user's `emailVerifiedAt` is now set
  * (the caller can read it back via `db.user.findUnique({ select: { emailVerifiedAt: true }})`
@@ -158,94 +179,85 @@ export async function consumeVerificationToken(rawToken: string): Promise<Consum
   const tokenHash = hashToken(rawToken)
   const now = new Date()
 
-  // Look up the row first to give a precise error code (NOT_FOUND vs EXPIRED
-  // vs ALREADY_CONSUMED). The actual claim is the updateMany below; this
-  // read is for diagnostics only. The lookup does NOT mutate state, so it
-  // can safely live outside the transaction — the transaction below will
-  // re-assert the conditions atomically.
-  const row = await db.emailVerificationToken.findUnique({
-    where: { tokenHash },
-    select: { userId: true, consumedAt: true, expiresAt: true },
-  })
-  if (!row) return { result: 'NOT_FOUND' }
-  if (row.consumedAt) return { result: 'ALREADY_CONSUMED', userId: row.userId }
-  if (row.expiresAt < now) return { result: 'EXPIRED', userId: row.userId }
-
-  // Peek at the user's current verification state so we can choose the
-  // correct wire code (`OK` vs `ALREADY_VERIFIED`) WITHOUT relying on a
-  // second DB round-trip after the transaction. The transaction below
-  // atomically re-checks the conditions when it actually performs the
-  // write, so this pre-peek is informational only.
-  const userBefore = await db.user.findUnique({
-    where: { id: row.userId },
-    select: { emailVerifiedAt: true },
-  })
-
-  // ----- ATOMIC TRANSACTION -----
-  // Both operations MUST commit together:
-  //   (1) Claim the token (`updateMany WHERE consumedAt IS NULL AND
-  //       expiresAt > now()` — count=1 means this request won the race).
-  //   (2) Set `emailVerifiedAt` on the user (`updateMany WHERE
-  //       emailVerifiedAt IS NULL` — idempotent, only mutates if NULL).
+  // ----- INTERACTIVE TRANSACTION -----
+  // Why interactive (not array-form)? In Prisma `$transaction([...])` (array
+  // form), an `updateMany` that matches 0 rows is NOT an error — it returns
+  // `{ count: 0 }` and the next operation in the array STILL executes. That
+  // means if the token claim loses its race (concurrent consume, or token
+  // invalidated by a fresh `issueVerificationToken` between lookup and
+  // claim, or token just expired between lookup and claim), the user
+  // `emailVerifiedAt` write would STILL fire — verifying the user through
+  // a token that was not actually claimable. That violates the identity
+  // invariant.
   //
-  // If (1) succeeds but (2) throws (e.g. connection drops between the
-  // two writes), the entire transaction rolls back — the token is NOT
-  // consumed, the user is NOT verified, and the user can retry. This
-  // closes the unrecoverable window from the V1 baseline where the two
-  // operations were sequential.
+  // The interactive form `db.$transaction(async (tx) => { ... })` lets us
+  // branch on `claim.count`: if the claim returned 0 rows, we return early
+  // WITHOUT writing emailVerifiedAt. Only when `claim.count === 1` (this
+  // request atomically won the claim) do we proceed to the user write.
   //
-  // Prisma's `$transaction([...])` runs the operations sequentially inside
-  // a single DB transaction; if any throws, the whole transaction is
-  // rolled back.
-  const claim = await db.$transaction([
-    // (1) Atomic claim — only one concurrent request can win.
-    db.emailVerificationToken.updateMany({
-      where: { tokenHash, consumedAt: null, expiresAt: { gt: now } },
+  // Atomicity: if anything throws between the token claim and the user
+  // write, the entire transaction rolls back — the token is NOT consumed
+  // and the user is NOT verified. The user can retry.
+  return db.$transaction(async (tx) => {
+    // (1) Inspect the token row inside the transaction. The lookup is
+    //     authoritative for our disambiguation (NOT_FOUND / EXPIRED /
+    //     ALREADY_CONSUMED). The actual claim below re-asserts the
+    //     conditions atomically.
+    const row = await tx.emailVerificationToken.findUnique({
+      where: { tokenHash },
+      select: { id: true, userId: true, consumedAt: true, expiresAt: true },
+    })
+
+    if (!row) return { result: 'NOT_FOUND' as const }
+    if (row.consumedAt) return { result: 'ALREADY_CONSUMED' as const, userId: row.userId }
+    if (row.expiresAt <= now) return { result: 'EXPIRED' as const, userId: row.userId }
+
+    // (2) Atomic claim — only one concurrent request can win.
+    //     The `where` clause re-asserts `consumedAt IS NULL` AND
+    //     `expiresAt > now`, so a concurrent request that
+    //     consumed / invalidated / expired the token between the
+    //     findUnique above and this updateMany will cause `count=0`
+    //     here — even though the findUnique said the token was valid.
+    const claim = await tx.emailVerificationToken.updateMany({
+      where: { id: row.id, consumedAt: null, expiresAt: { gt: now } },
       data: { consumedAt: now },
-    }),
-    // (2) Idempotent emailVerifiedAt write — only mutates if currently
-    //     NULL. If already set (e.g. user previously verified via a
-    //     different path), this is a no-op updateMany with count=0,
-    //     which is fine.
-    db.user.updateMany({
+    })
+
+    // (3) CRITICAL GATE — if the claim did not match exactly 1 row, the
+    //     token was NOT claimed by this request. DO NOT write
+    //     `emailVerifiedAt`. This is the invariant that the array-form
+    //     `$transaction` could NOT enforce (because `count=0` was not an
+    //     error in the array form, the next op would still execute).
+    if (claim.count !== 1) {
+      return { result: 'ALREADY_CONSUMED' as const, userId: row.userId }
+    }
+
+    // (4) We won the claim. Now idempotently set `emailVerifiedAt`.
+    //     `where emailVerifiedAt IS NULL` ensures idempotency: if the
+    //     user was already verified via a different path (e.g. Google
+    //     OAuth), this updateMany returns `count=0` and we surface
+    //     ALREADY_VERIFIED with the authoritative prior timestamp.
+    const userWrite = await tx.user.updateMany({
       where: { id: row.userId, emailVerifiedAt: null },
       data: { emailVerifiedAt: now },
-    }),
-  ])
+    })
 
-  // claim[0] = token updateMany result; claim[1] = user updateMany result.
-  const tokenClaim = claim[0]
-  const userClaim = claim[1]
+    if (userWrite.count === 1) {
+      return { result: 'OK' as const, userId: row.userId, emailVerifiedAt: now }
+    }
 
-  if (tokenClaim.count === 0) {
-    // Race lost — another request just consumed the token (and set
-    // emailVerifiedAt in its own transaction). Idempotent outcome.
-    // We read the user back to return the authoritative emailVerifiedAt.
-    const u = await db.user.findUnique({
+    // userWrite.count === 0 → user was already verified before this tx.
+    // Read the authoritative `emailVerifiedAt` back to return to caller.
+    const userAfter = await tx.user.findUnique({
       where: { id: row.userId },
       select: { emailVerifiedAt: true },
     })
     return {
-      result: 'ALREADY_CONSUMED',
+      result: 'ALREADY_VERIFIED' as const,
       userId: row.userId,
-      emailVerifiedAt: u?.emailVerifiedAt ?? null,
+      emailVerifiedAt: userAfter?.emailVerifiedAt ?? null,
     }
-  }
-
-  // We won the claim. Did WE set emailVerifiedAt (count=1), or was it
-  // already set by a prior flow (count=0)?
-  if (userClaim.count === 1) {
-    // We just verified the user.
-    return { result: 'OK', userId: row.userId, emailVerifiedAt: now }
-  }
-  // userClaim.count === 0 → user was already verified before this
-  // transaction. The token is still consumed (audit trail).
-  const alreadyVerifiedAt = userBefore?.emailVerifiedAt ?? null
-  return {
-    result: 'ALREADY_VERIFIED',
-    userId: row.userId,
-    emailVerifiedAt: alreadyVerifiedAt,
-  }
+  })
 }
 
 /**
