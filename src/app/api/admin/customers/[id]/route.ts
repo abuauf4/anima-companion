@@ -5,12 +5,19 @@ import { requireAdmin, handleAuthError, logAuthError } from '@/lib/auth'
 /**
  * GET /api/admin/customers/[id] — Member detail.
  *
- * Returns a single member's record + lightweight stats (order count, last
- * order date). Read-only — admin cannot mutate emailVerifiedAt, provider,
- * providerSubject, or role from this endpoint (PHASE 6 — "Admin tidak
- * boleh mengubah emailVerifiedAt / provider / providerSubject / role
+ * Returns a single CUSTOMER member's record + lightweight stats (order
+ * count, last 5 orders). Read-only — admin cannot mutate emailVerifiedAt,
+ * provider, providerSubject, or role from this endpoint (PHASE 6 — "Admin
+ * tidak boleh mengubah emailVerifiedAt / provider / providerSubject / role
  * secara sembarang hanya dari member detail"). There is intentionally NO
  * POST/PATCH/PUT handler on this route.
+ *
+ * CUSTOMER-ONLY INVARIANT: the query is `findFirst({ where: { id, role:
+ * 'CUSTOMER' } })`. If the requested id belongs to an ADMIN or SELLER, the
+ * response is 404 MEMBER_NOT_FOUND — staff accounts are not member
+ * records and must not be retrievable via the member detail endpoint.
+ * Google members are still reachable (they have role='CUSTOMER' +
+ * provider='GOOGLE').
  *
  * PRIVACY (PHASE 9): explicit Prisma select whitelist — NEVER includes
  * password, providerSubject, or any verification-token data.
@@ -26,8 +33,11 @@ export async function GET(
     await requireAdmin()
     const { id } = params
 
-    const member = await db.user.findUnique({
-      where: { id },
+    // findFirst (NOT findUnique) — we add `role: 'CUSTOMER'` so an id
+    // belonging to an ADMIN or SELLER returns null → 404. The detail
+    // endpoint must never surface staff records as if they were members.
+    const member = await db.user.findFirst({
+      where: { id, role: 'CUSTOMER' },
       // EXPLICIT WHITELIST — see PHASE 9.
       select: {
         id: true,

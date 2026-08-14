@@ -6,7 +6,11 @@ import { requireAdmin, handleAuthError, logAuthError } from '@/lib/auth'
  * GET /api/admin/customers/export — CSV export of member registry.
  *
  * Respects the SAME query params as the list endpoint:
- *   search, verified, provider, role
+ *   search, verified, provider
+ *
+ * The `role: 'CUSTOMER'` filter is HARDCODED — there is no `role` query
+ * param. ADMIN and SELLER rows are NEVER included in the CSV, so the
+ * doorprize dataset Anima consumes from this export is staff-account-free.
  *
  * Page/limit are ignored — export returns ALL matching rows (the use case
  * is "download the filtered set for offline doorprize operations", not
@@ -35,10 +39,10 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get('search')?.trim() || ''
     const verifiedParam = searchParams.get('verified')?.toLowerCase() || ''
     const providerParam = searchParams.get('provider')?.toUpperCase() || ''
-    const roleParam = searchParams.get('role')?.toUpperCase() || ''
 
     // Same WHERE clause as the list endpoint — kept in sync so the export
-    // matches what the operator sees on screen.
+    // matches what the operator sees on screen. The `role: 'CUSTOMER'`
+    // filter is hardcoded — exports cannot be broadened to ADMIN/SELLER.
     type WhereClause = {
       OR?: Array<
         | { name: { contains: string; mode: 'insensitive' } }
@@ -47,9 +51,9 @@ export async function GET(req: NextRequest) {
       >
       emailVerifiedAt?: { not: null } | null
       provider?: string
-      role?: string
+      role: string // always 'CUSTOMER'
     }
-    const where: WhereClause = {}
+    const where: WhereClause = { role: 'CUSTOMER' }
 
     if (search) {
       where.OR = [
@@ -67,10 +71,6 @@ export async function GET(req: NextRequest) {
 
     if (providerParam === 'PASSWORD' || providerParam === 'GOOGLE') {
       where.provider = providerParam
-    }
-
-    if (roleParam === 'CUSTOMER' || roleParam === 'ADMIN' || roleParam === 'SELLER') {
-      where.role = roleParam
     }
 
     // Fetch all matching rows (capped at 50k). Explicit whitelist select.
@@ -135,7 +135,6 @@ export async function GET(req: NextRequest) {
     if (search) filterParts.push(`search-${sanitizeFilename(search)}`)
     if (verifiedParam) filterParts.push(`verified-${verifiedParam}`)
     if (providerParam) filterParts.push(`provider-${providerParam}`)
-    if (roleParam) filterParts.push(`role-${roleParam}`)
     const filterSuffix = filterParts.length > 0 ? `_${filterParts.join('_')}` : ''
     const dateStr = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
     const filename = `anima-members_${dateStr}${filterSuffix}.csv`

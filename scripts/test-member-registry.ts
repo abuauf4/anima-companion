@@ -16,7 +16,7 @@
  *   and cleans them up at the end. NEVER run this against a production deployment.
  * - The script aborts immediately if NODE_ENV=production.
  *
- * Scenarios covered (per task spec PHASE 10):
+ * Scenarios covered (per task spec PHASE 10 + cleanup v2):
  *
  * Verification (cross-checked with test-verified-identity.ts):
  *   V1.  password account starts unverified
@@ -44,7 +44,16 @@
  *   F2. verified=false filter returns only unverified members
  *   F3. provider=GOOGLE filter returns only Google members
  *   F4. provider=PASSWORD filter returns only Email/Password members
- *   F5. role filter works
+ *
+ * CUSTOMER-only registry (cleanup v2):
+ *   R1. CUSTOMER + GOOGLE → included in list
+ *   R2. CUSTOMER + PASSWORD → included in list
+ *   R3. ADMIN → excluded from list
+ *   R4. SELLER → excluded from list
+ *   R5. ADMIN → excluded from detail (404)
+ *   R6. SELLER → excluded from detail (404)
+ *   R7. ADMIN → excluded from CSV export
+ *   R8. SELLER → excluded from CSV export
  *
  * Admin member detail:
  *   D1. admin can fetch detail by id → 200
@@ -59,6 +68,12 @@
  *   E4. export contains expected columns (header row)
  *   E5. export does NOT contain password/providerSubject/token/security data
  *
+ * Pagination (cleanup v2):
+ *   PG1. response pagination object has page/limit/total/totalPages
+ *   PG2. page=2 returns the second page of results
+ *   PG3. page beyond totalPages returns empty members array
+ *   PG4. limit cap of 100 is enforced by the server (requesting limit=999 returns ≤100)
+ *
  * Source-level invariants:
  *   SRC1. customers/route.ts uses explicit Prisma select whitelist
  *   SRC2. customers/[id]/route.ts uses explicit Prisma select whitelist
@@ -69,6 +84,11 @@
  *   SRC7. email.ts ResendEmailAdapter constructor throws when RESEND_API_KEY missing
  *   SRC8. email.ts ResendEmailAdapter constructor throws when EMAIL_FROM missing
  *   SRC9. email.ts never logs raw token / verificationUrl (production-safe)
+ *   SRC10. register route hardcodes provider='PASSWORD' + emailVerifiedAt=null
+ *   SRC11. customers/route.ts hardcodes role='CUSTOMER' WHERE filter (no role param)
+ *   SRC12. customers/[id]/route.ts uses findFirst with where:{id, role:'CUSTOMER'}
+ *   SRC13. customers/export/route.ts hardcodes role='CUSTOMER' WHERE filter (no role param)
+ *   SRC14. UI (CustomersView.tsx) has functional Previous / Page X of Y / Next pagination
  */
 
 // ----- Safety guards -----
@@ -116,7 +136,7 @@ function readSrc(rel: string): string {
 
 function testSourceInvariants() {
   console.log('\n========================================')
-  console.log('Source-level invariants — admin member routes + email adapter')
+  console.log('Source-level invariants — admin member routes + email adapter + UI')
   console.log('========================================')
 
   const listSrc = readSrc('src/app/api/admin/customers/route.ts')
@@ -124,6 +144,7 @@ function testSourceInvariants() {
   const exportSrc = readSrc('src/app/api/admin/customers/export/route.ts')
   const emailSrc = readSrc('src/lib/email.ts')
   const registerSrc = readSrc('src/app/api/auth/register/route.ts')
+  const viewSrc = readSrc('src/views/admin/CustomersView.tsx')
 
   // ---- SRC1: list route uses explicit Prisma select whitelist ----
   console.log('\n[SRC1] customers/route.ts uses explicit Prisma select whitelist')
@@ -313,6 +334,145 @@ function testSourceInvariants() {
     assert(/provider:\s*['"]PASSWORD['"]/.test(data), "register db.user.create data has provider: 'PASSWORD'")
     assert(/emailVerifiedAt:\s*null/.test(data), 'register db.user.create data has emailVerifiedAt: null')
   }
+
+  // ---- SRC11: list route hardcodes role='CUSTOMER' in WHERE (no role param) ----
+  console.log('\n[SRC11] customers/route.ts hardcodes role=CUSTOMER (no role query param)')
+  // The WHERE object must initialize with role: 'CUSTOMER'.
+  assert(
+    /where:\s*WhereClause\s*=\s*\{\s*role:\s*['"]CUSTOMER['"]/.test(listSrc),
+    "list route initializes WHERE with role: 'CUSTOMER'"
+  )
+  // There must be NO `roleParam` parsing from URL search params.
+  assert(
+    !/searchParams\.get\(['"]role['"]\)/.test(listSrc),
+    'list route does NOT parse a `role` query param'
+  )
+  // There must be NO conditional `where.role = roleParam` assignment.
+  assert(
+    !/where\.role\s*=\s*roleParam/.test(listSrc),
+    'list route does NOT assign roleParam to where.role'
+  )
+  // The filters echo must NOT include `role`.
+  const filtersEchoMatch = listSrc.match(/filters:\s*\{([\s\S]*?)\}/)
+  if (filtersEchoMatch) {
+    assert(
+      !/\brole\b/.test(filtersEchoMatch[1]),
+      'list route filters echo does NOT include `role`'
+    )
+  }
+
+  // ---- SRC12: detail route uses findFirst with where:{id, role:'CUSTOMER'} ----
+  console.log('\n[SRC12] customers/[id]/route.ts uses findFirst with where:{id, role:CUSTOMER}')
+  // Must use findFirst (NOT findUnique) so role filter actually narrows.
+  assert(
+    /db\.user\.findFirst\(/.test(detailSrc),
+    'detail route uses db.user.findFirst (NOT findUnique)'
+  )
+  assert(
+    !/db\.user\.findUnique\(/.test(detailSrc),
+    'detail route does NOT use db.user.findUnique'
+  )
+  // The findFirst where clause must include both id and role: 'CUSTOMER'.
+  const detailWhereMatch = detailSrc.match(
+    /db\.user\.findFirst\(\s*\{[\s\S]*?where:\s*\{([\s\S]*?)\}/
+  )
+  assert(!!detailWhereMatch, 'detail route findFirst has a where clause')
+  if (detailWhereMatch) {
+    const detailWhere = detailWhereMatch[1]
+    assert(/\bid\b/.test(detailWhere), 'detail route where clause includes `id`')
+    assert(
+      /role:\s*['"]CUSTOMER['"]/.test(detailWhere),
+      "detail route where clause includes role: 'CUSTOMER'"
+    )
+  }
+
+  // ---- SRC13: export route hardcodes role='CUSTOMER' in WHERE (no role param) ----
+  console.log('\n[SRC13] customers/export/route.ts hardcodes role=CUSTOMER (no role query param)')
+  assert(
+    /where:\s*WhereClause\s*=\s*\{\s*role:\s*['"]CUSTOMER['"]/.test(exportSrc),
+    "export route initializes WHERE with role: 'CUSTOMER'"
+  )
+  assert(
+    !/searchParams\.get\(['"]role['"]\)/.test(exportSrc),
+    'export route does NOT parse a `role` query param'
+  )
+  assert(
+    !/where\.role\s*=\s*roleParam/.test(exportSrc),
+    'export route does NOT assign roleParam to where.role'
+  )
+  // Filename must NOT include role suffix.
+  assert(
+    !/filterParts\.push\(`role-/.test(exportSrc),
+    'export route filename does NOT include role suffix'
+  )
+
+  // ---- SRC14: UI has functional Previous / Page X of Y / Next pagination ----
+  console.log('\n[SRC14] CustomersView.tsx has functional pagination controls')
+  // Must have a `page` state variable.
+  assert(
+    /const\s+\[page,\s*setPage\]\s*=\s*useState/.test(viewSrc),
+    'view has a `page` state variable'
+  )
+  // Must have Previous / Next navigation handlers — goToPage function.
+  assert(
+    /goToPage/.test(viewSrc),
+    'view has a goToPage helper for navigation'
+  )
+  // Must have a Pagination component used.
+  assert(
+    /<Pagination[\s\S]*?onPrev=/.test(viewSrc),
+    'view renders a <Pagination> component with onPrev'
+  )
+  assert(
+    /<Pagination[\s\S]*?onNext=/.test(viewSrc),
+    'view renders a <Pagination> component with onNext'
+  )
+  // Must render "Halaman X / Y" indicator.
+  assert(
+    /Halaman\s*\{page\}\s*\/\s*\{totalPages/.test(viewSrc),
+    'view renders "Halaman {page} / {totalPages}" indicator'
+  )
+  // Previous must be disabled on first page.
+  assert(
+    /disabled=\{isFirst\s*\|\|\s*loading\}/.test(viewSrc),
+    'view disables Previous on first page (or while loading)'
+  )
+  // Next must be disabled on last page.
+  assert(
+    /disabled=\{isLast\s*\|\|\s*loading\}/.test(viewSrc),
+    'view disables Next on last page (or while loading)'
+  )
+  // Must use ChevronLeft / ChevronRight icons from lucide-react.
+  assert(
+    /ChevronLeft/.test(viewSrc),
+    'view imports ChevronLeft from lucide-react'
+  )
+  assert(
+    /ChevronRight/.test(viewSrc),
+    'view imports ChevronRight from lucide-react'
+  )
+  // Must reset page to 1 when filters change — the filter-key ref effect.
+  assert(
+    /lastFiltersKey/.test(viewSrc),
+    'view has lastFiltersKey ref to detect filter changes'
+  )
+  assert(
+    /setPage\(1\)/.test(viewSrc),
+    'view calls setPage(1) when filters change'
+  )
+  // Must NOT have a Role filter dropdown (the DetailRow in the detail
+  // dialog showing the user's role is fine — we only forbid the FILTER).
+  // The regex requires `label="Role"` to appear immediately after
+  // `<FilterSelect` (with only whitespace between) — this matches the
+  // FilterSelect dropdown pattern but NOT the DetailRow inline pattern.
+  assert(
+    !/<FilterSelect\s+label=['"]Role['"]/.test(viewSrc),
+    'view does NOT have a FilterSelect with label="Role" (Role filter dropdown removed)'
+  )
+  assert(
+    !/RoleFilter/.test(viewSrc),
+    'view does NOT have a RoleFilter type'
+  )
 }
 
 // ============================================================================
@@ -368,6 +528,7 @@ async function testHttpMemberRegistry() {
   const adminEmail = `${QA_PREFIX}admin@example.com`
   const customerEmail = `${QA_PREFIX}customer@example.com`
   const googleEmail = `${QA_PREFIX}google@example.com`
+  const sellerEmail = `${QA_PREFIX}seller@example.com`
 
   console.log(`\nSetup: creating QA users`)
   const adminUser = await db.user.create({
@@ -402,7 +563,20 @@ async function testHttpMemberRegistry() {
       emailVerifiedAt: new Date(),
     },
   })
-  console.log(`  Created admin=${adminUser.id}, customer=${customerUser.id}, google=${googleUser.id}`)
+  // A mock SELLER user — staff, must NOT appear in member registry.
+  const sellerUser = await db.user.create({
+    data: {
+      email: sellerEmail,
+      password: await bcrypt.hash('test-pw-123', 10),
+      name: 'QA Seller',
+      role: 'SELLER',
+      provider: 'PASSWORD',
+      emailVerifiedAt: new Date(),
+    },
+  })
+  console.log(
+    `  Created admin=${adminUser.id}, customer=${customerUser.id}, google=${googleUser.id}, seller=${sellerUser.id}`
+  )
 
   try {
     // ---- A1. guest cannot list members → 401 ----
@@ -424,7 +598,19 @@ async function testHttpMemberRegistry() {
     const a3 = await http('GET', '/api/admin/customers', { cookie: adminCookie })
     assertEqual(a3.status, 200, 'admin GET /api/admin/customers status')
     assert(!!a3.body.members, 'response body has `members` array')
-    assert(a3.body.members.length >= 3, `response has >= 3 members (got ${a3.body.members.length})`)
+    // Only CUSTOMER members — admin + seller must NOT be in the list.
+    assert(
+      a3.body.members.every((m: any) => m.role === 'CUSTOMER'),
+      'every member in list has role=CUSTOMER (no ADMIN/SELLER leak)'
+    )
+    assert(
+      a3.body.members.some((m: any) => m.id === customerUser.id),
+      'list includes the CUSTOMER (PASSWORD) user'
+    )
+    assert(
+      a3.body.members.some((m: any) => m.id === googleUser.id),
+      'list includes the CUSTOMER (GOOGLE) user'
+    )
 
     // ---- P1. response does NOT expose `password` key ----
     console.log('\n[P1] Response does NOT expose `password` key')
@@ -443,30 +629,43 @@ async function testHttpMemberRegistry() {
     )
 
     // ---- S1. search by name works ----
+    // IMPORTANT: search by 'QA Admin' must NOT return the admin (admin is
+    // ADMIN role, excluded). Instead we search for 'QA Customer' which is
+    // a CUSTOMER.
     console.log('\n[S1] Search by name works')
     const s1 = await http(
       'GET',
-      `/api/admin/customers?search=${encodeURIComponent('QA Admin')}`,
+      `/api/admin/customers?search=${encodeURIComponent('QA Customer')}`,
       { cookie: adminCookie }
     )
     assertEqual(s1.status, 200, 'search-by-name status')
     assert(s1.body.members.length >= 1, 'search-by-name returns >= 1 member')
     assert(
-      s1.body.members.some((m: any) => m.name.includes('QA Admin')),
-      'search-by-name returns the QA Admin user'
+      s1.body.members.some((m: any) => m.name.includes('QA Customer')),
+      'search-by-name returns the QA Customer user'
     )
 
     // ---- S2. search by email works ----
     console.log('\n[S2] Search by email works')
     const s2 = await http(
       'GET',
-      `/api/admin/customers?search=${encodeURIComponent(adminEmail)}`,
+      `/api/admin/customers?search=${encodeURIComponent(googleEmail)}`,
       { cookie: adminCookie }
     )
     assertEqual(s2.status, 200, 'search-by-email status')
     assert(
-      s2.body.members.some((m: any) => m.email === adminEmail),
-      'search-by-email returns the QA Admin user'
+      s2.body.members.some((m: any) => m.email === googleEmail),
+      'search-by-email returns the QA Google user (CUSTOMER)'
+    )
+    // Even if we search by the admin's email, the admin should NOT appear.
+    const s2b = await http(
+      'GET',
+      `/api/admin/customers?search=${encodeURIComponent(adminEmail)}`,
+      { cookie: adminCookie }
+    )
+    assert(
+      !s2b.body.members.some((m: any) => m.id === adminUser.id),
+      'search-by-admin-email does NOT return the admin (role=ADMIN excluded)'
     )
 
     // ---- S3. search by phone works ----
@@ -497,13 +696,20 @@ async function testHttpMemberRegistry() {
       f1.body.members.every((m: any) => m.emailVerified === true),
       'every member in verified=true result has emailVerified=true'
     )
+    // The QA Google user is verified + CUSTOMER → must be in the result.
     assert(
-      f1.body.members.some((m: any) => m.id === adminUser.id),
-      'verified=true result includes the verified QA admin'
+      f1.body.members.some((m: any) => m.id === googleUser.id),
+      'verified=true result includes the verified QA Google (CUSTOMER) user'
     )
+    // The QA Customer user is unverified → must NOT be in the result.
     assert(
       !f1.body.members.some((m: any) => m.id === customerUser.id),
-      'verified=true result does NOT include the unverified QA customer'
+      'verified=true result does NOT include the unverified QA Customer'
+    )
+    // The QA Admin is verified + ADMIN → must NOT appear (CUSTOMER-only invariant).
+    assert(
+      !f1.body.members.some((m: any) => m.id === adminUser.id),
+      'verified=true result does NOT include the QA Admin (role=ADMIN excluded)'
     )
 
     // ---- F2. verified=false filter returns only unverified members ----
@@ -518,7 +724,7 @@ async function testHttpMemberRegistry() {
     )
     assert(
       f2.body.members.some((m: any) => m.id === customerUser.id),
-      'verified=false result includes the unverified QA customer'
+      'verified=false result includes the unverified QA Customer'
     )
 
     // ---- F3. provider=GOOGLE filter returns only Google members ----
@@ -551,19 +757,184 @@ async function testHttpMemberRegistry() {
       'provider=PASSWORD result does NOT include the Google user'
     )
 
-    // ---- F5. role filter works ----
-    console.log('\n[F5] role=ADMIN filter returns only ADMIN members')
-    const f5 = await http('GET', '/api/admin/customers?role=ADMIN', {
-      cookie: adminCookie,
-    })
-    assertEqual(f5.status, 200, 'role=ADMIN status')
+    // ---- F5. REMOVED — role filter is no longer supported ----
+    // The Member Registry always returns CUSTOMER users only. The role
+    // query param is ignored (not parsed). R-series tests below cover the
+    // CUSTOMER-only invariant explicitly.
+    console.log('\n[F5] role query param is no longer accepted — REMOVED (replaced by R-series)')
+    assert(true, 'role filter intentionally removed — see R1..R8 below')
+
+    // ---- R1. CUSTOMER + GOOGLE → included in list ----
+    console.log('\n[R1] CUSTOMER + GOOGLE → included in member list')
+    const r1 = await http('GET', '/api/admin/customers', { cookie: adminCookie })
+    assertEqual(r1.status, 200, 'R1 list status')
     assert(
-      f5.body.members.every((m: any) => m.role === 'ADMIN'),
-      'every member in role=ADMIN result has role=ADMIN'
+      r1.body.members.some((m: any) => m.id === googleUser.id),
+      'R1 list includes the CUSTOMER+GOOGLE user'
+    )
+
+    // ---- R2. CUSTOMER + PASSWORD → included in list ----
+    console.log('\n[R2] CUSTOMER + PASSWORD → included in member list')
+    assert(
+      r1.body.members.some((m: any) => m.id === customerUser.id),
+      'R2 list includes the CUSTOMER+PASSWORD user'
+    )
+
+    // ---- R3. ADMIN → excluded from list ----
+    console.log('\n[R3] ADMIN → excluded from member list')
+    assert(
+      !r1.body.members.some((m: any) => m.id === adminUser.id),
+      'R3 list does NOT include the ADMIN user'
+    )
+    // The `role` query param is ignored — even if we pass ?role=ADMIN, the
+    // admin must still NOT appear (because role='CUSTOMER' is hardcoded).
+    const r3 = await http('GET', '/api/admin/customers?role=ADMIN', { cookie: adminCookie })
+    assertEqual(r3.status, 200, 'R3 ?role=ADMIN status (still 200 — param ignored)')
+    assert(
+      !r3.body.members.some((m: any) => m.id === adminUser.id),
+      'R3 ?role=ADMIN does NOT include the admin (role param ignored, CUSTOMER-only)'
     )
     assert(
-      f5.body.members.some((m: any) => m.id === adminUser.id),
-      'role=ADMIN result includes the QA admin'
+      r3.body.members.every((m: any) => m.role === 'CUSTOMER'),
+      'R3 ?role=ADMIN result still all CUSTOMER (role param ignored)'
+    )
+
+    // ---- R4. SELLER → excluded from list ----
+    console.log('\n[R4] SELLER → excluded from member list')
+    assert(
+      !r1.body.members.some((m: any) => m.id === sellerUser.id),
+      'R4 list does NOT include the SELLER user'
+    )
+    const r4 = await http('GET', '/api/admin/customers?role=SELLER', { cookie: adminCookie })
+    assertEqual(r4.status, 200, 'R4 ?role=SELLER status (param ignored)')
+    assert(
+      !r4.body.members.some((m: any) => m.id === sellerUser.id),
+      'R4 ?role=SELLER does NOT include the seller (role param ignored)'
+    )
+
+    // ---- R5. ADMIN → excluded from detail (404) ----
+    console.log('\n[R5] ADMIN id → detail 404 (not treated as a member)')
+    const r5 = await http('GET', `/api/admin/customers/${adminUser.id}`, {
+      cookie: adminCookie,
+    })
+    assertEqual(r5.status, 404, 'R5 admin id → 404')
+
+    // ---- R6. SELLER → excluded from detail (404) ----
+    console.log('\n[R6] SELLER id → detail 404 (not treated as a member)')
+    const r6 = await http('GET', `/api/admin/customers/${sellerUser.id}`, {
+      cookie: adminCookie,
+    })
+    assertEqual(r6.status, 404, 'R6 seller id → 404')
+
+    // ---- R7. ADMIN → excluded from CSV export ----
+    console.log('\n[R7] ADMIN email → excluded from CSV export')
+    const r7 = await http('GET', '/api/admin/customers/export', { cookie: adminCookie })
+    const r7Csv = typeof r7.body === 'string' ? r7.body : ''
+    assert(r7Csv.length > 0, 'R7 export returned non-empty CSV')
+    assert(
+      !r7Csv.includes(adminEmail),
+      'R7 CSV does NOT include the admin email'
+    )
+
+    // ---- R8. SELLER → excluded from CSV export ----
+    console.log('\n[R8] SELLER email → excluded from CSV export')
+    assert(
+      !r7Csv.includes(sellerEmail),
+      'R8 CSV does NOT include the seller email'
+    )
+    // Sanity: the CUSTOMER + GOOGLE members MUST be in the CSV.
+    assert(
+      r7Csv.includes(googleEmail),
+      'R8 CSV includes the CUSTOMER+GOOGLE email (sanity)'
+    )
+    assert(
+      r7Csv.includes(customerEmail),
+      'R8 CSV includes the CUSTOMER+PASSWORD email (sanity)'
+    )
+
+    // ---- PG1. response pagination object has page/limit/total/totalPages ----
+    console.log('\n[PG1] Response pagination object has all required fields')
+    assert(!!a3.body.pagination, 'response body has `pagination` object')
+    assertEqual(typeof a3.body.pagination.page, 'number', 'pagination.page is a number')
+    assertEqual(typeof a3.body.pagination.limit, 'number', 'pagination.limit is a number')
+    assertEqual(typeof a3.body.pagination.total, 'number', 'pagination.total is a number')
+    assertEqual(
+      typeof a3.body.pagination.totalPages,
+      'number',
+      'pagination.totalPages is a number'
+    )
+    assertEqual(a3.body.pagination.page, 1, 'default request returns page=1')
+    assertEqual(a3.body.pagination.limit, 20, 'default request returns limit=20')
+    // total/totalPages depend on DB state — sanity check that they are ≥0.
+    assert(
+      a3.body.pagination.total >= 0,
+      `pagination.total is >= 0 (got ${a3.body.pagination.total})`
+    )
+    assert(
+      a3.body.pagination.totalPages >= 0,
+      `pagination.totalPages is >= 0 (got ${a3.body.pagination.totalPages})`
+    )
+    // totalPages = ceil(total / limit)
+    const expectedTotalPages = Math.ceil(a3.body.pagination.total / a3.body.pagination.limit)
+    assertEqual(
+      a3.body.pagination.totalPages,
+      expectedTotalPages,
+      'pagination.totalPages = ceil(total / limit)'
+    )
+
+    // ---- PG2. page=2 returns the second page of results ----
+    console.log('\n[PG2] page=2 returns the second page (different from page=1)')
+    const pg2a = await http('GET', '/api/admin/customers?page=1&limit=2', { cookie: adminCookie })
+    const pg2b = await http('GET', '/api/admin/customers?page=2&limit=2', { cookie: adminCookie })
+    assertEqual(pg2a.status, 200, 'PG2 page=1 status')
+    assertEqual(pg2b.status, 200, 'PG2 page=2 status')
+    assertEqual(pg2a.body.pagination.page, 1, 'PG2 page=1 returns pagination.page=1')
+    assertEqual(pg2b.body.pagination.page, 2, 'PG2 page=2 returns pagination.page=2')
+    // If there are >2 CUSTOMER members in the DB, page 2 must have at least 1
+    // member and the IDs must be DIFFERENT from page 1.
+    if (pg2a.body.pagination.total > 2) {
+      assert(pg2b.body.members.length >= 1, 'PG2 page=2 has >= 1 member (total > 2)')
+      const page1Ids = new Set(pg2a.body.members.map((m: any) => m.id))
+      const page2Ids = pg2b.body.members.map((m: any) => m.id)
+      assert(
+        page2Ids.every((id: string) => !page1Ids.has(id)),
+        'PG2 page=2 member ids differ from page=1 (no overlap)'
+      )
+    } else {
+      assert(
+        pg2b.body.members.length === 0,
+        'PG2 page=2 returns empty when total <= limit (no second page)'
+      )
+    }
+
+    // ---- PG3. page beyond totalPages returns empty members array ----
+    console.log('\n[PG3] page beyond totalPages → empty members (not an error)')
+    const totalPages = a3.body.pagination.totalPages
+    const beyondPage = totalPages + 5
+    const pg3 = await http(
+      'GET',
+      `/api/admin/customers?page=${beyondPage}&limit=20`,
+      { cookie: adminCookie }
+    )
+    assertEqual(pg3.status, 200, 'PG3 beyond-page status (not 4xx)')
+    assertEqual(pg3.body.members.length, 0, 'PG3 beyond-page returns empty members array')
+    assertEqual(pg3.body.pagination.page, beyondPage, 'PG3 echoes the requested page back')
+    // total should match the unfiltered count (since no filters applied).
+    assertEqual(pg3.body.pagination.total, a3.body.pagination.total, 'PG3 total matches unfiltered')
+
+    // ---- PG4. limit cap of 100 is enforced by the server ----
+    console.log('\n[PG4] limit=999 is capped at 100 by the server')
+    const pg4 = await http(
+      'GET',
+      '/api/admin/customers?limit=999',
+      { cookie: adminCookie }
+    )
+    assertEqual(pg4.status, 200, 'PG4 limit=999 status')
+    assertEqual(pg4.body.pagination.limit, 100, 'PG4 server caps limit at 100')
+    // Even with limit=10000, the server must not return more than 100 members.
+    assert(
+      pg4.body.members.length <= 100,
+      `PG4 returns at most 100 members (got ${pg4.body.members.length})`
     )
 
     // ---- D1. admin can fetch detail by id → 200 ----
@@ -598,6 +969,7 @@ async function testHttpMemberRegistry() {
       cookie: adminCookie,
     })
     assertEqual(d4.status, 404, 'non-existent id status')
+    // (ADMIN/SELLER ids → 404 is covered by R5/R6 above.)
 
     // ---- E1. admin can export → 200 + text/csv ----
     console.log('\n[E1] Admin can export → 200 + text/csv')
@@ -621,16 +993,21 @@ async function testHttpMemberRegistry() {
     assertEqual(e3.status, 200, 'filtered export status')
     const csvText = typeof e3.body === 'string' ? e3.body : ''
     assert(csvText.length > 0, 'filtered export returned non-empty CSV body')
-    // The customer (unverified) should NOT be in the verified=true export
-    // (search by email — the customer email is unique to the QA user)
+    // The customer (unverified) should NOT be in the verified=true export.
     assert(
       !csvText.includes(customerEmail),
       'verified=true export does NOT include the unverified customer email'
     )
-    // The admin (verified) SHOULD be in the verified=true export
+    // The Google user (verified + CUSTOMER) SHOULD be in the verified=true export.
     assert(
-      csvText.includes(adminEmail),
-      'verified=true export DOES include the verified admin email'
+      csvText.includes(googleEmail),
+      'verified=true export DOES include the verified Google (CUSTOMER) email'
+    )
+    // The admin (verified + ADMIN) should NOT be in the verified=true export
+    // (CUSTOMER-only invariant — verified admin still excluded).
+    assert(
+      !csvText.includes(adminEmail),
+      'verified=true export does NOT include the admin email (role=ADMIN excluded)'
     )
 
     // ---- E4. export contains expected columns (header row) ----
@@ -660,6 +1037,16 @@ async function testHttpMemberRegistry() {
     assert(
       !fullCsv.includes('mock-google-sub-123'),
       'CSV body does NOT include the mock Google providerSubject value'
+    )
+    // Body must NOT contain the admin email (CUSTOMER-only invariant).
+    assert(
+      !fullCsv.includes(adminEmail),
+      'CSV body does NOT include the admin email (role=ADMIN excluded from export)'
+    )
+    // Body must NOT contain the seller email (CUSTOMER-only invariant).
+    assert(
+      !fullCsv.includes(sellerEmail),
+      'CSV body does NOT include the seller email (role=SELLER excluded from export)'
     )
 
     // ---- V5. client cannot set emailVerifiedAt via /api/auth/register body ----
@@ -704,7 +1091,7 @@ async function testHttpMemberRegistry() {
   } finally {
     // ---- Cleanup ----
     console.log('\nCleanup — deleting QA users + tokens')
-    const qaEmails = [adminEmail, customerEmail, googleEmail, `${QA_PREFIX}spoof@example.com`]
+    const qaEmails = [adminEmail, customerEmail, googleEmail, sellerEmail, `${QA_PREFIX}spoof@example.com`]
     const qaUserIds = (
       await db.user.findMany({
         where: { email: { in: qaEmails } },

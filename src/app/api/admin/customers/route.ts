@@ -5,18 +5,22 @@ import { requireAdmin, handleAuthError, logAuthError } from '@/lib/auth'
 /**
  * GET /api/admin/customers — Member Registry list.
  *
- * Member = a row in the `User` table (any role, any provider). The previous
- * version of this route filtered `role: 'CUSTOMER'` exclusively, which hid
- * Google Sign-In users and admin/seller accounts from the registry. The
- * Member Registry must show every registered identity so the operator can
- * see the full roster; role + provider + verification filters let the
- * operator narrow down as needed.
+ * Member Registry = CUSTOMER users only. ADMIN and SELLER accounts are
+ * operational staff identities, not customer/member records, and must NOT
+ * appear in the member list, search results, or CSV export — otherwise the
+ * dataset that Anima consumes for offline doorprize operations would be
+ * contaminated by staff accounts. Google-authenticated members are still
+ * CUSTOMER users (`provider: 'GOOGLE'` + `role: 'CUSTOMER'`) — provider and
+ * role are orthogonal concepts.
+ *
+ * The `role: 'CUSTOMER'` filter is HARDCODED — there is no `role` query
+ * param. The operator cannot broaden the registry to include ADMIN/SELLER
+ * from the UI.
  *
  * QUERY PARAMS (all optional):
  *   search    — string, case-insensitive contains on name OR email OR phone
  *   verified  — 'true' | 'false' (filter by emailVerifiedAt !== null)
  *   provider  — 'PASSWORD' | 'GOOGLE' (case-insensitive)
- *   role      — 'CUSTOMER' | 'ADMIN' | 'SELLER' (case-insensitive)
  *   page      — 1-indexed page number (default 1)
  *   limit     — page size (default 20, max 100 to avoid unbounded queries)
  *
@@ -39,11 +43,12 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get('search')?.trim() || ''
     const verifiedParam = searchParams.get('verified')?.toLowerCase() || ''
     const providerParam = searchParams.get('provider')?.toUpperCase() || ''
-    const roleParam = searchParams.get('role')?.toUpperCase() || ''
     const page = Math.max(1, parseInt(searchParams.get('page') || '1') || 1)
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20') || 20))
 
     // Build the WHERE clause from the filters. Each filter is opt-in.
+    // The `role: 'CUSTOMER'` filter is HARDCODED — ADMIN/SELLER are NEVER
+    // part of the Member Registry regardless of operator-selected filters.
     type WhereClause = {
       OR?: Array<
         | { name: { contains: string; mode: 'insensitive' } }
@@ -52,9 +57,9 @@ export async function GET(req: NextRequest) {
       >
       emailVerifiedAt?: { not: null } | null
       provider?: string
-      role?: string
+      role: string // always 'CUSTOMER'
     }
-    const where: WhereClause = {}
+    const where: WhereClause = { role: 'CUSTOMER' }
 
     if (search) {
       where.OR = [
@@ -74,10 +79,6 @@ export async function GET(req: NextRequest) {
 
     if (providerParam === 'PASSWORD' || providerParam === 'GOOGLE') {
       where.provider = providerParam
-    }
-
-    if (roleParam === 'CUSTOMER' || roleParam === 'ADMIN' || roleParam === 'SELLER') {
-      where.role = roleParam
     }
 
     const [total, members] = await Promise.all([
@@ -144,7 +145,6 @@ export async function GET(req: NextRequest) {
         search,
         verified: verifiedParam || null,
         provider: providerParam || null,
-        role: roleParam || null,
       },
     })
   } catch (e) {

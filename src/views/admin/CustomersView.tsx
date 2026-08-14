@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,7 @@ import {
 import {
   Search, Users, Mail, Phone, PawPrint, ShoppingBag, Download,
   ShieldCheck, ShieldAlert, CheckCircle2, Loader2,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { formatRupiah, formatDate } from '@/lib/format'
 
@@ -20,12 +21,17 @@ import { formatRupiah, formatDate } from '@/lib/format'
 // Extends the existing CustomersView with:
 //   - Verification badge (Verified / Unverified)
 //   - Provider badge (Google / Email)
-//   - Filter dropdowns: verification, provider, role
+//   - Filter dropdowns: verification, provider
 //   - Export CSV button (respects current filters)
 //   - Mobile-first cards on small screens, table on md+ screens
 //   - Member detail dialog showing provider, emailVerifiedAt, role
 //   - Read-only on sensitive fields (no inline edit of emailVerifiedAt /
 //     provider / providerSubject / role from the admin UI)
+//   - Pagination controls: Previous / Page X of Y / Next
+//
+// The Role filter is INTENTIONALLY ABSENT — the server always returns
+// CUSTOMER members only (ADMIN/SELLER are staff, not members). There is
+// nothing for the operator to filter by role.
 // ============================================================================
 
 interface Member {
@@ -65,13 +71,11 @@ interface MemberListResponse {
     search: string
     verified: string | null
     provider: string | null
-    role: string | null
   }
 }
 
 type VerifiedFilter = '' | 'true' | 'false'
 type ProviderFilter = '' | 'PASSWORD' | 'GOOGLE'
-type RoleFilter = '' | 'CUSTOMER' | 'ADMIN' | 'SELLER'
 
 export function CustomersView() {
   const [members, setMembers] = useState<Member[]>([])
@@ -82,37 +86,72 @@ export function CustomersView() {
   const [search, setSearch] = useState('')
   const [verified, setVerified] = useState<VerifiedFilter>('')
   const [provider, setProvider] = useState<ProviderFilter>('')
-  const [role, setRole] = useState<RoleFilter>('')
+  // Page is held in state so Previous/Next buttons can navigate it.
+  // It is RESET to 1 whenever search/verified/provider changes — see the
+  // filter-key ref logic in the load effect below.
+  const [page, setPage] = useState(1)
 
   const [selected, setSelected] = useState<MemberDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    const params = new URLSearchParams()
-    if (search) params.set('search', search)
-    if (verified) params.set('verified', verified)
-    if (provider) params.set('provider', provider)
-    if (role) params.set('role', role)
-    params.set('page', '1')
-    params.set('limit', '20')
+  // load(targetPage) — fetches a single page of members using the current
+  // search/verified/provider state and the supplied targetPage. `page` is
+  // NOT in deps so navigating pages doesn't recreate `load` and double-fire
+  // the load effect (the effect reads `page` from state at call time).
+  const load = useCallback(
+    async (targetPage: number) => {
+      setLoading(true)
+      const params = new URLSearchParams()
+      if (search) params.set('search', search)
+      if (verified) params.set('verified', verified)
+      if (provider) params.set('provider', provider)
+      params.set('page', String(targetPage))
+      params.set('limit', '20')
 
-    try {
-      const res = await fetch(`/api/admin/customers?${params.toString()}`)
-      if (!res.ok) throw new Error('Failed to load members')
-      const data: MemberListResponse = await res.json()
-      setMembers(data.members || [])
-      setPagination(data.pagination)
-    } catch {
-      setMembers([])
-    } finally {
-      setLoading(false)
-    }
-  }, [search, verified, provider, role])
+      try {
+        const res = await fetch(`/api/admin/customers?${params.toString()}`)
+        if (!res.ok) throw new Error('Failed to load members')
+        const data: MemberListResponse = await res.json()
+        setMembers(data.members || [])
+        setPagination(data.pagination)
+        // Sync local page state to whatever the server returned. If the
+        // operator navigated past the last page (e.g. after a deletion),
+        // the server will clamp to the last valid page.
+        setPage(data.pagination.page)
+      } catch {
+        setMembers([])
+      } finally {
+        setLoading(false)
+      }
+    },
+    [search, verified, provider]
+  )
 
+  // Single source-of-truth effect: fires whenever filters change OR page
+  // changes. We track the last-fetched filter signature so we can detect
+  // filter changes BEFORE fetching and reset page to 1 first — this avoids
+  // the double-fetch race of "fetch old page with new filters, then fetch
+  // page 1 with new filters".
+  const filtersKey = `${search}|${verified}|${provider}`
+  const lastFiltersKey = useRef(filtersKey)
   useEffect(() => {
-    load()
-  }, [load])
+    if (filtersKey !== lastFiltersKey.current) {
+      lastFiltersKey.current = filtersKey
+      if (page !== 1) {
+        setPage(1)
+        return // Don't fetch — wait for page=1 in the next render.
+      }
+    }
+    load(page)
+  }, [filtersKey, page, load])
+
+  const goToPage = (next: number) => {
+    if (loading) return
+    const totalPages = pagination.totalPages
+    const clamped = Math.max(1, Math.min(totalPages || 1, next))
+    if (clamped === page) return
+    setPage(clamped)
+  }
 
   const openDetail = async (m: Member) => {
     setDetailLoading(true)
@@ -136,7 +175,6 @@ export function CustomersView() {
       if (search) params.set('search', search)
       if (verified) params.set('verified', verified)
       if (provider) params.set('provider', provider)
-      if (role) params.set('role', role)
       const res = await fetch(`/api/admin/customers/export?${params.toString()}`)
       if (!res.ok) throw new Error('Export failed')
       const blob = await res.blob()
@@ -160,7 +198,7 @@ export function CustomersView() {
     }
   }
 
-  const hasActiveFilters = !!(search || verified || provider || role)
+  const hasActiveFilters = !!(search || verified || provider)
 
   return (
     <div className="space-y-6">
@@ -192,7 +230,14 @@ export function CustomersView() {
         <form
           onSubmit={(e) => {
             e.preventDefault()
-            load()
+            // Explicit submit (Enter) — reset to page 1 and fetch.
+            // The setPage(1) will trigger the load effect on next render;
+            // if page was already 1, fetch immediately.
+            if (page !== 1) {
+              setPage(1)
+            } else {
+              load(1)
+            }
           }}
         >
           <div className="relative max-w-md">
@@ -227,17 +272,6 @@ export function CustomersView() {
               { value: 'GOOGLE', label: 'Google' },
             ]}
           />
-          <FilterSelect
-            label="Role"
-            value={role}
-            onChange={(v) => setRole(v as RoleFilter)}
-            options={[
-              { value: '', label: 'Semua' },
-              { value: 'CUSTOMER', label: 'Customer' },
-              { value: 'SELLER', label: 'Seller' },
-              { value: 'ADMIN', label: 'Admin' },
-            ]}
-          />
           {hasActiveFilters && (
             <Button
               variant="ghost"
@@ -246,7 +280,6 @@ export function CustomersView() {
                 setSearch('')
                 setVerified('')
                 setProvider('')
-                setRole('')
               }}
               className="text-xs"
             >
@@ -366,18 +399,17 @@ export function CustomersView() {
             ))}
           </div>
 
-          {/* Pagination (simple prev/next) */}
-          {pagination.totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 text-sm">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled
-              >
-                Halaman {pagination.page} / {pagination.totalPages}
-              </Button>
-            </div>
-          )}
+          {/* Pagination — Previous / Page X of Y / Next.
+              Visible whenever there are >1 pages OR when there's at least 1
+              member (so the operator always knows where they are). Disabled
+              Previous on page 1, disabled Next on last page. */}
+          <Pagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            loading={loading}
+            onPrev={() => goToPage(pagination.page - 1)}
+            onNext={() => goToPage(pagination.page + 1)}
+          />
         </>
       )}
 
@@ -604,6 +636,59 @@ function FilterSelect({
           </option>
         ))}
       </select>
+    </div>
+  )
+}
+
+// Pagination — Previous / "Page X of Y" / Next. Plain existing-design-system
+// Button + Badge components. Previous is disabled on page 1, Next is disabled
+// on the last page. The whole bar is hidden if there are 0 total pages
+// (nothing to paginate). It reuses the current search/filter query through
+// the parent's `onPrev`/`onNext` callbacks (the parent state holds the
+// filters; only `page` changes).
+function Pagination({
+  page,
+  totalPages,
+  loading,
+  onPrev,
+  onNext,
+}: {
+  page: number
+  totalPages: number
+  loading: boolean
+  onPrev: () => void
+  onNext: () => void
+}) {
+  if (totalPages === 0) return null
+  const isFirst = page <= 1
+  const isLast = page >= totalPages || totalPages === 0
+  return (
+    <div className="flex items-center justify-center gap-2 text-sm">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={onPrev}
+        disabled={isFirst || loading}
+        className="gap-1"
+        aria-label="Halaman sebelumnya"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        <span className="hidden sm:inline">Sebelumnya</span>
+      </Button>
+      <Badge variant="outline" className="px-3 py-1 text-xs font-medium">
+        Halaman {page} / {totalPages || 1}
+      </Badge>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={onNext}
+        disabled={isLast || loading}
+        className="gap-1"
+        aria-label="Halaman berikutnya"
+      >
+        <span className="hidden sm:inline">Berikutnya</span>
+        <ChevronRight className="h-4 w-4" />
+      </Button>
     </div>
   )
 }
