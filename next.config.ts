@@ -66,7 +66,6 @@ const nextConfig: NextConfig = {
       '@radix-ui/react-dialog',
       '@radix-ui/react-dropdown-menu',
       '@radix-ui/react-tabs',
-      '@radix-ui/react-toast',
       '@radix-ui/react-select',
       '@radix-ui/react-popover',
       '@radix-ui/react-tooltip',

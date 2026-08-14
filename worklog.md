@@ -2810,3 +2810,41 @@ Stage Summary:
 - Runtime PostgreSQL QA: PENDING (sandbox has no DATABASE_URL — same as baseline e968d8e). The 26 new HTTP integration tests (R1-R8, PG1-PG4) require BASE_URL + DB to actually run; they are runtime-ready and will execute automatically once a database is available.
 - No changes to OAuth, order, stock, voucher, identity verification transaction, Resend email adapter, or any other preserved integrity area.
 - Stop condition satisfied: cleanup is complete. No Doorprize System, no winner generator, no campaign, no Apple Login, no phone OTP, no payment, no loyalty, no new features.
+
+---
+Task ID: toast-v1-standardization
+Agent: main
+Task: Audit toast implementation → standardize Sonner globally → test login success/error + admin/checkout actions. Do not touch auth logic.
+
+Work Log:
+- Audited every toast reference in src/ and config files. Findings:
+  - `sonner` package (v2.0.6) already installed.
+  - 21 caller files import `{ toast } from 'sonner'` and call `toast.success/error/info/warning(...)` (LoginView, RegisterView, VerifyEmailView, HomeView, CartView, CheckoutView, ProductDetailView, WishlistView, ProfileView, ProductCard, use-fetch, CloudinaryUploader, 8 admin views).
+  - `src/components/ui/sonner.tsx` already existed but was NOT mounted.
+  - Dead Radix infrastructure also present: `src/components/ui/toast.tsx`, `src/components/ui/toaster.tsx`, `src/hooks/use-toast.ts`. The Radix `<Toaster />` was mounted in `src/app/layout.tsx` — but `useToast()` was never called anywhere, so the Radix queue was never fed.
+  - CRITICAL BUG: `layout.tsx` mounted the Radix Toaster, NOT the Sonner Toaster. Result: every `toast.success/error` call across the app queued internally to Sonner but rendered nothing visible. All 21 callers were effectively silent.
+- Standardization changes:
+  - `src/app/layout.tsx`: switched import from `@/components/ui/toaster` → `@/components/ui/sonner`. Now mounts the Sonner `<Toaster />`.
+  - `src/components/ui/sonner.tsx`: rewrote with sensible global defaults — `position="bottom-right"`, `richColors`, `closeButton`, `duration={4000}`, `useTheme()` for theme sync, design-token classNames mapping (popover bg + border + text), `--normal-*` CSS vars. Added module-level doc block listing the standard API and explicitly forbidding the dead Radix imports.
+  - Deleted dead files: `src/components/ui/toast.tsx`, `src/components/ui/toaster.tsx`, `src/hooks/use-toast.ts`.
+  - `package.json`: removed `@radix-ui/react-toast` from dependencies.
+  - `next.config.ts`: removed `@radix-ui/react-toast` from `experimental.optimizePackageImports`.
+- New test: `scripts/test-toast.ts` + helper `scripts/_walk-src.ts` (ESM TypeScript source-walker).
+  - 13 static scenarios (44 assertions total): Sonner package surface (toast.{success,error,info,warning,loading,promise,custom,dismiss,message} + Toaster export), sonner.tsx wrapper re-exports Toaster with position/richColors/closeButton/duration/useTheme, layout.tsx mounts Sonner Toaster, dead Radix files gone, no remaining imports of `@radix-ui/react-toast` / `@/hooks/use-toast` / `@/components/ui/toaster` / `@/components/ui/toast` anywhere in src/, package.json no longer lists radix toast, next.config.ts no longer references radix toast, LoginView contract (empty-form error + welcome success + fallback error), CheckoutView contract (incomplete-form error + 401/409/400 branches + order success + fallback), all 10 admin views use Sonner signature (no Radix-style `toast({ title })`), every caller file imports `{ toast } from 'sonner'`.
+  - 9 HTTP integration scenarios (runtime-ready, gated by BASE_URL): empty body → 400, wrong password → 401, valid customer creds → 200 + Set-Cookie anima_session + user.name + no password key, GET /api/admin/orders without auth → 401, with customer session → 403, with admin session → 200, POST /api/orders without auth → 401, POST /api/orders with auth but empty items → 400, POST /api/auth/logout → 200.
+- Did NOT touch: `src/lib/auth.ts`, `src/lib/identity.ts`, `src/lib/email.ts`, `src/lib/redirect.ts`, `safeInternalPath`, `consumeVerificationToken`, `requireAdmin`, any auth API route handler, any LoginView/CheckoutView business logic, any admin view business logic. The toast call sites themselves are unchanged — only the Toaster mounting + dead-code cleanup changed.
+
+Verification:
+- `bunx tsc --noEmit`: 1 pre-existing error in `.next/types/validator.ts` about `customers/[id]` route's sync `params: { id: string }` vs Next.js 16's `Promise<{ id: string }>`. CONFIRMED PRE-EXISTING at baseline `07a95c8` (verified by `git stash` + re-run). Out of scope for toast task. `bun run build` completes successfully despite this tsc advisory error — Next.js does not fail the build on it.
+- `bun run lint`: clean (0 errors, 0 warnings).
+- `bun run build`: exit 0 — Compiled successfully in ~21s, 51/51 static pages generated, all /api/admin/* and /login + /checkout routes present.
+- `bun run scripts/test-toast.ts`: 44 passed, 0 failed (static mode). HTTP integration tests runtime-ready (require BASE_URL + DB).
+- `bun run scripts/test-auth-integrity.ts`: 96 passed, 0 failed (no regression — auth surface untouched).
+- `bun run scripts/test-verified-identity.ts`: 2101 passed, 0 failed (no regression — identity surface untouched).
+
+Stage Summary:
+- 1 critical bug fixed: toasts were silently broken because layout.tsx mounted the Radix Toaster instead of the Sonner Toaster. Now Sonner is the sole toast system, mounted globally with sensible defaults.
+- 5 files modified: src/app/layout.tsx, src/components/ui/sonner.tsx, next.config.ts, package.json, scripts/_walk-src.ts (new), scripts/test-toast.ts (new).
+- 3 files deleted: src/components/ui/toast.tsx, src/components/ui/toaster.tsx, src/hooks/use-toast.ts.
+- 0 auth files touched. 0 business-logic files touched (LoginView, CheckoutView, all admin views unchanged).
+- Auth + identity + order integrity all remain green (96 + 2101 assertions).
