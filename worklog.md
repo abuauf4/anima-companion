@@ -2592,3 +2592,53 @@ Stage Summary:
 - Runtime PostgreSQL QA: still 🟡 pending (no DATABASE_URL in sandbox). Static tests cover all structural guarantees (2040 + 96 = 2136 assertions pass).
 - Remaining limitations explicitly deferred (per task spec): Doorprize system, Apple Login, phone OTP/WhatsApp verification, session revocation store, Prisma enum role, rate limiting, real email provider (resend/sendgrid/ses/smtp) — all V2 or later.
 === Verified Identity V1 COMPLETE (runtime PostgreSQL QA still pending — same as previous tasks) ===
+
+---
+Task ID: vid-v1-cleanup
+Agent: main (Super Z)
+Task: Verified Identity V1 cleanup — one focused security/reliability patch on top of baseline 61983c8.
+
+Work Log:
+- Audited Google OAuth state handling at baseline 61983c8 — found that `createOAuthState` returned only an HMAC-signed self-contained state token (`{ next, nonce, exp }`). The state was NOT bound to the initiating browser, so a fresh+signed state URL leaked via phishing / referer / cross-site navigation could be replayed from a different browser within the 10-minute TTL.
+- Created `src/lib/oauth-state.ts` — new browser-binding helper. `setOAuthStateCookie(nonce)` sets a sibling HttpOnly + SameSite=Lax + Secure-in-prod cookie `anima_oauth_state` carrying the SAME nonce as embedded in the signed state token. `verifyOAuthStateCookie(stateNonce)` requires an exact constant-time match between cookie value and state nonce. `consumeOAuthStateCookie()` clears the cookie after successful session creation, making the state URL single-use.
+- Modified `src/lib/auth.ts` — `createOAuthState` now returns `OAuthStateIssuance = { state, nonce }` so the entry route can pass the nonce to `setOAuthStateCookie`. The nonce is now 32 bytes of CSPRNG (was 16 bytes via `crypto.randomUUID()`).
+- Modified `src/app/api/auth/google/route.ts` — entry route destructures `{ state, nonce }` and calls `setOAuthStateCookie(nonce)` before redirecting to Google consent.
+- Modified `src/app/api/auth/google/callback/route.ts` — added Step 1b after state HMAC verification: `verifyOAuthStateCookie(statePayload.nonce)` with exact-match requirement; rejects with `state_cookie_mismatch` if missing/mismatched. Added Step 8b AFTER `createSession`: `consumeOAuthStateCookie()` (single-use enforcement). Cookie is NOT consumed on rejection, so legitimate users can retry within TTL.
+- Audited transaction boundary — found `consumeVerificationToken` and `markEmailVerified` were separate sequential operations called from `/api/auth/verify-email/confirm`. A DB failure between them would permanently consume the token without verifying the user — unrecoverable (retry would return `ALREADY_CONSUMED`).
+- Modified `src/lib/identity.ts` — `consumeVerificationToken` now performs BOTH the atomic token claim AND the idempotent `emailVerifiedAt` write inside a single `db.$transaction([...])`. Either both commit or neither commits. `ConsumeTokenResponse` now carries the authoritative `emailVerifiedAt` field after commit. `markEmailVerified` is kept as a public idempotent helper (still imported by tests) but no longer called from the /confirm route.
+- Rewrote `src/app/api/auth/verify-email/confirm/route.ts` — calls only `consumeVerificationToken` (transaction handles both mutations atomically). Replaced the inner `console.error('[verify-email/confirm] Failed to send confirmation email')` (raw, could leak email-adapter error in prod) with `logAuthError('Verify-email confirmation email send failed', e)` (production-safe).
+- Audited Prisma migration strategy — confirmed project intentionally uses schema-push (`prisma db push`) workflow, NOT migration files. Worklog documents this was decided during Phase 3 (Neon migration readiness) because Supabase was source-of-truth. Per task spec conditional ("If the project intentionally uses another schema deployment mechanism, document and verify it instead"):
+  - Added explicit documentation header to `prisma/schema.prisma` (lines 10-57) explaining the schema-push strategy, why migrations are intentionally NOT used, what this means for operators, and how to verify schema parity via `prisma migrate diff --from-schema-datamodel ... --to-url $DATABASE_URL`.
+  - Created `prisma/sql/20260814-verified-identity-v1.sql` — a SQL REFERENCE file (NOT a Prisma migration; clearly labeled as such) documenting the DDL that `db push` applies for the V1 schema changes (`provider`, `providerSubject`, `emailVerifiedAt` columns on `User`, plus the new `EmailVerificationToken` table). For audit / disaster-recovery purposes — operators can review or replay by hand if `prisma db push` cannot be used.
+- Audited verification-token logging — found DevConsoleEmailAdapter already gates stdout prints behind `NODE_ENV !== 'production'` (early return), but no source invariant enforced the contract. Added explicit "PRODUCTION LOGGING INVARIANT" section to `src/lib/email.ts` docstring.
+- Audited registration failure path — found `/api/auth/register` swallows email-adapter errors via `console.error('[register] Failed to send verification email:', emailErr instanceof Error ? emailErr.message : emailErr)` which leaks raw error message to production logs. Replaced with `logAuthError('Register verification email send failed', emailErr)`. Verified recoverability: account is created with `emailVerifiedAt=null`, user is logged in, profile page shows "Belum terverifikasi" + "Kirim ulang" button (POST `/api/auth/verify-email/request`), which issues a fresh token (invalidating the unsent previous one) and retries delivery. No unrecoverable state.
+- Made `jose` an explicit direct dependency — was relying on next-auth@4's transitive `jose@^4.15.5`. Added `"jose": "^4.15.9"` to `package.json` dependencies (matches the version next-auth@4.24.13 already pulls in transitively, so no version drift). `bun install` updated `bun.lock` to reflect jose as a direct dep.
+- Hardened `verifyGoogleIdToken` in `src/lib/google.ts` — moved the `email_verified === true` check INSIDE the function (was in the caller). Now explicitly enforces ALL five claims listed in task spec: iss (via jose `issuer` option), aud (via jose `audience` option), exp (jose auto + explicit payload.exp type check), sub (non-empty string check), email (non-empty string check), email_verified (=== true check). Caller's redundant `if (!googleUser.emailVerified)` redirect is kept as defense-in-depth.
+- Added 50 new test assertions to `scripts/test-verified-identity.ts`:
+  - OST1-OST8: OAuth state token unit tests (createOAuthState returns {state, nonce}, verifyOAuthState accepts/rejects tampered/forged/empty, two consecutive nonces differ, full round-trip preserves nonce+next).
+  - SRC9: email adapter NEVER logs raw verification token/URL in production (asserts DevConsoleEmailAdapter has NODE_ENV check before any console.log of message body, and production branch's console.error doesn't interpolate message.text/html/verificationUrl/rawToken).
+  - SRC10: OAuth state cookie binding (entry route calls setOAuthStateCookie(nonce), callback calls verifyOAuthStateCookie + consumeOAuthStateCookie, oauth-state.ts sets httpOnly+sameSite=lax+secure-in-prod).
+  - SRC11: Google ID-token validation explicitly enforces iss/aud/exp/sub/email/email_verified inside verifyGoogleIdToken.
+  - SRC12: consumeVerificationToken uses db.$transaction([tokenUpdate, userUpdate]) — verify-email/confirm route does NOT call markEmailVerified separately (comment-stripped source check).
+  - SRC13: google/callback consumes OAuth state cookie AFTER createSession.
+
+Verification:
+- `bunx tsc --noEmit`: clean (0 errors).
+- `bun run lint`: clean (0 errors, 0 warnings).
+- `bun run build`: succeeded (exit code 0). Prisma connection errors during static prerender are pre-existing sandbox limitations (no DATABASE_URL set in sandbox), NOT introduced by this patch — same behavior as baseline 61983c8.
+- `bun run scripts/test-verified-identity.ts`: 2090 passed, 0 failed (was 2040 at baseline, +50 new cleanup assertions).
+- `bun run scripts/test-auth-integrity.ts`: 96 passed, 0 failed (no regression to existing Auth V1).
+- Order/stock/voucher integrity preserved — no changes to `src/lib/orders.ts`, `prisma/schema.prisma` business models, or any order/voucher/stock transaction code.
+- No new features added. No Doorprize, no Apple Login, no phone OTP, no new email provider. Only security/reliability cleanup of the V1 identity layer.
+
+Stage Summary:
+- 12 files modified, 2 new files created (src/lib/oauth-state.ts, prisma/sql/20260814-verified-identity-v1.sql).
+- 4 critical issues closed:
+  1. OAuth state browser-binding (HMAC state alone was replayable across browsers — now bound via HttpOnly+SameSite cookie with exact-match + consume).
+  2. Transaction boundary (token consume + emailVerifiedAt set are now atomic in single db.$transaction — no unrecoverable window).
+  3. Production token-logging invariant (source-level test SRC9 enforces that production never logs raw verification tokens/URLs).
+  4. Google ID-token validation contract (iss/aud/exp/sub/email/email_verified all explicitly enforced INSIDE verifyGoogleIdToken).
+- Plus 2 minor issues: jose made explicit direct dependency; registration email-failure path now uses logAuthError (production-safe) instead of raw console.error.
+- Prisma migration strategy documented explicitly in schema.prisma + SQL reference file committed (NOT a Prisma migration; project intentionally uses schema-push).
+- Runtime PostgreSQL QA still pending (sandbox has no DATABASE_URL) — same as previous tasks.
+- Commit: see git log.

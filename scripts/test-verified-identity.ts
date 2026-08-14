@@ -33,6 +33,22 @@
  *   SRC7. google/callback route uses safeInternalPath on state.next
  *   SRC8. google/callback route does NOT auto-link unverified password accounts
  *
+ * Pure-static — Verified Identity V1 CLEANUP additions:
+ *   SRC9.  email adapter NEVER logs raw verification token/URL in production
+ *          (DevConsoleEmailAdapter must gate ALL stdout prints behind
+ *          NODE_ENV !== 'production')
+ *   SRC10. OAuth state cookie binding — entry route sets HttpOnly+SameSite
+ *          cookie carrying the same nonce as in the signed state token;
+ *          callback verifies exact match + consumes the cookie
+ *   SRC11. Google ID-token validation explicitly enforces iss, aud, exp,
+ *          sub (non-empty), email (non-empty), email_verified===true — all
+ *          inside verifyGoogleIdToken (not in caller)
+ *   SRC12. verify-email/confirm route consumes token AND sets emailVerifiedAt
+ *          in the SAME Prisma transaction (consumeVerificationToken uses
+ *          db.$transaction([tokenUpdate, userUpdate]))
+ *   SRC13. google/callback consumes the OAuth state cookie after issuing
+ *          the session cookie (single-use enforcement)
+ *
  * HTTP integration (requires BASE_URL + PostgreSQL):
  *   VREG. normal email registration starts UNVERIFIED
  *   VREQ. requesting verification email returns { sent: true } and doesn't leak token
@@ -63,6 +79,14 @@ import {
   generateVerificationToken,
   hashToken,
 } from '../src/lib/identity'
+import {
+  createOAuthState,
+  verifyOAuthState,
+  type OAuthStatePayload,
+} from '../src/lib/auth'
+import {
+  generateOAuthNonce,
+} from '../src/lib/oauth-state'
 import { safeInternalPath } from '../src/lib/redirect'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
@@ -132,6 +156,77 @@ function testTokenGeneration() {
   const t2 = generateVerificationToken()
   assert(t1 !== t2, 'two independently-generated tokens differ')
   assert(hashToken(t1) !== hashToken(t2), 'two independent tokens hash to different values')
+}
+
+// ============================================================================
+// OAuth state — unit tests for the signed state token + nonce contract
+// (no DB, no HTTP, no cookie jar — pure crypto-level tests of the helpers)
+// ============================================================================
+async function testOAuthStateToken() {
+  console.log('\n========================================')
+  console.log('OAuth state token — unit tests (signed payload + nonce)')
+  console.log('========================================')
+
+  console.log('\n[OST1] createOAuthState returns { state, nonce }')
+  const issued = await createOAuthState('/checkout')
+  assert(typeof issued.state === 'string' && issued.state.length > 0, 'state is a non-empty string')
+  assert(typeof issued.nonce === 'string' && issued.nonce.length === 64, `nonce is a 64-char hex string (got ${issued.nonce.length})`)
+  assert(/^[0-9a-f]+$/.test(issued.nonce), 'nonce is all lowercase hex')
+
+  console.log('\n[OST2] verifyOAuthState accepts a freshly-issued state token')
+  const verified = await verifyOAuthState(issued.state)
+  assert(!!verified, 'verifyOAuthState returns the payload (not null)')
+  if (verified) {
+    assertEqual(verified.next, '/checkout', 'state.next is preserved')
+    assertEqual(verified.nonce, issued.nonce, 'state.nonce matches the issued nonce')
+    assert(typeof verified.exp === 'number' && verified.exp > Date.now(), 'state.exp is in the future')
+  }
+
+  console.log('\n[OST3] verifyOAuthState rejects a tampered state token')
+  // Flip the last character of the state token (alter the signature or
+  // payload). verify must return null.
+  const tamperedState = issued.state.slice(0, -1) + (issued.state.slice(-1) === 'a' ? 'b' : 'a')
+  const tamperedVerified = await verifyOAuthState(tamperedState)
+  assert(tamperedVerified === null, 'verifyOAuthState returns null for tampered state')
+
+  console.log('\n[OST4] verifyOAuthState rejects a completely forged state token')
+  const forged = await verifyOAuthState('not-a-real-state-token')
+  assert(forged === null, 'verifyOAuthState returns null for a forged state token')
+
+  console.log('\n[OST5] verifyOAuthState rejects an empty string')
+  const emptyVerified = await verifyOAuthState('')
+  assert(emptyVerified === null, 'verifyOAuthState returns null for empty string')
+
+  console.log('\n[OST6] two consecutive createOAuthState calls produce DIFFERENT nonces')
+  const issued2 = await createOAuthState(null)
+  assert(issued2.nonce !== issued.nonce, 'two consecutive state tokens have different nonces')
+  assert(issued2.state !== issued.state, 'two consecutive state tokens differ overall')
+  // The next field is also preserved when null.
+  const verified2 = await verifyOAuthState(issued2.state)
+  if (verified2) {
+    assertEqual(verified2.next, null, 'null next is preserved')
+  }
+
+  console.log('\n[OST7] generateOAuthNonce produces 64-char hex')
+  const n1 = generateOAuthNonce()
+  assert(typeof n1 === 'string' && n1.length === 64, `generateOAuthNonce returns 64-char (got ${n1.length})`)
+  assert(/^[0-9a-f]+$/.test(n1), 'generateOAuthNonce returns lowercase hex')
+  const n2 = generateOAuthNonce()
+  assert(n1 !== n2, 'two nonces differ')
+
+  console.log('\n[OST8] state token survives a full encode/decode round-trip')
+  // Issue → serialize → deserialize → verify. The nonce embedded in the
+  // state token must equal the nonce returned by createOAuthState. This is
+  // the contract the OAuth flow depends on: the entry route sets the
+  // sibling cookie to `issued.nonce`, and the callback verifies
+  // `cookieValue === statePayload.nonce`.
+  const issued3 = await createOAuthState('/admin/orders')
+  const verified3 = await verifyOAuthState(issued3.state)
+  assert(!!verified3, 'round-trip state token verifies')
+  if (verified3) {
+    assertEqual(verified3.nonce, issued3.nonce, 'round-trip preserves the nonce (cookie-binding contract)')
+    assertEqual(verified3.next, '/admin/orders', 'round-trip preserves next')
+  }
 }
 
 function testSourceInvariants() {
@@ -279,6 +374,242 @@ function testSourceInvariants() {
   assert(
     /unverified_password_account/.test(googleCallbackSrc),
     'google/callback returns unverified_password_account error when refusing to link'
+  )
+
+  // ============================================================================
+  // Verified Identity V1 CLEANUP — new source invariants
+  // ============================================================================
+
+  // ---- SRC9: email adapter NEVER logs raw verification token/URL in production
+  console.log('\n[SRC9] email adapter NEVER logs raw verification token/URL in production')
+  // The DevConsoleEmailAdapter must gate ALL stdout prints behind
+  // NODE_ENV !== 'production'. We assert:
+  //   (a) The adapter has an early `if (process.env.NODE_ENV === 'production')`
+  //       return at the top of `send()`.
+  //   (b) Any `console.log(...message.text...)` or `console.log(...message...)`
+  //       call is reachable only AFTER that guard. We approximate this by
+  //       asserting that the first occurrence of `process.env.NODE_ENV === 'production'`
+  //       in the DevConsoleEmailAdapter.send method comes BEFORE the first
+  //       `console.log` that prints the message body.
+  const emailSrc = readFileSync(
+    resolve(process.cwd(), 'src/lib/email.ts'),
+    'utf8'
+  )
+  // Find the DevConsoleEmailAdapter class body.
+  const devAdapterMatch = emailSrc.match(
+    /class\s+DevConsoleEmailAdapter[\s\S]*?\n\}/
+  )
+  assert(!!devAdapterMatch, 'DevConsoleEmailAdapter class found in src/lib/email.ts')
+  if (devAdapterMatch) {
+    const devAdapterSrc = devAdapterMatch[0]
+    // The adapter MUST check NODE_ENV === 'production' BEFORE any
+    // console.log that prints the message body.
+    const prodCheckIdx = devAdapterSrc.indexOf(
+      "process.env.NODE_ENV === 'production'"
+    )
+    assert(prodCheckIdx >= 0, 'DevConsoleEmailAdapter checks NODE_ENV === production')
+    // Find the first console.log AFTER the production check that prints
+    // the message body — those are the dev-only stdout prints.
+    const afterProdCheck = devAdapterSrc.slice(prodCheckIdx)
+    // The body-printing logs are 'console.log(message.text)' or
+    // 'console.log('────────── BODY ──────────')'. Both MUST come after
+    // the production guard.
+    const bodyLogIdx = afterProdCheck.indexOf('console.log(message.text)')
+    assert(bodyLogIdx >= 0, 'DevConsoleEmailAdapter prints message body AFTER production guard')
+    // The CONFIG-MISSING console.error in production must NOT include the
+    // raw token / verificationUrl. We assert the production branch's
+    // console.error message does NOT interpolate message.text or
+    // message.html or verificationUrl.
+    const prodBranchMatch = devAdapterSrc.match(
+      /if\s*\(\s*process\.env\.NODE_ENV\s*===\s*['"]production['"]\s*\)\s*\{([\s\S]*?)\n\s*\}/
+    )
+    if (prodBranchMatch) {
+      const prodBranch = prodBranchMatch[1]
+      assert(
+        !/message\.text/.test(prodBranch),
+        'production branch does NOT log message.text'
+      )
+      assert(
+        !/message\.html/.test(prodBranch),
+        'production branch does NOT log message.html'
+      )
+      assert(
+        !/verificationUrl/.test(prodBranch),
+        'production branch does NOT log verificationUrl'
+      )
+      assert(
+        !/rawToken/.test(prodBranch),
+        'production branch does NOT log rawToken'
+      )
+    }
+  }
+
+  // ---- SRC10: OAuth state cookie binding ----
+  console.log('\n[SRC10] OAuth state cookie binding (entry sets cookie, callback verifies + consumes)')
+  // Entry route (/api/auth/google/route.ts) MUST:
+  //   (a) call createOAuthState (returns { state, nonce }),
+  //   (b) call setOAuthStateCookie(nonce).
+  const googleEntrySrc = readFileSync(
+    resolve(process.cwd(), 'src/app/api/auth/google/route.ts'),
+    'utf8'
+  )
+  assert(
+    /setOAuthStateCookie\s*\(\s*nonce\s*\)/.test(googleEntrySrc),
+    'google entry route calls setOAuthStateCookie(nonce)'
+  )
+  assert(
+    /createOAuthState\s*\(/.test(googleEntrySrc),
+    'google entry route calls createOAuthState'
+  )
+  // Destructure both { state, nonce } from createOAuthState
+  assert(
+    /const\s*\{\s*state\s*,\s*nonce\s*\}\s*=\s*await\s+createOAuthState/.test(googleEntrySrc),
+    'google entry destructures { state, nonce } from createOAuthState'
+  )
+
+  // Callback route (/api/auth/google/callback/route.ts) MUST:
+  //   (a) call verifyOAuthStateCookie(statePayload.nonce),
+  //   (b) reject if it returns false,
+  //   (c) call consumeOAuthStateCookie() after issuing the session cookie.
+  assert(
+    /verifyOAuthStateCookie\s*\(\s*statePayload\.nonce\s*\)/.test(googleCallbackSrc),
+    'google/callback calls verifyOAuthStateCookie(statePayload.nonce)'
+  )
+  assert(
+    /state_cookie_mismatch/.test(googleCallbackSrc),
+    'google/callback redirects to state_cookie_mismatch error on cookie mismatch'
+  )
+  assert(
+    /consumeOAuthStateCookie\s*\(\s*\)/.test(googleCallbackSrc),
+    'google/callback calls consumeOAuthStateCookie() (single-use enforcement)'
+  )
+  // The cookie consume MUST come AFTER createSession (so a mid-flow error
+  // doesn't burn the cookie and force the user to re-consent).
+  const createSessionIdx = googleCallbackSrc.indexOf('await createSession(')
+  const consumeCookieIdx = googleCallbackSrc.indexOf('await consumeOAuthStateCookie()')
+  assert(
+    createSessionIdx >= 0 && consumeCookieIdx >= 0 && consumeCookieIdx > createSessionIdx,
+    'google/callback consumes OAuth state cookie AFTER createSession'
+  )
+
+  // oauth-state.ts must define the cookie with HttpOnly + SameSite=Lax
+  const oauthStateSrc = readFileSync(
+    resolve(process.cwd(), 'src/lib/oauth-state.ts'),
+    'utf8'
+  )
+  assert(
+    /httpOnly:\s*true/.test(oauthStateSrc),
+    'oauth-state.ts sets httpOnly: true on the state cookie'
+  )
+  assert(
+    /sameSite:\s*['"]lax['"]/.test(oauthStateSrc),
+    'oauth-state.ts sets sameSite: "lax" on the state cookie'
+  )
+  assert(
+    /secure:\s*process\.env\.NODE_ENV\s*===\s*['"]production['"]/.test(oauthStateSrc),
+    'oauth-state.ts sets secure: NODE_ENV === production'
+  )
+
+  // ---- SRC11: Google ID-token validation enforces iss/aud/exp/sub/email/email_verified
+  console.log('\n[SRC11] Google ID-token validation enforces iss/aud/exp/sub/email/email_verified')
+  const googleSrc = readFileSync(
+    resolve(process.cwd(), 'src/lib/google.ts'),
+    'utf8'
+  )
+  // iss check via jose issuer option
+  assert(
+    /issuer:\s*\[\s*['"]accounts\.google\.com['"]/.test(googleSrc),
+    'verifyGoogleIdToken enforces issuer = accounts.google.com'
+  )
+  // aud check via jose audience option
+  assert(
+    /audience:\s*clientId/.test(googleSrc),
+    'verifyGoogleIdToken enforces audience = clientId'
+  )
+  // exp check — jose does it automatically, but we additionally
+  // require the payload.exp field to be a number.
+  assert(
+    /payload\.exp\s*!==\s*['"]number['"]|payload\.exp\s*<=\s*0/.test(googleSrc),
+    'verifyGoogleIdToken explicitly checks payload.exp is a positive number'
+  )
+  // sub non-empty check
+  assert(
+    /payload\.sub\s*!==\s*['"]string['"]|payload\.sub\.length\s*===\s*0/.test(googleSrc),
+    'verifyGoogleIdToken checks sub is non-empty string'
+  )
+  // email non-empty check
+  assert(
+    /payload\.email\s*!==\s*['"]string['"]|payload\.email\.length\s*===\s*0/.test(googleSrc),
+    'verifyGoogleIdToken checks email is non-empty string'
+  )
+  // email_verified === true check INSIDE verifyGoogleIdToken (not in caller)
+  assert(
+    /payload\.email_verified\s*!==\s*true/.test(googleSrc),
+    'verifyGoogleIdToken throws when payload.email_verified !== true (checked INSIDE the function)'
+  )
+
+  // ---- SRC12: verify-email/confirm consumes token AND sets emailVerifiedAt in same $transaction
+  console.log('\n[SRC12] consumeVerificationToken uses db.$transaction for token+emailVerifiedAt')
+  const identitySrc = readFileSync(
+    resolve(process.cwd(), 'src/lib/identity.ts'),
+    'utf8'
+  )
+  // The transaction must contain BOTH the token updateMany AND the user
+  // updateMany for emailVerifiedAt.
+  assert(
+    /db\.\$transaction\s*\(\s*\[/.test(identitySrc),
+    'identity.ts uses db.$transaction([...])'
+  )
+  // The transaction array must contain BOTH a token updateMany AND a
+  // user updateMany (in the consumeVerificationToken function, not in
+  // issueVerificationToken which also uses a transaction but for the
+  // different purpose of invalidating previous tokens).
+  const consumeFnMatch = identitySrc.match(
+    /export\s+async\s+function\s+consumeVerificationToken[\s\S]*?\n\}/
+  )
+  assert(!!consumeFnMatch, 'consumeVerificationToken function found')
+  if (consumeFnMatch) {
+    const consumeFn = consumeFnMatch[0]
+    assert(
+      /db\.\$transaction\s*\(\s*\[/.test(consumeFn),
+      'consumeVerificationToken uses db.$transaction([...])'
+    )
+    assert(
+      /emailVerificationToken\.updateMany/.test(consumeFn),
+      'consumeVerificationToken transaction includes token updateMany'
+    )
+    assert(
+      /db\.user\.updateMany/.test(consumeFn),
+      'consumeVerificationToken transaction includes user updateMany (emailVerifiedAt)'
+    )
+    assert(
+      /emailVerifiedAt:\s*null/.test(consumeFn),
+      'consumeVerificationToken user updateMany is conditional on emailVerifiedAt IS NULL (idempotent)'
+    )
+  }
+  // The verify-email/confirm route must NOT call markEmailVerified
+  // separately (the transaction does it atomically). Strip comments
+  // first so doc-comment references to `markEmailVerified` don't trip
+  // the assertion (we only care about the actual code path).
+  const verifyConfirmSrcNoComments = verifyConfirmSrc
+    .replace(/\/\/.*$/gm, '') // strip line comments
+    .replace(/\/\*[\s\S]*?\*\//g, '') // strip block comments
+  assert(
+    !/markEmailVerified/.test(verifyConfirmSrcNoComments),
+    'verify-email/confirm route does NOT call markEmailVerified (transaction handles it)'
+  )
+
+  // ---- SRC13: google/callback consumes OAuth state cookie after createSession
+  console.log('\n[SRC13] google/callback consumes OAuth state cookie after createSession')
+  // (Already partially checked in SRC10, but assert the explicit ordering
+  // here for documentation.)
+  // Re-verify: createSession comes BEFORE consumeOAuthStateCookie in the
+  // callback's happy path.
+  const sessionIdx = googleCallbackSrc.indexOf('await createSession({')
+  const consumeIdx = googleCallbackSrc.indexOf('await consumeOAuthStateCookie()')
+  assert(
+    sessionIdx >= 0 && consumeIdx >= 0 && consumeIdx > sessionIdx,
+    'createSession is called BEFORE consumeOAuthStateCookie'
   )
 }
 
@@ -632,6 +963,7 @@ async function main() {
 
   // ----- Pure-static tests (always run) -----
   testTokenGeneration()
+  await testOAuthStateToken()
   testSourceInvariants()
 
   // ----- DB-direct tests (require PostgreSQL) -----

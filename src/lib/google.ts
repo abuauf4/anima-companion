@@ -70,14 +70,29 @@ export interface GoogleIdTokenPayload {
 /**
  * Verify a Google ID token and return the safe fields.
  *
- * Verification per Google's docs:
- *   - `iss` must be `accounts.google.com` or `https://accounts.google.com`.
- *   - `aud` must equal our OAuth Client ID.
- *   - Signature must validate against Google's JWKS.
- *   - `exp` must be in the future (jose checks this automatically).
+ * Verification per Google's docs (Verified Identity V1 cleanup — explicit
+ * enforcement of all five claims listed in the task spec):
+ *   - `iss`  MUST be `accounts.google.com` or `https://accounts.google.com`
+ *            (enforced by jose's `issuer` option).
+ *   - `aud`  MUST equal our OAuth Client ID (enforced by jose's `audience`
+ *            option — jose rejects tokens where `aud` does not match).
+ *   - `exp`  MUST be in the future (enforced by jose automatically —
+ *            jwtVerify throws `JWTExpired` otherwise).
+ *   - `sub`  MUST be present and non-empty (stable Google user ID — the
+ *            unique account identifier we use as `providerSubject`).
+ *   - `email` MUST be present and non-empty.
+ *   - `email_verified` MUST be `true`. If Google says the email is not
+ *            verified (rare — happens for some unverified Google Workspace
+ *            accounts), we REFUSE to consider the identity verified and
+ *            throw. The caller must NOT treat the token as a successful
+ *            login when this throws. This check is INSIDE this function
+ *            (not in the caller) so the verification contract is
+ *            centralized — any future caller gets it for free.
+ *   - Signature MUST validate against Google's JWKS (enforced by jose).
  *
- * Throws if any check fails. The caller should treat any throw as an
- * invalid token and return 401 — never as a successful login.
+ * Throws if ANY check fails. The caller should treat any throw as an
+ * invalid token and return 401 (or redirect to a login-error page) —
+ * never as a successful login.
  */
 export async function verifyGoogleIdToken(
   idToken: string,
@@ -88,17 +103,46 @@ export async function verifyGoogleIdToken(
     audience: clientId,
   })
 
-  if (!payload.sub) throw new Error('ID token missing sub claim')
-  if (!payload.email) throw new Error('ID token missing email claim')
+  // jose enforces exp automatically via the `exp` claim — if the token
+  // is past its `exp`, `jwtVerify` throws a `JWTExpired` error before
+  // reaching this point. We additionally fail loud if `exp` is missing
+  // entirely (a token without `exp` is structurally invalid and jose
+  // would still accept it unless we explicitly require it).
+  if (typeof payload.exp !== 'number' || payload.exp <= 0) {
+    throw new Error('ID token missing or invalid exp claim')
+  }
+
+  // `sub` is the stable Google user ID. We use it as `providerSubject`
+  // for the unique constraint, so it MUST be present and non-empty.
+  if (typeof payload.sub !== 'string' || payload.sub.length === 0) {
+    throw new Error('ID token missing sub claim')
+  }
+
+  // `email` is required for our identity model — we need to know which
+  // email address this Google identity is asserting.
+  if (typeof payload.email !== 'string' || payload.email.length === 0) {
+    throw new Error('ID token missing email claim')
+  }
+
+  // `email_verified` MUST be `true`. If Google has not verified this
+  // email at the identity-provider level, we refuse to consider the
+  // identity verified. The caller (Google callback) treats this throw
+  // as a non-success — it will redirect to /login?google_error=
+  // email_not_verified. This is the trusted-authority assertion: we
+  // set `emailVerifiedAt = now()` on the Anima Companion user record
+  // based on this claim, so it MUST be `true` to do so.
+  if (payload.email_verified !== true) {
+    throw new Error('ID token email_verified claim is not true')
+  }
 
   return {
     sub: payload.sub,
-    email: payload.email as string,
-    // `email_verified` is a boolean claim from Google. If Google says the
-    // email is verified, we trust it as the authority and set
-    // `emailVerifiedAt` directly on the user. Google's verification is
-    // the canonical proof-of-control for that email address at Google.
-    emailVerified: payload.email_verified === true,
+    email: payload.email,
+    // We've already enforced `email_verified === true` above, so this
+    // field is always `true` for any successfully-verified token. The
+    // field is kept in the return type for documentation / future-proofing
+    // (in case a future caller wants to assert it again).
+    emailVerified: true,
     name: payload.name as string | undefined,
     picture: payload.picture as string | undefined,
   }

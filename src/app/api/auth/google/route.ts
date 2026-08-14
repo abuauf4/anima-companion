@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createOAuthState } from '@/lib/auth'
+import { setOAuthStateCookie } from '@/lib/oauth-state'
 import { getGoogleOAuthConfig, buildGoogleAuthUrl } from '@/lib/google'
 import { safeInternalPath } from '@/lib/redirect'
 
@@ -11,9 +12,18 @@ import { safeInternalPath } from '@/lib/redirect'
  *      same open-redirect defense used by LoginView. Unsafe / external
  *      values are dropped (null), and the user is sent to `/` after login.
  *   2. Sign the safe-internal `next` path into an OAuth state token
- *      (HMAC-SHA-256, 10-min TTL). The state token prevents CSRF and
- *      carries the post-login destination through Google's redirect.
- *   3. Redirect (302) to Google's consent screen with `client_id`,
+ *      (HMAC-SHA-256, 10-min TTL) carrying `next` + a fresh nonce + exp.
+ *      The state token prevents CSRF and carries the post-login
+ *      destination through Google's redirect.
+ *   3. **Browser-binding (Verified Identity V1 cleanup):** set a sibling
+ *      HttpOnly + SameSite=Lax cookie `anima_oauth_state` whose value is
+ *      the SAME nonce embedded in the signed state token. The callback
+ *      requires an exact cookie-vs-state-nonce match, then consumes the
+ *      cookie. This binds the OAuth flow to the initiating browser — a
+ *      state URL obtained by an attacker (phishing, leaked referer, etc.)
+ *      cannot be replayed from a different browser within the TTL because
+ *      that browser has no matching cookie.
+ *   4. Redirect (302) to Google's consent screen with `client_id`,
  *      `redirect_uri`, `response_type=code`, `scope=openid email profile`,
  *      `prompt=select_account`, and `state=<signedStateToken>`.
  *
@@ -42,7 +52,13 @@ export async function GET(req: NextRequest) {
   // null (unsafe / missing / external), we still issue a state token but
   // with `next: null` — the callback will then send the user to the
   // role-based default (`/admin` for admin, `/` for customer).
-  const state = await createOAuthState(safeNext)
+  const { state, nonce } = await createOAuthState(safeNext)
+
+  // Browser-bind the state: set a sibling HttpOnly+SameSite cookie carrying
+  // the same nonce. The callback requires an exact match between this
+  // cookie and the nonce in the signed state token, then consumes the
+  // cookie. See src/lib/oauth-state.ts for the full contract.
+  await setOAuthStateCookie(nonce)
 
   const authUrl = buildGoogleAuthUrl(
     config.clientId,

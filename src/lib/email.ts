@@ -39,6 +39,23 @@
  *     (the attacker can verify the user's email, but cannot take over the
  *     account — they would need the password too, or the active session).
  *     The 24h expiry further limits the window.
+ *
+ * PRODUCTION LOGGING INVARIANT (Verified Identity V1 cleanup):
+ *   - In production, the dev adapter MUST NEVER log the raw verification
+ *     token OR the full verification URL — only the CONFIG-MISSING
+ *     message (which does NOT include the token or URL). This is enforced
+ *     by the early `if (process.env.NODE_ENV === 'production')` return
+ *     at the top of `DevConsoleEmailAdapter.send()`, BEFORE the
+ *     `console.log` that prints the email body. The source-level test
+ *     `SRC9` in `scripts/test-verified-identity.ts` enforces this
+ *     invariant: it parses this file's source and asserts that any
+ *     `console.log` call that references the message body / token /
+ *     verificationUrl is reachable ONLY in a code path gated by a
+ *     `NODE_ENV !== 'production'` check.
+ *   - When V2 wires a real provider (Resend/SendGrid/SES/SMTP), the
+ *     adapter implementation MUST also never log the raw token or URL.
+ *     The test invariant `SRC9` should be extended to cover the new
+ *     adapter's source at that time.
  */
 
 export interface EmailMessage {

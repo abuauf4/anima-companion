@@ -6,6 +6,55 @@
 // - `directUrl` → DIRECT_URL    (Neon direct connection, for migrations/introspection/admin)
 // Prisma 6.x supports `directUrl` natively (introduced in 5.10). Both env vars
 // MUST be set in production. See `.env.example` for the correct format.
+//
+// ===========================================================================
+// SCHEMA DEPLOYMENT STRATEGY — schema-push (prisma db push), NOT migrations
+// ===========================================================================
+// This project intentionally uses the schema-push workflow
+// (`bun run db:push` → `prisma db push`) instead of the migration workflow
+// (`prisma migrate dev` / `prisma migrate deploy`). There is intentionally
+// NO `prisma/migrations/` directory and NO `_prisma_migrations` table.
+//
+// WHY (historical context, see worklog.md Phase 3):
+//   - The existing Supabase production database was the source of truth
+//     at the time of the Neon migration readiness work. The schema was
+//     introspected against production, compared with this file, and
+//     pushed with `prisma db push` to align dev/staging/prod to the
+//     same shape. Generating a synthetic migration baseline from a
+//     pre-existing database is fragile and `prisma migrate` would have
+//     falsely recorded a sequence of `migration.sql` files that never
+//     actually ran in order on the production DB.
+//   - The team chose to keep `prisma db push` going forward and to
+//     document schema-level changes via commit history + the SQL
+//     reference files in `prisma/sql/` rather than via `_prisma_migrations`.
+//
+// WHAT THIS MEANS FOR OPERATORS:
+//   - To apply schema changes to any environment (dev/staging/prod),
+//     run `bun run db:push` (or `bunx prisma db push` against the
+//     target DATABASE_URL). Prisma will compute the diff between this
+//     schema file and the target DB and apply the minimal DDL.
+//   - The `db:migrate` script (`prisma migrate dev`) exists in
+//     package.json but is intentionally unused. Running it would
+//     create a `prisma/migrations/` directory and a `_prisma_migrations`
+//     table on the target DB, which would conflict with the schema-push
+//     workflow. Do NOT switch workflows without a coordinated migration
+//     plan that exports the existing DB state as the baseline migration.
+//   - For audit / paper-trail purposes, every schema-affecting commit
+//     SHOULD also commit a corresponding SQL reference file under
+//     `prisma/sql/<YYYYMMDD>-<slug>.sql` showing the DDL that `db push`
+//     would have applied. These files are NOT Prisma migrations and are
+//     NOT picked up by `prisma migrate` — they exist purely so an
+//     operator can review / replay the DDL by hand if needed.
+//
+// VERIFICATION (how to verify schema parity without running migrations):
+//   - `bunx prisma migrate diff --from-schema-datamodel prisma/schema.prisma --to-url $DATABASE_URL`
+//     prints the SQL that `db push` WOULD apply to bring the target DB
+//     in line with the schema. If the output is empty, the DB is already
+//     in sync. Use this in CI / pre-deploy checks.
+//   - `bunx prisma migrate diff --from-url $DATABASE_URL --to-schema-datamodel prisma/schema.prisma`
+//     prints the inverse diff — useful for detecting drift in the other
+//     direction (DB has columns the schema doesn't, or vice versa).
+// ===========================================================================
 
 generator client {
   provider = "prisma-client-js"

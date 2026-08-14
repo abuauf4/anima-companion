@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { randomBytes } from 'crypto'
 
 const SESSION_COOKIE = 'anima_session'
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7 // 7 days
@@ -284,6 +285,17 @@ export function logAuthError(event: string, e: unknown, status = 500): void {
 // The `next` field MUST be a safe-internal path (validated via
 // safeInternalPath() before signing). We re-validate after verifying
 // the signature too, because defense-in-depth.
+//
+// BROWSER-BINDING (Verified Identity V1 cleanup):
+//   The signed state token alone is NOT sufficient — it can be replayed
+//   from any browser within its TTL. The caller MUST also call
+//   `setOAuthStateCookie(nonce)` (in src/lib/oauth-state.ts) to set a
+//   sibling HttpOnly+SameSite cookie whose value is the SAME nonce
+//   embedded in the state token. The callback verifies the cookie nonce
+//   exactly matches the state nonce, then consumes the cookie. See
+//   src/lib/oauth-state.ts for the full browser-binding contract.
+//   `createOAuthState` returns BOTH the signed state token AND the nonce
+//   so the caller can pass the nonce to `setOAuthStateCookie`.
 // ============================================================================
 
 export interface OAuthStatePayload {
@@ -292,17 +304,33 @@ export interface OAuthStatePayload {
   exp: number
 }
 
+export interface OAuthStateIssuance {
+  /** The signed state token to send to Google as `?state=...`. */
+  state: string
+  /** The nonce embedded in `state`. Caller MUST set this same value in the
+   *  OAuth state cookie via `setOAuthStateCookie(nonce)`. */
+  nonce: string
+}
+
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000 // 10 minutes — long enough to complete Google consent, short enough to limit CSRF window
 
-export async function createOAuthState(next: string | null): Promise<string> {
+/**
+ * Issue a signed OAuth state token carrying `next` + a fresh nonce + expiry.
+ * Returns BOTH the signed `state` string (to send to Google) AND the `nonce`
+ * (so the caller can also `setOAuthStateCookie(nonce)` for browser-binding).
+ *
+ * The nonce is 32 bytes of CSPRNG output, hex-encoded → 64 chars. This is
+ * the value that ties the signed state token to the sibling browser cookie.
+ */
+export async function createOAuthState(next: string | null): Promise<OAuthStateIssuance> {
+  const nonce = randomBytes(32).toString('hex')
   const payload: OAuthStatePayload = {
     next,
-    // 16 bytes of CSPRNG, hex-encoded → 32 chars. Prevents replay of
-    // an old state token even within its TTL.
-    nonce: crypto.randomUUID().replace(/-/g, ''),
+    nonce,
     exp: Date.now() + OAUTH_STATE_TTL_MS,
   }
-  return await sign(payload)
+  const state = await sign(payload)
+  return { state, nonce }
 }
 
 export async function verifyOAuthState(state: string): Promise<OAuthStatePayload | null> {

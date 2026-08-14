@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { createSession, verifyOAuthState, logAuthError } from '@/lib/auth'
+import { verifyOAuthStateCookie, consumeOAuthStateCookie } from '@/lib/oauth-state'
 import { getGoogleOAuthConfig, exchangeGoogleCodeForTokens, verifyGoogleIdToken } from '@/lib/google'
 import { safeInternalPath } from '@/lib/redirect'
 
@@ -91,6 +92,25 @@ export async function GET(req: NextRequest) {
   if (!statePayload) {
     return NextResponse.redirect(
       new URL('/login?google_error=invalid_state', process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000')
+    )
+  }
+
+  // Step 1b (Verified Identity V1 cleanup): Verify the OAuth state COOKIE.
+  // The signed state token alone is not sufficient — it can be replayed
+  // from any browser within its TTL. The sibling `anima_oauth_state`
+  // HttpOnly+SameSite cookie (set by `/api/auth/google`) carries the SAME
+  // nonce as embedded in the signed state. Require an EXACT match.
+  //   - Missing cookie → state was replayed from a different browser, or
+  //     the cookie was already consumed by a previous callback.
+  //   - Mismatched nonce → state token and cookie are not from the same
+  //     initiation (tampering / forged state).
+  // Either way: reject. The cookie is NOT consumed on rejection, so the
+  // legitimate user can still retry (their cookie is still valid for the
+  // 10-minute TTL).
+  const cookieOk = await verifyOAuthStateCookie(statePayload.nonce)
+  if (!cookieOk) {
+    return NextResponse.redirect(
+      new URL('/login?google_error=state_cookie_mismatch', process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000')
     )
   }
 
@@ -255,6 +275,14 @@ export async function GET(req: NextRequest) {
       email: user.email,
       role: user.role,
     })
+
+    // Step 8b (Verified Identity V1 cleanup): Consume (clear) the OAuth
+    // state cookie. This makes the state URL single-use — a replayed
+    // callback hitting the route again will see no matching cookie and
+    // be rejected at Step 1b. The session cookie issued above is what
+    // authorizes the user from here on; the OAuth state cookie has
+    // served its purpose.
+    await consumeOAuthStateCookie()
 
     // Step 9: Redirect to safe-internal `next` or role-based default.
     const fallback = user.role === 'ADMIN' ? '/admin' : '/'

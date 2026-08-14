@@ -62,15 +62,31 @@ export async function POST(req: NextRequest) {
     // Issue a verification token + send the verification email. Best-effort
     // — if the email adapter fails (e.g. production without EMAIL_PROVIDER
     // configured), the user is still registered and logged in; they can
-    // request another verification email from the profile page. We log
-    // the failure but don't fail the registration.
+    // request another verification email from the profile page's "Kirim
+    // ulang" button (POST /api/auth/verify-email/request). We log the
+    // failure via `logAuthError` (production: stable event label only —
+    // never logs the raw email-adapter error message which could include
+    // SMTP config fragments or PII) but don't fail the registration.
+    //
+    // RECOVERABILITY CONTRACT (Verified Identity V1 cleanup):
+    //   Account is created with emailVerifiedAt = null. User is logged in.
+    //   Profile page shows "Belum terverifikasi" badge + "Kirim ulang"
+    //   button. Clicking it calls POST /api/auth/verify-email/request,
+    //   which issues a fresh token (invalidating the un-sent previous
+    //   one) and retries delivery. The user is NEVER trapped in a
+    //   "registered but unrecoverable" state — even if the initial
+    //   delivery fails entirely, the resend path is always available
+    //   for as long as the account exists.
     try {
       const rawToken = await issueVerificationToken(user.id)
       await sendVerificationEmail(user.email, rawToken, user.name)
     } catch (emailErr) {
-      // Log but don't fail registration — the user can request another
-      // verification email from the profile page.
-      console.error('[register] Failed to send verification email:', emailErr instanceof Error ? emailErr.message : emailErr)
+      // Don't fail registration — log a stable event label only. The raw
+      // `emailErr.message` may contain SMTP/Prisma error fragments that
+      // must not reach production logs. `logAuthError` handles the prod
+      // sanitization (only `{ event, status }` in production; verbose in
+      // development for debugging).
+      logAuthError('Register verification email send failed', emailErr)
     }
 
     await createSession({

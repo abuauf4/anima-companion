@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logAuthError } from '@/lib/auth'
-import { consumeVerificationToken, markEmailVerified, VerifyTokenResult } from '@/lib/identity'
+import { consumeVerificationToken, VerifyTokenResult } from '@/lib/identity'
 import { sendVerifiedConfirmation } from '@/lib/email'
 import { db } from '@/lib/db'
 
@@ -23,6 +23,16 @@ import { db } from '@/lib/db'
  *     verified → 200 with `{ code: 'ALREADY_VERIFIED' }` (idempotent).
  *   - If the token was successfully consumed AND this is a fresh
  *     verification → 200 with `{ code: 'OK', emailVerifiedAt: <date> }`.
+ *
+ * TRANSACTION BOUNDARY (Verified Identity V1 cleanup):
+ *   The token consumption AND the `emailVerifiedAt` write happen in the
+ *   SAME `db.$transaction` inside `consumeVerificationToken`. There is
+ *   NO separate `markEmailVerified` call from this route. Either both
+ *   commit (token consumed + user verified) or neither commits (token
+ *   remains valid, user remains unverified — user can retry). This
+ *   closes the unrecoverable window from the V1 baseline (`61983c8`)
+ *   where the two operations were sequential and a failure between them
+ *   would permanently consume the token without verifying the user.
  *
  * CONCURRENCY:
  *   - Two requests with the same valid token race. Only one wins the
@@ -49,17 +59,22 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // consumeVerificationToken atomically:
+    //   (1) claims the token (updateMany WHERE consumedAt IS NULL AND
+    //       expiresAt > now — only one concurrent request can win), AND
+    //   (2) sets User.emailVerifiedAt = now() (idempotent).
+    // Both mutations commit in the SAME Prisma $transaction. If (2)
+    // throws, (1) is rolled back — no unrecoverable window.
     const result = await consumeVerificationToken(token)
 
-    let responseCode: VerifyTokenResult = result.result
     let emailVerifiedAt: Date | null = null
-
     if (result.result === 'OK' || result.result === 'ALREADY_VERIFIED') {
-      // The token was valid. Mark the user's email as verified (idempotent).
+      emailVerifiedAt = result.emailVerifiedAt ?? null
+      // Send a confirmation email — best-effort, don't fail the verify
+      // if the email adapter can't send. Use logAuthError for the catch
+      // so production never logs a raw email-adapter error message that
+      // could include PII / config fragments.
       if (result.userId) {
-        emailVerifiedAt = await markEmailVerified(result.userId)
-        // Send a confirmation email — best-effort, don't fail the verify
-        // if the email adapter can't send.
         try {
           const user = await db.user.findUnique({
             where: { id: result.userId },
@@ -68,10 +83,10 @@ export async function POST(req: NextRequest) {
           if (user) {
             await sendVerifiedConfirmation(user.email, user.name ?? undefined)
           }
-        } catch {
+        } catch (e) {
           // Email adapter failure is non-fatal — the verification itself
-          // already succeeded. Just log.
-          console.error('[verify-email/confirm] Failed to send confirmation email')
+          // already committed. Log a stable event label only.
+          logAuthError('Verify-email confirmation email send failed', e)
         }
       }
     }
@@ -79,7 +94,7 @@ export async function POST(req: NextRequest) {
     // Map internal result to wire-level code.
     let wireCode: string
     let httpStatus: number
-    switch (responseCode) {
+    switch (result.result) {
       case 'OK':
         wireCode = 'OK'
         httpStatus = 200
