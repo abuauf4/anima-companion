@@ -1,55 +1,156 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin, handleAuthError } from '@/lib/auth'
+import { requireAdmin, handleAuthError, logAuthError } from '@/lib/auth'
 
+/**
+ * GET /api/admin/customers — Member Registry list.
+ *
+ * Member = a row in the `User` table (any role, any provider). The previous
+ * version of this route filtered `role: 'CUSTOMER'` exclusively, which hid
+ * Google Sign-In users and admin/seller accounts from the registry. The
+ * Member Registry must show every registered identity so the operator can
+ * see the full roster; role + provider + verification filters let the
+ * operator narrow down as needed.
+ *
+ * QUERY PARAMS (all optional):
+ *   search    — string, case-insensitive contains on name OR email OR phone
+ *   verified  — 'true' | 'false' (filter by emailVerifiedAt !== null)
+ *   provider  — 'PASSWORD' | 'GOOGLE' (case-insensitive)
+ *   role      — 'CUSTOMER' | 'ADMIN' | 'SELLER' (case-insensitive)
+ *   page      — 1-indexed page number (default 1)
+ *   limit     — page size (default 20, max 100 to avoid unbounded queries)
+ *
+ * PRIVACY (PHASE 9):
+ *   The Prisma `select` is an EXPLICIT WHITELIST. It NEVER includes:
+ *     - password (bcrypt hash)
+ *     - providerSubject (Google `sub` — sensitive identity-provider data)
+ *     - EmailVerificationToken rows (raw token hashes, expiry, etc.)
+ *   Defense-in-depth: even if Prisma client behavior changes, the explicit
+ *   select ensures these columns never reach the response body.
+ *
+ * AUTHORIZATION (PHASE 8):
+ *   requireAdmin() — guest → 401 (UNAUTHENTICATED), customer → 403
+ *   (FORBIDDEN), admin → allowed. UI hiding alone is NOT sufficient.
+ */
 export async function GET(req: NextRequest) {
   try {
     await requireAdmin()
     const { searchParams } = new URL(req.url)
-    const search = searchParams.get('search')
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
-    const limit = 20
+    const search = searchParams.get('search')?.trim() || ''
+    const verifiedParam = searchParams.get('verified')?.toLowerCase() || ''
+    const providerParam = searchParams.get('provider')?.toUpperCase() || ''
+    const roleParam = searchParams.get('role')?.toUpperCase() || ''
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1') || 1)
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20') || 20))
 
-    const where: any = { role: 'CUSTOMER' }
+    // Build the WHERE clause from the filters. Each filter is opt-in.
+    type WhereClause = {
+      OR?: Array<
+        | { name: { contains: string; mode: 'insensitive' } }
+        | { email: { contains: string; mode: 'insensitive' } }
+        | { phone: { contains: string } }
+      >
+      emailVerifiedAt?: { not: null } | null
+      provider?: string
+      role?: string
+    }
+    const where: WhereClause = {}
+
     if (search) {
       where.OR = [
-        { name: { contains: search } },
-        { email: { contains: search } },
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
         { phone: { contains: search } },
       ]
     }
 
-    const [total, customers] = await Promise.all([
+    if (verifiedParam === 'true') {
+      // Verified = emailVerifiedAt is NOT NULL
+      where.emailVerifiedAt = { not: null }
+    } else if (verifiedParam === 'false') {
+      // Unverified = emailVerifiedAt IS NULL
+      where.emailVerifiedAt = null
+    }
+
+    if (providerParam === 'PASSWORD' || providerParam === 'GOOGLE') {
+      where.provider = providerParam
+    }
+
+    if (roleParam === 'CUSTOMER' || roleParam === 'ADMIN' || roleParam === 'SELLER') {
+      where.role = roleParam
+    }
+
+    const [total, members] = await Promise.all([
       db.user.count({ where }),
       db.user.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
+        // EXPLICIT WHITELIST — see PRIVACY section above.
         select: {
-          id: true, name: true, email: true, phone: true, createdAt: true,
-          orders: {
-            select: { id: true, total: true, status: true, createdAt: true },
-            orderBy: { createdAt: 'desc' },
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+          provider: true,
+          emailVerifiedAt: true,
+          createdAt: true,
+          // NEVER select: password, providerSubject
+          // NEVER include: verificationTokens (raw token hashes)
+          // Optional stats (kept lightweight — single count + last date).
+          _count: {
+            select: { orders: true },
           },
-          petProfiles: { include: { petType: true } },
+          orders: {
+            select: { createdAt: true },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
         },
       }),
     ])
 
-    const customersWithStats = customers.map((c) => ({
-      ...c,
-      totalOrders: c.orders.length,
-      totalSpent: c.orders.reduce((s, o) => s + o.total, 0),
+    // Shape the response — flatten the order stats for easy client consumption.
+    const membersWithStats = members.map((m) => ({
+      id: m.id,
+      name: m.name,
+      email: m.email,
+      phone: m.phone,
+      role: m.role,
+      provider: m.provider,
+      emailVerifiedAt: m.emailVerifiedAt,
+      // Convenience boolean for the client (so the UI doesn't have to do
+      // null-checks everywhere).
+      emailVerified: m.emailVerifiedAt !== null,
+      createdAt: m.createdAt,
+      totalOrders: m._count.orders,
+      lastOrderAt: m.orders[0]?.createdAt ?? null,
     }))
 
     return NextResponse.json({
-      customers: customersWithStats,
-      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      members: membersWithStats,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      // Echo the active filters back to the client so the UI can render
+      // active-filter chips and so the export endpoint can reuse the same
+      // query params without re-parsing.
+      filters: {
+        search,
+        verified: verifiedParam || null,
+        provider: providerParam || null,
+        role: roleParam || null,
+      },
     })
-  } catch (e: any) {
+  } catch (e) {
     const authRes = handleAuthError(e)
     if (authRes) return authRes
+    logAuthError('Admin members list error', e)
     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 })
   }
 }

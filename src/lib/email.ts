@@ -106,6 +106,84 @@ class DevConsoleEmailAdapter implements EmailAdapter {
 }
 
 // ----------------------------------------------------------------------------
+// ResendEmailAdapter — production email delivery via Resend (resend.com).
+// Single provider — task spec says "Jangan menambahkan beberapa provider
+// sekaligus". Resend is preferred for simplicity + reliability.
+//
+// REQUIRED ENV VARS when EMAIL_PROVIDER=resend:
+//   RESEND_API_KEY   — server-only, NEVER expose via NEXT_PUBLIC_*
+//   EMAIL_FROM       — e.g. "Anima Companion <noreply@animacompanion.id>"
+//                      Must be a verified sender domain in Resend dashboard.
+//
+// SECURITY:
+//   - If EMAIL_PROVIDER=resend but RESEND_API_KEY is missing/empty, the
+//     constructor throws — the server will refuse to start. We do NOT
+//     silently fall back to the dev adapter in production — that would
+//     hide the misconfiguration and let unverified users believe their
+//     email was sent.
+//   - The adapter NEVER logs the raw email body, the raw verification
+//     token, or the verification URL. Resend API errors are caught by
+//     the caller (register/verify routes) and routed through
+//     `logAuthError` which sanitizes in production.
+//   - `EMAIL_FROM` is a server-side constant — the recipient is set per
+//     message from `EmailMessage.to` (always a user's submitted email).
+// ----------------------------------------------------------------------------
+class ResendEmailAdapter implements EmailAdapter {
+  private readonly apiKey: string
+  private readonly from: string
+
+  constructor() {
+    const apiKey = process.env.RESEND_API_KEY
+    const from = process.env.EMAIL_FROM
+    if (!apiKey || !apiKey.trim()) {
+      throw new Error(
+        'EMAIL_PROVIDER=resend but RESEND_API_KEY is not set. ' +
+          'Set RESEND_API_KEY in the deployment environment (NEVER commit). ' +
+          'See src/lib/email.ts and .env.example.'
+      )
+    }
+    if (!from || !from.trim()) {
+      throw new Error(
+        'EMAIL_PROVIDER=resend but EMAIL_FROM is not set. ' +
+          'Set EMAIL_FROM to a verified sender address (e.g. ' +
+          '"Anima Companion <noreply@animacompanion.id>"). ' +
+          'The domain must be verified in the Resend dashboard.'
+      )
+    }
+    this.apiKey = apiKey
+    this.from = from
+  }
+
+  async send(message: EmailMessage): Promise<void> {
+    // Lazy-import so the dependency is only loaded when Resend is actually
+    // wired. This keeps the dev adapter path zero-cost for local dev.
+    const { Resend } = await import('resend')
+    const client = new Resend(this.apiKey)
+    // SECURITY: never log message.text/html — they contain the verification
+    // token + URL. We only surface a stable event label via the caller's
+    // logAuthError catch block if Resend throws.
+    const { error } = await client.emails.send({
+      from: this.from,
+      to: message.to,
+      subject: message.subject,
+      text: message.text,
+      ...(message.html ? { html: message.html } : {}),
+    })
+    if (error) {
+      // Wrap the Resend error into a plain Error so the caller's
+      // logAuthError catch can sanitize it (production logs only
+      // `{ event, status }`). Do NOT interpolate error.message into
+      // any thrown/logged string in production paths.
+      throw new Error(
+        `Resend API returned error (name=${error.name}). ` +
+          `Check the Resend dashboard for delivery details. ` +
+          `(Full error message is suppressed for security — see server logs only in dev.)`
+      )
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
 // Stubs for future V2 providers. Each throws a clear NOT-IMPLEMENTED error
 // so the operator knows which dependency is missing.
 // ----------------------------------------------------------------------------
@@ -116,7 +194,7 @@ class NotImplementedEmailAdapter implements EmailAdapter {
       `EMAIL_PROVIDER=${this.providerName} is not implemented yet. ` +
         `Install the corresponding SDK and wire it in src/lib/email.ts. ` +
         `For now, set EMAIL_PROVIDER=dev (or leave unset) to use the ` +
-        `dev console adapter.`
+        `dev console adapter, or EMAIL_PROVIDER=resend for production.`
     )
   }
 }
@@ -135,7 +213,7 @@ export function getEmailAdapter(): EmailAdapter {
       cachedAdapter = new DevConsoleEmailAdapter()
       break
     case 'resend':
-      cachedAdapter = new NotImplementedEmailAdapter('resend')
+      cachedAdapter = new ResendEmailAdapter()
       break
     case 'sendgrid':
       cachedAdapter = new NotImplementedEmailAdapter('sendgrid')

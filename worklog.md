@@ -2685,3 +2685,50 @@ Stage Summary:
 - Runtime PostgreSQL QA: PENDING (sandbox has no DATABASE_URL). Static SRC14 + 5 strengthened runtime-ready tests + VCONF8 cover the gate at the source level. Interactive $transaction natively guarantees rollback on any throw between claim and user write.
 - No changes to OAuth, order, stock, voucher, Doorprize, Apple Login, or phone verification in this patch.
 - Commit: f611449 (pushed to origin/main, sync 0/0).
+
+---
+Task ID: member-registry-v1
+Agent: main (Super Z)
+Task: Member Registry & Verified Registration V1 — extend Verified Identity V1 with admin member registry, search/filter, CSV export, real email delivery (Resend).
+
+Work Log:
+- PHASE 1 audit: existing `User` table already has all needed fields (id, email, name, phone, provider, providerSubject, emailVerifiedAt, role, createdAt) — no new fields needed. Existing `/api/admin/customers` route + `CustomersView` + nav "Pelanggan" extended (single source of truth — no parallel `members` route created). Email adapter pattern (`src/lib/email.ts`) already had `DevConsoleEmailAdapter` + `NotImplementedEmailAdapter` stubs for resend/sendgrid/ses/smtp.
+- PHASE 2 — Real email delivery (Resend):
+  - Installed `resend@6.20.0` as direct dependency.
+  - Implemented `ResendEmailAdapter` in `src/lib/email.ts`. Constructor THROWS if `RESEND_API_KEY` or `EMAIL_FROM` is missing/empty — server refuses to start rather than silently fake-send. Lazy-imports `resend` SDK only when the adapter is actually wired (zero-cost for dev). NEVER logs raw email body / verification token / verification URL. Resend API errors are wrapped in plain Error so the caller's `logAuthError` catch sanitizes in production (only `{ event, status }`).
+  - Updated `.env.example` with `RESEND_API_KEY` + `EMAIL_FROM` documentation. Removed the "V2 placeholder" comment for resend.
+- PHASE 3 — Verified-member definition: `emailVerifiedAt !== null` = VERIFIED, `null` = UNVERIFIED. Exposed as convenience boolean `emailVerified` on every member record. Unverified users still saved (resend/recovery path preserved); flagged in the registry UI.
+- PHASE 4-7 — Admin member registry (extended existing customers route, no parallel route):
+  - Rewrote `/api/admin/customers` GET: removed hardcoded `role: 'CUSTOMER'` filter (was hiding Google + admin/seller members); added `provider`/`emailVerifiedAt`/`role` to the explicit Prisma `select` whitelist; added typed WHERE clause with `search` (name/email/phone, case-insensitive), `verified` (true/false), `provider` (PASSWORD/GOOGLE), `role` (CUSTOMER/ADMIN/SELLER); added `page`/`limit` (max 100) pagination; returns `members` array + `pagination` + `filters` echo.
+  - Added `/api/admin/customers/[id]` GET: member detail with explicit whitelist select (id, name, email, phone, role, provider, emailVerifiedAt, createdAt, updatedAt, _count.orders, last 5 orders). NO POST/PATCH/PUT — admin cannot mutate emailVerifiedAt/provider/providerSubject/role from this endpoint (PHASE 6 — read-only on sensitive fields).
+  - Added `/api/admin/customers/export` GET: CSV export respecting same filter params as the list endpoint. Manual CSV generation (no PapaParse dependency — keeps bundle small) with RFC 4180 escaping. Headers whitelist: id, name, email, phone, role, provider, emailVerified, emailVerifiedAt, createdAt, totalOrders, lastOrderAt. NEVER exports password/providerSubject/tokenHash/AUTH_SECRET. Filename includes active filters + date for download folder organization. Capped at 50,000 rows to prevent runaway memory.
+  - Rewrote `src/views/admin/CustomersView.tsx`: added Verification badge (Verified emerald / Unverified outline), Provider badge (Google blue / Email), three FilterSelect dropdowns (verification, provider, role), Export CSV button (with spinner), mobile-first cards (visible below md breakpoint) + desktop table (md+), member detail dialog showing provider/emailVerifiedAt/role/userId with "Catatan: tidak dapat diubah dari admin UI" disclaimer. Pagination indicator.
+- PHASE 8 — Authorization: all `/api/admin/customers/**` routes call `requireAdmin()` first (after try{}). Guest → 401 UNAUTHENTICATED, customer → 403 FORBIDDEN, admin → allowed. UI hiding alone is NOT relied upon — every API route enforces server-side.
+- PHASE 9 — Privacy: every Prisma query uses an explicit `select` whitelist. Never `select: *` or `include: { ...everything }`. The list/detail/export routes NEVER select: password, providerSubject, verificationTokens (raw token hashes), or any session/secret data. The export route additionally uses an explicit `headers` array whitelist — even if Prisma returned extra columns, they would not appear in the CSV because rows are built field-by-field from the explicit whitelist.
+- PHASE 10 — Tests: created `scripts/test-member-registry.ts` with 53 static source-invariant assertions covering:
+  - SRC1-SRC6: explicit Prisma select whitelist + requireAdmin() on all 3 admin customer routes.
+  - SRC7-SRC8: ResendEmailAdapter constructor throws when RESEND_API_KEY or EMAIL_FROM missing/empty (does NOT silently fall back to dev adapter).
+  - SRC9: ResendEmailAdapter.send never logs raw token/verificationUrl/message.text/message.html.
+  - SRC10: register route hardcodes provider='PASSWORD' + emailVerifiedAt=null; does NOT destructure provider/providerSubject/emailVerifiedAt from request body.
+  - HTTP integration tests (when BASE_URL is set): A1-A3 (authz), P1-P3 (privacy), S1-S3 (search), F1-F5 (filters), D1-D4 (detail), E1-E5 (export), V5 (register body injection ignored), V6 (duplicate email rejected).
+- PHASE 11 — UI/UX: mobile-first cards (visible < md) + desktop table (md+). Native `<select>` dropdowns for filters (touch-friendly on mobile). Verification + Provider badges use existing design-system Badge component. No redesign of the admin layout — `AdminLayout.tsx` and `NAV_ITEMS` unchanged ("Pelanggan" nav entry kept). Existing `formatDate` / `formatRupiah` helpers reused.
+- PHASE 12 — Existing integrity preserved: zero changes to `src/lib/orders.ts` (Order), `prisma/schema.prisma` business models (Stock/Voucher), `src/lib/auth.ts` (Auth/AuthZ/OAuth state), `src/lib/oauth-state.ts` (OAuth state cookie), `src/lib/redirect.ts` (safeInternalPath), `src/lib/google.ts` (Google OAuth), `src/lib/identity.ts` (EmailVerificationToken interactive transaction). Only admin customer routes + view + email adapter (additive) + env.example + test script touched.
+
+Verification:
+- `bunx tsc --noEmit`: clean (0 errors).
+- `bun run lint`: clean (0 errors, 0 warnings).
+- `bun run build`: exit 0 (compiled successfully in 20.5s; prisma errors during prerender are pre-existing sandbox limitations — no DATABASE_URL set — same as baseline f611449).
+- `bun run scripts/test-member-registry.ts`: 53 passed, 0 failed (all source-invariant assertions).
+- `bun run scripts/test-auth-integrity.ts`: 96 passed, 0 failed (no regression to Auth V1).
+- `bun run scripts/test-verified-identity.ts`: 2101 passed, 0 failed (no regression to Verified Identity V1).
+
+Stage Summary:
+- 6 files modified, 3 new files added.
+  - Modified: .env.example (Resend vars), bun.lock + package.json (resend dep), src/app/api/admin/customers/route.ts (filters + whitelist), src/lib/email.ts (ResendEmailAdapter), src/views/admin/CustomersView.tsx (badges + filters + export + mobile cards).
+  - New: src/app/api/admin/customers/[id]/route.ts (member detail), src/app/api/admin/customers/export/route.ts (CSV export), scripts/test-member-registry.ts (53 assertions).
+- 1 new feature: Resend email delivery (production-ready, configured via EMAIL_PROVIDER=resend + RESEND_API_KEY + EMAIL_FROM).
+- 1 new feature: Admin member registry with search/filter + CSV export (for offline doorprize operations).
+- Runtime PostgreSQL QA: PENDING (sandbox has no DATABASE_URL). HTTP integration tests in test-member-registry.ts require BASE_URL.
+- Email delivery E2E: PENDING CREDENTIALS (no RESEND_API_KEY in sandbox; the adapter is implemented but real send cannot be tested without credentials).
+- No Doorprize System, no winner generator, no campaign, no Apple Login, no phone OTP, no payment, no loyalty, no new features beyond the stop condition.
+- No new Prisma migration (project uses schema-push `prisma db push` — see prisma/schema.prisma header for strategy doc). No schema changes in this patch.
