@@ -16,10 +16,18 @@
  *    before stock validation.
  * 5. Order numbers (`AC-YYYYMMDD-NNN`) are generated race-safely via the
  *    existing `@unique` constraint + bounded retry on Prisma P2002.
- * 6. Cancellation restores stock exactly once. Re-cancelling an already
- *    CANCELLED order is a no-op (does not double-restore).
- * 7. CANCELLED is terminal for V1. Transitioning CANCELLED → any other
- *    status is rejected with a 400.
+ * 6. Cancellation restores stock exactly once. The cancellation claim is
+ *    atomic at the database layer (`UPDATE WHERE status != CANCELLED`),
+ *    so two concurrent CANCEL requests cannot both restock — exactly one
+ *    wins the claim, the other returns idempotent success without touching
+ *    stock.
+ * 7. CANCELLED is terminal for V1, enforced at the database layer. Non-cancel
+ *    status transitions use a conditional `UPDATE WHERE status != CANCELLED`,
+ *    so a stale read cannot revive a CANCELLED order into CONFIRMED/etc.
+ *    Concurrent CANCEL vs CONFIRMED can never produce CONFIRMED + restored stock.
+ * 8. Multi-product stock mutations (decrement at order creation, increment at
+ *    cancellation) lock product rows in canonical `productId` order to avoid
+ *    deadlocks between concurrent multi-product checkouts.
  */
 
 import { Prisma, PrismaClient } from '@prisma/client'
@@ -70,6 +78,12 @@ export const ORDER_ERRORS = {
     new OrderError(400, 'INVALID_QUANTITY', `Jumlah tidak valid untuk produk ${productId}`),
   PRODUCT_NOT_FOUND: (productId: string) =>
     new OrderError(400, 'PRODUCT_NOT_FOUND', `Produk tidak ditemukan: ${productId}`),
+  // ORDER_NOT_FOUND is distinct from PRODUCT_NOT_FOUND so the API can return 404
+  // when an order id is missing during cancellation / status updates, matching
+  // the documented contract (404 order missing). Previously the code reused
+  // PRODUCT_NOT_FOUND (400) for this case, which was a contract bug.
+  ORDER_NOT_FOUND: (orderId: string) =>
+    new OrderError(404, 'ORDER_NOT_FOUND', `Pesanan tidak ditemukan: ${orderId}`),
   PRODUCT_INACTIVE: (productId: string) =>
     new OrderError(400, 'PRODUCT_INACTIVE', `Produk tidak tersedia: ${productId}`),
   OUT_OF_STOCK: (productId: string) =>
@@ -79,6 +93,30 @@ export const ORDER_ERRORS = {
   ORDER_NUMBER_CONFLICT: () =>
     new OrderError(500, 'ORDER_NUMBER_CONFLICT', 'Gagal membuat nomor pesanan unik, coba lagi'),
 } as const
+
+// =====================================================
+// Internal: canonical product ordering (deadlock avoidance)
+// =====================================================
+
+/**
+ * Comparator for sorting items by productId.
+ *
+ * Used to ensure all transactions acquire row locks in the SAME order when
+ * decrementing or restocking multiple products. Without this, two concurrent
+ * multi-product orders can deadlock:
+ *
+ *   Order A: lock P1 → wait for P2
+ *   Order B: lock P2 → wait for P1
+ *   → PostgreSQL aborts one transaction as deadlock victim.
+ *
+ * By always sorting by productId before the lock loop, every transaction
+ * acquires locks in the same canonical order, eliminating AB-BA deadlocks.
+ * Data is never corrupted (the deadlock victim rolls back cleanly), but the
+ * customer gets a spurious 500 — this fix removes that failure mode.
+ */
+function byProductId<T extends { productId: string }>(a: T, b: T): number {
+  return a.productId < b.productId ? -1 : a.productId > b.productId ? 1 : 0
+}
 
 // =====================================================
 // Internal: aggregate duplicate cart items
@@ -350,7 +388,10 @@ export async function createOrder(input: CreateOrderInput): Promise<any> {
   }
 
   // ----- 2. Aggregate + validate quantities -----
-  const aggregated = aggregateCartItems(input.items)
+  // Aggregate duplicates first, then sort by productId so the per-product
+  // stock-decrement loop below acquires row locks in canonical order. This
+  // eliminates AB-BA deadlocks between two concurrent multi-product checkouts.
+  const aggregated = aggregateCartItems(input.items).sort(byProductId)
   validateQuantities(aggregated)
 
   const quantities = new Map(aggregated.map((i) => [i.productId, i.quantity]))
@@ -436,56 +477,94 @@ export async function createOrder(input: CreateOrderInput): Promise<any> {
 /**
  * Transition an order to CANCELLED and restore stock exactly once.
  *
+ * ATOMIC CLAIM SEMANTICS (concurrency-safe):
+ *
+ * The previous implementation read the order, checked `status === 'CANCELLED'`,
+ * then restored stock and updated status. Under concurrency, two requests
+ * could both read PENDING, both restore stock, and both set status —
+ * resulting in stock being restored twice (e.g. 9 → 11 instead of 9 → 10).
+ *
+ * This implementation uses a conditional UPDATE as the claim:
+ *
+ *   UPDATE "Order"
+ *   SET status = 'CANCELLED'
+ *   WHERE id = ? AND status != 'CANCELLED'
+ *
+ * PostgreSQL row-level locking guarantees that only ONE concurrent
+ * transaction receives `count === 1` from this UPDATE. All others receive
+ * `count === 0` (because the row's status is already CANCELLED by the time
+ * their UPDATE acquires the lock). Only the winner proceeds to restock.
+ *
  * Rules:
- * - If the order is already CANCELLED, return it without re-restoring stock
- *   (idempotent). Caller can detect this via `alreadyCancelled: true`.
- * - If the order is in any non-CANCELLED status, transition it to CANCELLED
- *   and restore stock for every OrderItem inside the same transaction.
+ * - If the order doesn't exist → throw ORDER_NOT_FOUND (404).
+ * - If the order is already CANCELLED → return idempotent success with
+ *   `alreadyCancelled: true`. Stock is NOT touched.
+ * - If the order is in any non-CANCELLED status → claim it atomically and
+ *   restore stock for every OrderItem inside the same transaction. Only the
+ *   transaction that wins the claim performs the restock.
  * - CANCELLED is terminal: callers should never pass a non-CANCELLED status
  *   after this. Use `updateOrderStatus` for ordinary transitions.
  *
  * Stock restoration uses `updateMany` (not `update`) so a deleted Product
  * row doesn't fail the cancellation — the order is still marked CANCELLED,
  * and the missing product simply doesn't get its stock restored.
+ *
+ * Items are restocked in canonical `productId` order to avoid deadlocks
+ * with concurrent multi-product checkouts.
  */
 export async function cancelOrderAndRestoreStock(orderId: string): Promise<{
   order: any
   alreadyCancelled: boolean
 }> {
   return db.$transaction(async (tx) => {
-    // Read order WITH items in the same transaction to get a consistent
-    // snapshot. We use the raw `findUnique` (not `findFirst`) so a missing
-    // order is null rather than undefined.
+    // 1. Fetch order + items. We need the items regardless of outcome
+    //    (either to restock on claim-win, or to return them on idempotent skip).
     const order = await tx.order.findUnique({
       where: { id: orderId },
       include: { items: true },
     })
     if (!order) {
-      throw ORDER_ERRORS.PRODUCT_NOT_FOUND(orderId)
+      throw ORDER_ERRORS.ORDER_NOT_FOUND(orderId)
     }
 
-    // Idempotent: already cancelled → no-op (do NOT double-restore).
-    if (order.status === 'CANCELLED') {
+    // 2. ATOMIC CLAIM. This is the concurrency-critical statement.
+    //    Equivalent SQL:
+    //      UPDATE "Order"
+    //      SET status = 'CANCELLED', "updatedAt" = NOW()
+    //      WHERE id = $1 AND status != 'CANCELLED'
+    //    Returns affected-row count. Only one concurrent transaction gets 1.
+    const claim = await tx.order.updateMany({
+      where: { id: orderId, status: { not: 'CANCELLED' } },
+      data: { status: 'CANCELLED' },
+    })
+
+    // 3. Lost the claim race — order was already CANCELLED by a concurrent
+    //    transaction (or by a prior request in the same transaction, which is
+    //    impossible here since we just fetched it). Idempotent success — do NOT
+    //    restock. The winner has already restored (or is restoring) stock.
+    if (claim.count === 0) {
       return { order, alreadyCancelled: true }
     }
 
-    // Restore stock for each item. We use updateMany (not update) so a
-    // deleted product doesn't fail the whole cancellation — the order is
-    // still marked CANCELLED, that product simply doesn't get restocked.
-    for (const item of order.items) {
+    // 4. Won the claim. Restore stock for each item, in canonical productId
+    //    order to avoid deadlocks with concurrent multi-product checkouts.
+    //    We use updateMany (not update) so a deleted product doesn't fail the
+    //    whole cancellation — that product simply doesn't get restocked.
+    const itemsToRestore = [...order.items].sort(byProductId)
+    for (const item of itemsToRestore) {
       await tx.product.updateMany({
         where: { id: item.productId },
         data: { stock: { increment: item.quantity } },
       })
     }
 
-    const updated = await tx.order.update({
-      where: { id: orderId },
-      data: { status: 'CANCELLED' },
-      include: { items: true },
-    })
-
-    return { order: updated, alreadyCancelled: false }
+    // 5. Return the post-claim snapshot. We don't re-fetch since we know the
+    //    only field that changed is `status` (and `updatedAt`, which Prisma
+    //    auto-updated). Merge manually to avoid an extra round-trip.
+    return {
+      order: { ...order, status: 'CANCELLED' },
+      alreadyCancelled: false,
+    }
   })
 }
 
@@ -500,16 +579,36 @@ const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'PROCESSED', 'COMPLETED', 'CANCE
  * Update order status. Cancellation (transition INTO CANCELLED) must go
  * through `cancelOrderAndRestoreStock` to ensure stock is restored.
  *
+ * ATOMIC TERMINAL GUARD (concurrency-safe):
+ *
+ * The previous implementation read the current status, validated it wasn't
+ * CANCELLED, then issued a plain UPDATE. Under concurrency, a stale read
+ * could let a CONFIRMED request slip through AFTER a concurrent CANCEL
+ * had already restored stock — producing CONFIRMED status with stock
+ * already restored (a worse corruption than the cancel-double-restock bug,
+ * because the status says the order is active but inventory is gone).
+ *
+ * This implementation uses a conditional UPDATE as the guard:
+ *
+ *   UPDATE "Order"
+ *   SET status = $newStatus
+ *   WHERE id = $id AND status != 'CANCELLED'
+ *
+ * If `count === 0`, we refetch to disambiguate: missing → ORDER_NOT_FOUND,
+ * or already CANCELLED → INVALID_TRANSITION. This eliminates the stale-read
+ * window entirely.
+ *
  * This function:
- * - Rejects unknown status values (400).
- * - Rejects transition FROM CANCELLED → any other status (400). CANCELLED
- *   is terminal for V1.
- * - For an already-CANCELLED order transitioning to CANCELLED, delegates
- *   to `cancelOrderAndRestoreStock` which is idempotent.
- * - For non-CANCELLED → CANCELLED, delegates to `cancelOrderAndRestoreStock`.
- * - For all other transitions (PENDING → CONFIRMED, etc.), performs a plain
- *   status update. Stock is NOT modified — it was already decremented at
- *   order creation time.
+ * - Rejects unknown status values (400 INVALID_TRANSITION).
+ * - Rejects transition FROM CANCELLED → any other status (400 INVALID_TRANSITION)
+ *   at the database layer — even under concurrent requests.
+ * - For an already-CANCELLED order transitioning to CANCELLED, delegates to
+ *   `cancelOrderAndRestoreStock` which is idempotent.
+ * - For non-CANCELLED → CANCELLED, delegates to `cancelOrderAndRestoreStock`
+ *   (which uses the atomic claim pattern).
+ * - For all other transitions (PENDING → CONFIRMED, etc.), performs a
+ *   conditional atomic status update. Stock is NOT modified — it was already
+ *   decremented at order creation time.
  */
 export async function updateOrderStatus(orderId: string, newStatus: string): Promise<any> {
   if (!VALID_STATUSES.includes(newStatus)) {
@@ -517,30 +616,43 @@ export async function updateOrderStatus(orderId: string, newStatus: string): Pro
   }
 
   // Transition INTO CANCELLED — delegate to the cancellation helper which
-  // restores stock atomically and is idempotent on already-CANCELLED.
+  // restores stock atomically (atomic claim) and is idempotent on already-CANCELLED.
   if (newStatus === 'CANCELLED') {
     const result = await cancelOrderAndRestoreStock(orderId)
     return result.order
   }
 
-  // For any other transition, fetch the current status and validate.
-  const current = await db.order.findUnique({
-    where: { id: orderId },
-    select: { status: true },
+  // ATOMIC CONDITIONAL UPDATE — only succeeds if order is NOT CANCELLED.
+  // Equivalent SQL:
+  //   UPDATE "Order"
+  //   SET status = $1
+  //   WHERE id = $2 AND status != 'CANCELLED'
+  // If a concurrent CANCEL won the race between our (implicit) read and our
+  // UPDATE, our UPDATE affects 0 rows. We then refetch to surface the proper
+  // error: ORDER_NOT_FOUND (404) if missing, or INVALID_TRANSITION (400) if
+  // the order is now CANCELLED.
+  const result = await db.order.updateMany({
+    where: { id: orderId, status: { not: 'CANCELLED' } },
+    data: { status: newStatus },
   })
-  if (!current) {
-    throw ORDER_ERRORS.PRODUCT_NOT_FOUND(orderId)
-  }
 
-  if (current.status === TERMINAL_STATUS) {
-    // CANCELLED → anything else is forbidden for V1.
+  if (result.count === 0) {
+    // Either the order doesn't exist, OR a concurrent transaction already
+    // transitioned it to CANCELLED. Disambiguate by refetching the row.
+    const current = await db.order.findUnique({
+      where: { id: orderId },
+      select: { status: true },
+    })
+    if (!current) {
+      throw ORDER_ERRORS.ORDER_NOT_FOUND(orderId)
+    }
+    // Status is CANCELLED → terminal violation for V1.
     throw ORDER_ERRORS.INVALID_TRANSITION(TERMINAL_STATUS, newStatus)
   }
 
-  // Ordinary status change — no stock modification.
-  return db.order.update({
+  // Ordinary status change succeeded — return updated order. No stock modification.
+  return db.order.findUnique({
     where: { id: orderId },
-    data: { status: newStatus },
     include: { items: true },
   })
 }
@@ -560,5 +672,8 @@ export const __test__ = {
   buildOrderItemRecords,
   resolveVoucher,
   nextOrderNumberCandidate,
+  cancelOrderAndRestoreStock,
+  updateOrderStatus,
+  byProductId,
   MAX_ORDER_NUMBER_RETRIES,
 }

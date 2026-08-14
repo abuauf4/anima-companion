@@ -1,5 +1,5 @@
 /**
- * Order integrity integration tests — scenarios A through J.
+ * Order integrity integration tests — scenarios A through O.
  *
  * Run with:
  *   DATABASE_URL="postgresql://..." bun run scripts/test-order-integrity.ts
@@ -27,8 +27,16 @@
  *   I. authenticated customer cannot forge another customer's userId
  *   J. two simultaneous requests competing for final stock → only one wins
  *
- * The script uses the same `createOrder()` and `cancelOrderAndRestoreStock()`
- * helpers that the API routes use, so it tests the actual production code path.
+ * Concurrency-specific scenarios (status + cancellation hardening):
+ *   K. two concurrent CANCEL requests on the same order → status CANCELLED, stock restored exactly once
+ *   L. CANCEL vs CONFIRMED concurrently → never produces CONFIRMED + restored stock
+ *   M. repeated CANCEL sequentially → stock restored once (sanity check)
+ *   N. concurrent checkout for last unit (qty=1 each, stock=1) → one wins, one OUT_OF_STOCK
+ *   O. multi-product concurrent checkout → no negative stock / no partial order
+ *
+ * The script uses the same `createOrder()`, `cancelOrderAndRestoreStock()`,
+ * and `updateOrderStatus()` helpers that the API routes use, so it tests the
+ * actual production code path.
  */
 
 // ----- Safety guards -----
@@ -49,6 +57,7 @@ import bcrypt from 'bcryptjs'
 import {
   createOrder,
   cancelOrderAndRestoreStock,
+  updateOrderStatus,
   aggregateCartItems,
   OrderError,
 } from '../src/lib/orders'
@@ -676,6 +685,359 @@ async function main() {
     await db.orderItem.deleteMany({ where: { orderId: order.id } })
     await db.order.delete({ where: { id: order.id } })
     await db.product.delete({ where: { id: p.id } })
+  }
+
+  // ============================================================
+  // Scenario K: two concurrent CANCEL requests on the same order
+  //             → status CANCELLED, stock restored exactly once
+  // ============================================================
+  console.log('\n[K] Two concurrent CANCEL requests → stock restored exactly once')
+  {
+    const p = await makeQaProduct({
+      name: 'QA Product K',
+      slug: 'product-k',
+      sku: 'sku-k',
+      price: 50000,
+      stock: 10,
+      categoryId: cat.id,
+    })
+
+    const order = await createOrder({
+      user: { id: alice.id, email: alice.email, name: alice.name, phone: alice.phone },
+      items: [{ productId: p.id, quantity: 3 }],
+      customerName: 'Alice QA',
+      customerPhone: '08123456789',
+      address: 'QA Address',
+    })
+    // Stock is now 10 - 3 = 7. Cancellation should restore 3 → final 10.
+
+    // Fire two CANCEL requests CONCURRENTLY. Without atomic claim, both could
+    // restore stock → final 13. With atomic claim, exactly one wins → final 10.
+    const [cancel1, cancel2] = await Promise.allSettled([
+      cancelOrderAndRestoreStock(order.id),
+      cancelOrderAndRestoreStock(order.id),
+    ])
+
+    // Both must resolve (idempotent for the loser).
+    assert(cancel1.status === 'fulfilled', 'CANCEL #1 resolved (fulfilled)')
+    assert(cancel2.status === 'fulfilled', 'CANCEL #2 resolved (fulfilled)')
+
+    // Exactly one should report alreadyCancelled=false (the winner); the other
+    // should report alreadyCancelled=true (the loser).
+    if (cancel1.status === 'fulfilled' && cancel2.status === 'fulfilled') {
+      const winnerClaim = !cancel1.value.alreadyCancelled
+      const loserClaim = cancel2.value.alreadyCancelled
+      // OR vice versa — we don't care which one won, just that exactly one did.
+      const oppositeWinner = cancel1.value.alreadyCancelled && !cancel2.value.alreadyCancelled
+      assert(
+        (winnerClaim && loserClaim) || oppositeWinner,
+        'Exactly one CANCEL won the claim (alreadyCancelled=false); the other lost (alreadyCancelled=true)'
+      )
+    }
+
+    // Final order status MUST be CANCELLED.
+    const finalOrder = await db.order.findUnique({
+      where: { id: order.id },
+      select: { status: true },
+    })
+    assertEqual(finalOrder?.status, 'CANCELLED', 'Order status is CANCELLED after concurrent cancels')
+
+    // Final stock MUST be 10 (restored exactly once: 7 + 3 = 10, never 13).
+    const after = await db.product.findUnique({ where: { id: p.id }, select: { stock: true } })
+    assertEqual(after?.stock, 10, 'Stock restored exactly once (10, not 13)')
+
+    await db.orderItem.deleteMany({ where: { orderId: order.id } })
+    await db.order.delete({ where: { id: order.id } })
+    await db.product.delete({ where: { id: p.id } })
+  }
+
+  // ============================================================
+  // Scenario L: CANCEL vs CONFIRMED concurrently
+  //             → never produces CONFIRMED + restored stock
+  // ============================================================
+  console.log('\n[L] CANCEL vs CONFIRMED concurrently → never CONFIRMED + restored stock')
+  {
+    const p = await makeQaProduct({
+      name: 'QA Product L',
+      slug: 'product-l',
+      sku: 'sku-l',
+      price: 50000,
+      stock: 10,
+      categoryId: cat.id,
+    })
+
+    const order = await createOrder({
+      user: { id: alice.id, email: alice.email, name: alice.name, phone: alice.phone },
+      items: [{ productId: p.id, quantity: 2 }],
+      customerName: 'Alice QA',
+      customerPhone: '08123456789',
+      address: 'QA Address',
+    })
+    // Stock is now 10 - 2 = 8.
+
+    // Fire CANCEL and CONFIRMED concurrently. Possible final states:
+    //   (a) CANCEL wins claim, CONFIRMED rejected (INVALID_TRANSITION) → status=CANCELLED, stock=10
+    //   (b) CONFIRMED wins the conditional update before CANCEL claims → status=CONFIRMED, stock=8,
+    //       then CANCEL still wins the claim (because CONFIRMED != CANCELLED) and restores stock → status=CANCELLED, stock=10
+    //   (c) CANCEL wins claim first, CONFIRMED's conditional update fails because status is now CANCELLED → status=CANCELLED, stock=10
+    //
+    // In ALL valid outcomes, the final state is CANCELLED with stock=10 (or, in case (b) intermediate,
+    // CANCELLED with stock=10). The forbidden outcomes are:
+    //   - status=CONFIRMED AND stock=10 (CONFIRMED but stock already restored)
+    //   - status=CONFIRMED AND stock<8 (shouldn't happen, but assert anyway)
+    //   - status=CANCELLED AND stock != 10 (double-restock or no-restock)
+    const [cancelResult, confirmResult] = await Promise.allSettled([
+      cancelOrderAndRestoreStock(order.id),
+      updateOrderStatus(order.id, 'CONFIRMED'),
+    ])
+
+    // CANCEL should always succeed (idempotent even if it loses the race it still returns fulfilled).
+    assert(cancelResult.status === 'fulfilled', 'CANCEL resolved (fulfilled)')
+
+    // CONFIRMED may either succeed (case b: it ran first) or fail with INVALID_TRANSITION (case a/c).
+    // Both are valid outcomes. The forbidden outcome is: CONFIRMED succeeds AND final status is CONFIRMED
+    // with stock already restored.
+    if (confirmResult.status === 'rejected') {
+      const err = confirmResult.reason
+      assert(err instanceof OrderError, 'CONFIRMED rejection is an OrderError')
+      assertEqual(err.status, 400, 'CONFIRMED rejection status is 400 (INVALID_TRANSITION)')
+    }
+
+    const finalOrder = await db.order.findUnique({
+      where: { id: order.id },
+      select: { status: true },
+    })
+    const after = await db.product.findUnique({ where: { id: p.id }, select: { stock: true } })
+
+    // THE INVARIANT: final state is always CANCELLED with stock restored to 10.
+    // CANCELLED is terminal — even if CONFIRMED ran first, the subsequent CANCEL
+    // must still claim and restore.
+    assertEqual(finalOrder?.status, 'CANCELLED', 'Final status is CANCELLED (terminal invariant)')
+    assertEqual(after?.stock, 10, 'Final stock is 10 (restored exactly once)')
+
+    // Explicitly check the forbidden outcome did NOT happen.
+    assert(
+      !(finalOrder?.status === 'CONFIRMED' && after?.stock === 10),
+      'Forbidden state AVOIDED: never CONFIRMED + restored-stock'
+    )
+
+    await db.orderItem.deleteMany({ where: { orderId: order.id } })
+    await db.order.delete({ where: { id: order.id } })
+    await db.product.delete({ where: { id: p.id } })
+  }
+
+  // ============================================================
+  // Scenario M: repeated CANCEL sequentially → stock restored once
+  // ============================================================
+  console.log('\n[M] Repeated CANCEL sequentially → stock restored once')
+  {
+    const p = await makeQaProduct({
+      name: 'QA Product M',
+      slug: 'product-m',
+      sku: 'sku-m',
+      price: 50000,
+      stock: 20,
+      categoryId: cat.id,
+    })
+
+    const order = await createOrder({
+      user: { id: alice.id, email: alice.email, name: alice.name, phone: alice.phone },
+      items: [{ productId: p.id, quantity: 5 }],
+      customerName: 'Alice QA',
+      customerPhone: '08123456789',
+      address: 'QA Address',
+    })
+    // Stock is now 20 - 5 = 15.
+
+    // Call cancel 5 times sequentially. First call wins the claim and restores stock.
+    // All subsequent calls must be idempotent no-ops.
+    const results: Array<{ alreadyCancelled: boolean }> = []
+    for (let i = 0; i < 5; i++) {
+      const r = await cancelOrderAndRestoreStock(order.id)
+      results.push({ alreadyCancelled: r.alreadyCancelled })
+    }
+
+    // Exactly one should be alreadyCancelled=false (the first call).
+    const winners = results.filter((r) => !r.alreadyCancelled)
+    assertEqual(winners.length, 1, 'Exactly one sequential CANCEL won the claim')
+
+    // Final state.
+    const finalOrder = await db.order.findUnique({
+      where: { id: order.id },
+      select: { status: true },
+    })
+    assertEqual(finalOrder?.status, 'CANCELLED', 'Final status is CANCELLED')
+
+    const after = await db.product.findUnique({ where: { id: p.id }, select: { stock: true } })
+    assertEqual(after?.stock, 20, 'Stock restored exactly once (20, never 35 or 45)')
+
+    await db.orderItem.deleteMany({ where: { orderId: order.id } })
+    await db.order.delete({ where: { id: order.id } })
+    await db.product.delete({ where: { id: p.id } })
+  }
+
+  // ============================================================
+  // Scenario N: concurrent checkout for last unit (stock=1, qty=1 each)
+  //             → one wins, one OUT_OF_STOCK
+  // ============================================================
+  console.log('\n[N] Concurrent checkout for last unit → one wins, one OUT_OF_STOCK')
+  {
+    const p = await makeQaProduct({
+      name: 'QA Product N',
+      slug: 'product-n',
+      sku: 'sku-n',
+      price: 50000,
+      stock: 1,
+      categoryId: cat.id,
+    })
+
+    // Two concurrent orders, each qty=1. Combined demand = 2, stock = 1.
+    // Only one can succeed; the other must fail with OUT_OF_STOCK.
+    const [aliceRes, bobRes] = await Promise.allSettled([
+      createOrder({
+        user: { id: alice.id, email: alice.email, name: alice.name, phone: alice.phone },
+        items: [{ productId: p.id, quantity: 1 }],
+        customerName: 'Alice QA',
+        customerPhone: '08123456789',
+        address: 'QA Address',
+      }),
+      createOrder({
+        user: { id: bob.id, email: bob.email, name: bob.name, phone: bob.phone },
+        items: [{ productId: p.id, quantity: 1 }],
+        customerName: 'Bob QA',
+        customerPhone: '081298765432',
+        address: 'QA Address 2',
+      }),
+    ])
+
+    const aliceWon = aliceRes.status === 'fulfilled'
+    const bobWon = bobRes.status === 'fulfilled'
+
+    // Exactly one winner.
+    assert(
+      (aliceWon && !bobWon) || (!aliceWon && bobWon),
+      `Exactly one of the two last-unit orders succeeded (alice=${aliceWon}, bob=${bobWon})`
+    )
+
+    // Loser must be OUT_OF_STOCK (409).
+    const loser = aliceWon ? bobRes : aliceRes
+    if (loser.status === 'rejected') {
+      const err = loser.reason
+      assert(err instanceof OrderError, 'Loser error is an OrderError')
+      assertEqual(err.status, 409, 'Loser error status is 409 (OUT_OF_STOCK)')
+    } else {
+      assert(false, 'Loser should have been rejected')
+    }
+
+    // Final stock MUST be 0 (1 - 1 = 0). Never negative.
+    const after = await db.product.findUnique({ where: { id: p.id }, select: { stock: true } })
+    assertEqual(after?.stock, 0, 'Final stock is 0 (one order succeeded with qty=1)')
+    assert((after?.stock ?? 0) >= 0, 'Stock never went negative')
+
+    // Cleanup: cancel the winner (which restores stock to 1), then delete QA records.
+    const winner = aliceWon
+      ? (aliceRes as PromiseFulfilledResult<any>).value
+      : (bobRes as PromiseFulfilledResult<any>).value
+    await cancelOrderAndRestoreStock(winner.id)
+    await db.orderItem.deleteMany({ where: { orderId: winner.id } })
+    await db.order.delete({ where: { id: winner.id } })
+    await db.product.delete({ where: { id: p.id } })
+  }
+
+  // ============================================================
+  // Scenario O: multi-product concurrent checkout
+  //             → no negative stock / no partial order
+  // ============================================================
+  console.log('\n[O] Multi-product concurrent checkout → no negative stock / no partial order')
+  {
+    // Two products, each with stock=1.
+    const p1 = await makeQaProduct({
+      name: 'QA Product O1',
+      slug: 'product-o1',
+      sku: 'sku-o1',
+      price: 50000,
+      stock: 1,
+      categoryId: cat.id,
+    })
+    const p2 = await makeQaProduct({
+      name: 'QA Product O2',
+      slug: 'product-o2',
+      sku: 'sku-o2',
+      price: 50000,
+      stock: 1,
+      categoryId: cat.id,
+    })
+
+    // Two concurrent orders, EACH requesting BOTH products.
+    // Total demand per product = 2, stock per product = 1.
+    // Each order must be ALL-OR-NOTHING: either both products succeed, or the
+    // entire order fails (no partial order, no negative stock).
+    // The canonical lock ordering (by productId) ensures no deadlock between
+    // the two concurrent multi-product transactions.
+    const [aliceRes, bobRes] = await Promise.allSettled([
+      createOrder({
+        user: { id: alice.id, email: alice.email, name: alice.name, phone: alice.phone },
+        items: [
+          { productId: p1.id, quantity: 1 },
+          { productId: p2.id, quantity: 1 },
+        ],
+        customerName: 'Alice QA',
+        customerPhone: '08123456789',
+        address: 'QA Address',
+      }),
+      createOrder({
+        user: { id: bob.id, email: bob.email, name: bob.name, phone: bob.phone },
+        // Reverse order in Bob's cart — without canonical sort, this is the
+        // deadlock-prone case (Alice locks P1→P2, Bob locks P2→P1).
+        items: [
+          { productId: p2.id, quantity: 1 },
+          { productId: p1.id, quantity: 1 },
+        ],
+        customerName: 'Bob QA',
+        customerPhone: '081298765432',
+        address: 'QA Address 2',
+      }),
+    ])
+
+    const aliceWon = aliceRes.status === 'fulfilled'
+    const bobWon = bobRes.status === 'fulfilled'
+
+    // Exactly one winner — combined demand (2) exceeds stock (1), so only one
+    // transaction can decrement both products successfully. The other must
+    // fail atomically: either both decrements succeed (impossible here) or
+    // the whole order rolls back with OUT_OF_STOCK on whichever product lost.
+    assert(
+      (aliceWon && !bobWon) || (!aliceWon && bobWon),
+      `Exactly one of the two multi-product orders succeeded (alice=${aliceWon}, bob=${bobWon})`
+    )
+
+    // Loser must be OUT_OF_STOCK (409) — partial orders are not allowed.
+    const loser = aliceWon ? bobRes : aliceRes
+    if (loser.status === 'rejected') {
+      const err = loser.reason
+      assert(err instanceof OrderError, 'Loser error is an OrderError')
+      assertEqual(err.status, 409, 'Loser error status is 409 (OUT_OF_STOCK)')
+    } else {
+      assert(false, 'Loser should have been rejected (no partial orders)')
+    }
+
+    // Final stock: each product must be 0 (one winner took 1 from each).
+    // Never negative. Never 1 (winner succeeded on both products).
+    const after1 = await db.product.findUnique({ where: { id: p1.id }, select: { stock: true } })
+    const after2 = await db.product.findUnique({ where: { id: p2.id }, select: { stock: true } })
+    assertEqual(after1?.stock, 0, 'P1 final stock is 0 (winner took 1, loser rolled back)')
+    assertEqual(after2?.stock, 0, 'P2 final stock is 0 (winner took 1, loser rolled back)')
+    assert((after1?.stock ?? 0) >= 0 && (after2?.stock ?? 0) >= 0, 'No product went negative')
+
+    // Cleanup: cancel the winner (restores stock to 1 on both products), then delete.
+    const winner = aliceWon
+      ? (aliceRes as PromiseFulfilledResult<any>).value
+      : (bobRes as PromiseFulfilledResult<any>).value
+    await cancelOrderAndRestoreStock(winner.id)
+    await db.orderItem.deleteMany({ where: { orderId: winner.id } })
+    await db.order.delete({ where: { id: winner.id } })
+    await db.product.delete({ where: { id: p1.id } })
+    await db.product.delete({ where: { id: p2.id } })
   }
 
   // ============================================================

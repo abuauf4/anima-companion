@@ -2055,3 +2055,99 @@ Stage Summary:
 - Cloudinary deletion: deferred to V2 (per original task).
 - Root cause of issue 2: GET /api/admin/products `include.images` had `take: 1` which truncated the images array returned to the admin client. Fix removes the take clause so all rows are returned ordered by `order`.
 === Cloudinary Upload Fixes COMPLETE ===
+
+---
+Task ID: order-cancel-concurrency-hardening
+Agent: main (Super Z)
+Task: Patch commit 0646968 (order creation hardening) to make order CANCELLATION and STATUS TRANSITIONS concurrency-safe at the database layer. Specifically fix two race conditions identified by the user: (1) concurrent CANCEL requests can double-restock, (2) CANCEL vs CONFIRMED can produce CONFIRMED + restored stock. Also implement canonical product-lock ordering to avoid deadlocks between concurrent multi-product checkouts, and add concurrency test scenarios K–O. Do not change API contract. Do not expand scope.
+
+Work Log:
+- Audit: read src/lib/orders.ts (0646968 baseline), src/app/api/orders/route.ts, src/app/api/admin/orders/[id]/route.ts, src/lib/auth.ts, prisma/schema.prisma (Order + OrderItem + Product), scripts/test-order-integrity.ts (scenarios A–J + bonus).
+
+- Root cause — Bug #1 (concurrent CANCEL double-restock):
+  The previous cancelOrderAndRestoreStock used a read-then-update pattern:
+    1. BEGIN
+    2. SELECT order WITH items
+    3. IF status === 'CANCELLED' → return idempotent
+    4. FOR each item: UPDATE product SET stock = stock + qty  ← runs in BOTH concurrent tx
+    5. UPDATE order SET status = 'CANCELLED'                   ← no WHERE check
+    COMMIT
+  Under concurrency, both Tx1 and Tx2 read PENDING, both skip step 3, both restock (step 4), and both update status (step 5). Final: status=CANCELLED but stock restored twice (e.g. 9 → 11 instead of 9 → 10). Idempotent vs sequential requests, NOT idempotent vs concurrent requests.
+
+- Root cause — Bug #2 (CANCELLED → other transitions via stale read):
+  The previous updateOrderStatus non-cancel branch also used read-then-update:
+    1. SELECT status FROM order WHERE id = ?
+    2. IF !order → 404
+    3. IF status === 'CANCELLED' → throw INVALID_TRANSITION
+    4. UPDATE order SET status = newStatus WHERE id = ?       ← no WHERE status check
+  Under concurrency, Tx1 (CONFIRMED) reads PENDING, Tx2 (CANCEL) wins the cancellation race (restores stock + sets CANCELLED), Tx1 then proceeds past its stale-read check (step 3) and updates status to CONFIRMED (step 4). Final: status=CONFIRMED, stock already restored by Tx2. Status says order is active, inventory is gone — worse corruption than Bug #1.
+
+- Root cause — Yellow (deadlock between multi-product checkouts):
+  createOrder's stock-decrement loop iterated over aggregated items in cart-insertion order. Two concurrent multi-product orders with reversed cart orders could acquire product row locks in opposite orders (A: P1→P2, B: P2→P1) → PostgreSQL detects deadlock, aborts one transaction. Data stays consistent (the deadlock victim rolls back cleanly), but the loser customer receives a spurious 500 even though stock was sufficient.
+
+- Fix — Bug #1 (atomic claim):
+  Replaced read-then-update with a conditional UPDATE used as the cancellation claim:
+    UPDATE "Order"
+    SET status = 'CANCELLED', "updatedAt" = NOW()
+    WHERE id = ? AND status != 'CANCELLED'
+  PostgreSQL row-level locking guarantees that exactly one concurrent transaction receives affected-row count = 1 from this UPDATE; all other concurrent transactions receive count = 0 (because by the time their UPDATE acquires the row lock, the status is already CANCELLED).
+  Implementation: cancelOrderAndRestoreStock now (a) fetches order+items, (b) issues the conditional updateMany as the claim, (c) if count === 0 → return idempotent success WITHOUT restocking (the winner already did / will), (d) if count === 1 → restock items in canonical productId order, then return { order: {...order, status: 'CANCELLED'}, alreadyCancelled: false }. Single $transaction wraps claim + restock — atomic.
+
+- Fix — Bug #2 (atomic terminal guard):
+  Replaced read-then-validate-then-update with a conditional UPDATE for non-cancel transitions too:
+    UPDATE "Order"
+    SET status = $newStatus, "updatedAt" = NOW()
+    WHERE id = ? AND status != 'CANCELLED'
+  If count === 0, the order is either missing OR already CANCELLED — disambiguate by refetching the row: missing → throw ORDER_NOT_FOUND (404), CANCELLED → throw INVALID_TRANSITION (400). Eliminates the stale-read window entirely. The forbidden final state (CONFIRMED + restored stock) is now structurally impossible because the conditional UPDATE rejects any transition attempt once the row has reached CANCELLED.
+
+- Fix — Yellow (canonical product lock order):
+  Added internal helper `byProductId` comparator. Applied in two places:
+    (1) createOrder: aggregateCartItems(items).sort(byProductId) before the per-product decrement loop. All concurrent multi-product checkouts now acquire product row locks in the same canonical order, eliminating AB-BA deadlocks.
+    (2) cancelOrderAndRestoreStock: [...order.items].sort(byProductId) before the per-item restock loop. Same reasoning — concurrent cancellations of multi-product orders also acquire product row locks in canonical order.
+
+- API contract — preserved per task spec, with one additive fix:
+  * Existing 400 (INVALID_TRANSITION, EMPTY_CART, MISSING_FIELDS, INVALID_QUANTITY, PRODUCT_NOT_FOUND, PRODUCT_INACTIVE) — UNCHANGED.
+  * Existing 409 (OUT_OF_STOCK) — UNCHANGED.
+  * Existing 401 (UNAUTHENTICATED) — UNCHANGED.
+  * Existing 500 (ORDER_NUMBER_CONFLICT) — UNCHANGED.
+  * NEW 404 (ORDER_NOT_FOUND): the pre-existing code reused PRODUCT_NOT_FOUND (status 400, message "Produk tidak ditemukan") when an ORDER id was missing during cancellation / status update. This contradicted the documented contract (user's task point 4: "404 order missing"). Added ORDER_NOT_FOUND (status 404, code='ORDER_NOT_FOUND', message="Pesanan tidak ditemukan: <orderId>") as a distinct error and used it in cancelOrderAndRestoreStock + updateOrderStatus non-cancel branch. This is an additive fix that aligns the implementation with the stated contract; it does not break any existing 4xx/5xx path. The admin order-status route handler already routes any OrderError through `{ status: e.status, code: e.code }` — no route changes needed.
+  * Frontend: untouched. No new error codes reach the customer-facing checkout flow (createOrder only throws product-level errors, none changed).
+
+- Domain principle preserved: "status order + perubahan stok = satu domain operation, bukan dua update database yang kebetulan dijalankan berurutan." Both the atomic claim (Bug #1) and the atomic terminal guard (Bug #2) keep status change + stock change inside the SAME Prisma $transaction. If either fails, the whole transaction rolls back. There is no code path where status is mutated without the corresponding stock mutation (and vice versa) inside the same transaction boundary.
+
+- Test scenarios added to scripts/test-order-integrity.ts:
+  * K — two concurrent CANCEL requests on the same order (qty=3, stock=10). Expected: final status=CANCELLED, final stock=10 (restored exactly once, never 13). Asserts exactly one CANCEL wins the claim (alreadyCancelled=false), the other loses (alreadyCancelled=true).
+  * L — CANCEL vs CONFIRMED concurrently (qty=2, stock=10). Expected: never produces CONFIRMED + restored stock. Asserts final status=CANCELLED (terminal invariant), final stock=10 (restored exactly once), and the forbidden state is explicitly checked as AVOIDED.
+  * M — repeated CANCEL sequentially (5 calls). Sanity-check extension of scenario F. Expected: exactly one call wins the claim (alreadyCancelled=false), the other 4 are idempotent no-ops. Final status=CANCELLED, final stock=20 (restored once, never 35 or 45).
+  * N — concurrent checkout for last unit (stock=1, qty=1 each for two customers). Stricter variant of scenario J. Expected: exactly one order succeeds, the other throws OUT_OF_STOCK (409). Final stock=0 (never negative).
+  * O — multi-product concurrent checkout (two products each stock=1, two customers each requesting BOTH products in REVERSED cart order). This is the deadlock-prone case the canonical-sort fix targets. Expected: exactly one order succeeds, the other rolls back atomically with OUT_OF_STOCK. Neither product goes negative; no partial order.
+
+- Static verification performed (NO runtime concurrency test executed):
+  * `bunx tsc --noEmit` → 0 errors. Confirms test scenarios K–O compile against the patched orders.ts exports (cancelOrderAndRestoreStock, updateOrderStatus now imported).
+  * `bun run lint` → 0 errors, 0 warnings.
+  * `bun run build` → ✓ Compiled successfully. 44/44 pages generated. /api/orders and /api/admin/orders/[id] routes present in build output. Pre-existing Prisma/sitemap warnings (DATABASE_URL missing in build env) are unrelated to this change.
+  * Manual SQL-pattern review: confirmed the conditional UPDATE WHERE clauses compile to the documented Prisma `updateMany({ where: { id, status: { not: 'CANCELLED' } }, data: { status } })` form, which Prisma translates to `UPDATE "Order" SET status = $1 WHERE id = $2 AND status != $3`. PostgreSQL acquires a row-level lock on the UPDATE, serializing concurrent claims on the same order id.
+
+- Runtime concurrency testing — PENDING (per task spec):
+  Local sandbox has NO PostgreSQL available (DATABASE_URL in .env points to a SQLite file, which does NOT support row-level locking the same way and is unsuitable for verifying the concurrency invariants). Per task instruction: "Kalau environment masih tidak punya PostgreSQL, jangan pura-pura bilang concurrency test passed. Compile test-nya, lakukan static verification, dan report runtime concurrency test pending."
+  To run the runtime tests in Coolify/staging:
+    1. Set DATABASE_URL to a non-production PostgreSQL connection string (localhost or dedicated QA database).
+    2. Run: `bun run scripts/test-order-integrity.ts`
+    3. The script aborts immediately if NODE_ENV=production OR if DATABASE_URL is unset, to prevent accidental execution against production.
+    4. Expected output: scenarios A through O all pass (60+ assertions). Exit code 0 on success, 1 on any failure.
+
+- Did NOT touch: order-number generation (the count+1 approach with P2002 retry was explicitly deprioritized by the user — "Ini bukan prioritas pertama, apalagi kalau Order memang tidak pernah hard-delete"), payment, voucher integrity (acknowledged as the next hole but out of scope for this patch), dashboard, frontend, Prisma schema, public components.
+
+Stage Summary:
+- Files changed (2): src/lib/orders.ts (cancellation atomic claim, non-cancel conditional update, canonical sort helper, ORDER_NOT_FOUND error, expanded __test__ exports, updated docblocks), scripts/test-order-integrity.ts (scenarios K, L, M, N, O added + header updated + updateOrderStatus imported).
+- Files NOT changed (deliberately): src/app/api/orders/route.ts (customer route — unaffected), src/app/api/admin/orders/[id]/route.ts (admin route — generic OrderError handler already surfaces correct status), prisma/schema.prisma (no migration needed — the fix uses existing columns), all frontend files, all auth files.
+- New error code: ORDER_NOT_FOUND (404). Additive; does not break any existing client error-handling path.
+- New helper: byProductId comparator (internal, exported via __test__ for testability).
+- API contract: 400/404/409/401/500 surface unchanged in shape; only the order-missing case shifts from 400 (PRODUCT_NOT_FOUND) to 404 (ORDER_NOT_FOUND), matching the documented contract.
+- Concurrency invariants now guaranteed by the database layer (not by application-level read-then-check):
+  (1) Exactly one concurrent CANCEL restocks. Others return idempotent success without touching stock.
+  (2) CANCELLED is terminal at the row level. No stale read can revive a CANCELLED order into CONFIRMED/PROCESSED/COMPLETED. Concurrent CANCEL vs CONFIRMED can never end with status=CONFIRMED + stock restored.
+  (3) Multi-product concurrent checkouts acquire product row locks in canonical productId order — no AB-BA deadlock between two multi-product orders with reversed cart orders.
+- Domain principle preserved: status + stock = one atomic operation inside a single $transaction. Failure of either side rolls back both.
+- Runtime concurrency test status: PENDING (awaiting PostgreSQL-equipped QA environment). Static verification (tsc + lint + build + manual SQL-pattern review) all pass.
+=== Order/Stock Status + Cancellation Concurrency Hardening COMPLETE (runtime concurrency test pending PostgreSQL) ===
