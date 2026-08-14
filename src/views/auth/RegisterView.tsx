@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useHashRouter } from '@/lib/router'
+import { safeInternalPath } from '@/lib/redirect'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,7 +26,12 @@ export function RegisterView() {
 
   // Honor ?next=... so a customer sent from /checkout lands back on checkout
   // after registering, instead of being dropped on the homepage.
-  const nextPath = route.query.get('next') || ''
+  //
+  // OPEN-REDIRECT DEFENSE: see src/lib/redirect.ts. External, scheme-relative,
+  // backslash-prefixed, and `javascript:`/`data:` URLs are all rejected and
+  // the user is sent to `/` instead. Shared with LoginView so both flows
+  // apply identical defense.
+  const nextPath = safeInternalPath(route.query.get('next'))
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -59,7 +65,8 @@ export function RegisterView() {
       await refresh()
       // Go back to the page the user was trying to reach (e.g. /checkout),
       // otherwise fall through to the homepage.
-      if (nextPath && nextPath.startsWith('/')) {
+      // safeInternalPath returns null for any external / malformed value.
+      if (nextPath) {
         navigate(nextPath)
       } else {
         navigate('/')

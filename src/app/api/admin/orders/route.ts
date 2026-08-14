@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin } from '@/lib/auth'
+import { requireAdmin, handleAuthError } from '@/lib/auth'
 import { ORDER_STATUS } from '@/lib/format'
 
 export async function GET(req: NextRequest) {
@@ -31,9 +31,8 @@ export async function GET(req: NextRequest) {
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     })
   } catch (e: any) {
-    if (e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN') {
-      return NextResponse.json({ error: 'Tidak diizinkan' }, { status: 403 })
-    }
+    const authRes = handleAuthError(e)
+    if (authRes) return authRes
     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 })
   }
 }

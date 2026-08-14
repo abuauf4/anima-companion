@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin } from '@/lib/auth'
+import { requireAdmin, handleAuthError } from '@/lib/auth'
 
 export async function GET() {
   try {
@@ -112,9 +112,8 @@ export async function GET() {
       salesByProblem: salesByProblemData,
     })
   } catch (e: any) {
-    if (e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN') {
-      return NextResponse.json({ error: 'Tidak diizinkan' }, { status: 403 })
-    }
+    const authRes = handleAuthError(e)
+    if (authRes) return authRes
     console.error('Dashboard error:', e)
     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 })
   }

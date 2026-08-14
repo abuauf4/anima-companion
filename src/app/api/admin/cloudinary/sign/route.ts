@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/auth'
+import { requireAdmin, handleAuthError } from '@/lib/auth'
 import {
   buildSignatureResponse,
   getCloudinaryConfig,
@@ -37,9 +37,8 @@ export async function GET() {
   try {
     await requireAdmin()
   } catch (e: any) {
-    if (e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN') {
-      return NextResponse.json({ error: 'Tidak diizinkan' }, { status: 403 })
-    }
+    const authRes = handleAuthError(e)
+    if (authRes) return authRes
     throw e
   }
 

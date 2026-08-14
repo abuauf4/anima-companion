@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin } from '@/lib/auth'
+import { requireAdmin, handleAuthError } from '@/lib/auth'
 import { invalidate } from '@/lib/cache'
 
 export async function GET() {
@@ -11,10 +11,8 @@ export async function GET() {
     })
     return NextResponse.json({ testimonials })
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e)
-    if (msg === 'UNAUTHORIZED' || msg === 'FORBIDDEN') {
-      return NextResponse.json({ error: 'Tidak diizinkan' }, { status: 403 })
-    }
+    const authRes = handleAuthError(e)
+    if (authRes) return authRes
     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 })
   }
 }
@@ -54,10 +52,8 @@ export async function POST(req: NextRequest) {
     invalidate('home:')
     return NextResponse.json({ testimonial })
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e)
-    if (msg === 'UNAUTHORIZED' || msg === 'FORBIDDEN') {
-      return NextResponse.json({ error: 'Tidak diizinkan' }, { status: 403 })
-    }
+    const authRes = handleAuthError(e)
+    if (authRes) return authRes
     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 })
   }
 }

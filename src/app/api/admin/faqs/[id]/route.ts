@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin } from '@/lib/auth'
+import { requireAdmin, handleAuthError } from '@/lib/auth'
 import { invalidate } from '@/lib/cache'
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -29,10 +29,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     invalidate('home:')
     return NextResponse.json({ faq: updated })
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e)
-    if (msg === 'UNAUTHORIZED' || msg === 'FORBIDDEN') {
-      return NextResponse.json({ error: 'Tidak diizinkan' }, { status: 403 })
-    }
+    const authRes = handleAuthError(e)
+    if (authRes) return authRes
     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 })
   }
 }
@@ -45,10 +43,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     invalidate('home:')
     return NextResponse.json({ success: true })
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e)
-    if (msg === 'UNAUTHORIZED' || msg === 'FORBIDDEN') {
-      return NextResponse.json({ error: 'Tidak diizinkan' }, { status: 403 })
-    }
+    const authRes = handleAuthError(e)
+    if (authRes) return authRes
     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 })
   }
 }

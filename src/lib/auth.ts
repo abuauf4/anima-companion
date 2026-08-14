@@ -1,9 +1,85 @@
 import { db } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 import { cookies } from 'next/headers'
+import { NextResponse } from 'next/server'
 
 const SESSION_COOKIE = 'anima_session'
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7 // 7 days
+
+// ============================================================================
+// AuthError — structured auth error, mirrors the OrderError pattern.
+//
+// SECURITY CONTRACT:
+//   throw new AuthError('UNAUTHENTICATED')  → HTTP 401, code='UNAUTHENTICATED'
+//   throw new AuthError('FORBIDDEN')        → HTTP 403, code='FORBIDDEN'
+//
+// `handleAuthError(e)` returns a NextResponse if e is an AuthError (so route
+// handlers can `return handleAuthError(e) ?? fallbackHandler(e)`), or null if
+// e is NOT an AuthError (caller should treat as 500 / unexpected).
+//
+// Why this exists: every /api/admin/* route previously did
+//   if (e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN') return 403
+// which (1) mapped BOTH unauthenticated and forbidden to 403 (task spec point
+// 3 requires 401 vs 403 to be distinct) and (2) was a fragile string-equality
+// check that would silently break if the message text ever changed. AuthError
+// carries the structured `{ status, code }` so the contract is enforced by
+// the type system instead of by string conventions.
+// ============================================================================
+
+export type AuthErrorCode = 'UNAUTHENTICATED' | 'FORBIDDEN'
+
+export class AuthError extends Error {
+  readonly status: number
+  readonly code: AuthErrorCode
+  constructor(code: AuthErrorCode) {
+    super(code)
+    this.name = 'AuthError'
+    this.code = code
+    this.status = code === 'UNAUTHENTICATED' ? 401 : 403
+  }
+}
+
+/**
+ * If `e` is an AuthError, returns a NextResponse with the structured
+ * `{ error, code }` body and the correct HTTP status (401 or 403).
+ * Otherwise returns null — the caller is responsible for handling the
+ * non-auth error (typically a 500 fallback).
+ *
+ * Usage in a route handler:
+ *   try { ... } catch (e) {
+ *     const authRes = handleAuthError(e)
+ *     if (authRes) return authRes
+ *     console.error('Unexpected error:', e)
+ *     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 })
+ *   }
+ */
+export function handleAuthError(e: unknown): NextResponse | null {
+  if (e instanceof AuthError) {
+    return NextResponse.json(
+      { error: 'Tidak diizinkan', code: e.code },
+      { status: e.status }
+    )
+  }
+  // Backwards-compat: still recognize the legacy bare Error('UNAUTHORIZED')
+  // / Error('FORBIDDEN') pattern from before the AuthError migration, so
+  // that any code path that still throws the old form continues to be
+  // handled correctly. New code should throw `new AuthError(...)` instead.
+  if (e instanceof Error) {
+    if (e.message === 'UNAUTHORIZED') {
+      return NextResponse.json(
+        { error: 'Tidak diizinkan', code: 'UNAUTHENTICATED' },
+        { status: 401 }
+      )
+    }
+    if (e.message === 'FORBIDDEN') {
+      return NextResponse.json(
+        { error: 'Tidak diizinkan', code: 'FORBIDDEN' },
+        { status: 403 }
+      )
+    }
+  }
+  return null
+}
 
 // Resolve the session-signing secret with hard production safety.
 //
@@ -122,7 +198,7 @@ export async function getCurrentUser() {
 export async function requireAuth() {
   const user = await getCurrentUser()
   if (!user) {
-    throw new Error('UNAUTHORIZED')
+    throw new AuthError('UNAUTHENTICATED')
   }
   return user
 }
@@ -130,7 +206,7 @@ export async function requireAuth() {
 export async function requireAdmin() {
   const user = await requireAuth()
   if (user.role !== 'ADMIN') {
-    throw new Error('FORBIDDEN')
+    throw new AuthError('FORBIDDEN')
   }
   return user
 }

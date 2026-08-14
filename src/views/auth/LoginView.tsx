@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useHashRouter } from '@/lib/router'
+import { safeInternalPath } from '@/lib/redirect'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,7 +28,16 @@ export function LoginView() {
 
   // Honor ?next=... so users returning from /checkout land back on the page
   // they came from after a successful login. Defaults to home or admin.
-  const nextPath = route.query.get('next') || ''
+  //
+  // OPEN-REDIRECT DEFENSE: `safeInternalPath` rejects any `next` value that
+  // is not a safe internal application path. Specifically, it rejects:
+  //   - missing / empty values
+  //   - external URLs (`https://evil.example.com`)
+  //   - scheme-relative URLs (`//evil.example.com`)
+  //   - backslash-prefixed variants (`/\evil.example.com`)
+  //   - scheme URLs (`javascript:alert(1)`, `data:text/html,...`)
+  // If `next` is rejected, we fall through to the role-based default below.
+  const nextPath = safeInternalPath(route.query.get('next'))
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -46,9 +56,10 @@ export function LoginView() {
       if (!res.ok) throw new Error(data.error)
       toast.success(`Selamat datang, ${data.user.name}!`)
       await refresh()
-      // If an explicit ?next= target was set (e.g. /checkout), go there.
+      // If a safe internal ?next= target was set (e.g. /checkout), go there.
       // Otherwise admins go to /admin and customers go to /.
-      if (nextPath && nextPath.startsWith('/')) {
+      // safeInternalPath already rejected anything external or malformed.
+      if (nextPath) {
         navigate(nextPath)
       } else if (data.user.role === 'ADMIN') {
         navigate('/admin')

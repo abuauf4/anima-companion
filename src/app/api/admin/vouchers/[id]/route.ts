@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin } from '@/lib/auth'
+import { requireAdmin, handleAuthError } from '@/lib/auth'
 
 // PUT /api/admin/vouchers/[id] — update an existing voucher.
 // DELETE /api/admin/vouchers/[id] — permanently delete a voucher.
@@ -38,9 +38,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     })
     return NextResponse.json({ voucher: updated })
   } catch (e: any) {
-    if (e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN') {
-      return NextResponse.json({ error: 'Tidak diizinkan' }, { status: 403 })
-    }
+    const authRes = handleAuthError(e)
+    if (authRes) return authRes
     // Prisma throws P2002 on unique-constraint violation (duplicate code).
     if (e?.code === 'P2002') {
       return NextResponse.json({ error: 'Kode voucher sudah digunakan' }, { status: 409 })
@@ -56,9 +55,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     await db.voucher.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (e: any) {
-    if (e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN') {
-      return NextResponse.json({ error: 'Tidak diizinkan' }, { status: 403 })
-    }
+    const authRes = handleAuthError(e)
+    if (authRes) return authRes
     // Prisma throws P2025 if the record does not exist.
     if (e?.code === 'P2025') {
       return NextResponse.json({ error: 'Voucher tidak ditemukan' }, { status: 404 })

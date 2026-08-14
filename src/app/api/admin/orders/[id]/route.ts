@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/auth'
+import { requireAdmin, handleAuthError } from '@/lib/auth'
 import { updateOrderStatus, OrderError } from '@/lib/orders'
 
 /**
@@ -26,9 +26,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const order = await updateOrderStatus(id, status)
     return NextResponse.json({ order })
   } catch (e: any) {
-    if (e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN') {
-      return NextResponse.json({ error: 'Tidak diizinkan' }, { status: 403 })
-    }
+    const authRes = handleAuthError(e)
+    if (authRes) return authRes
     if (e instanceof OrderError) {
       return NextResponse.json(
         { error: e.message, code: e.code },

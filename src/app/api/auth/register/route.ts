@@ -46,7 +46,13 @@ export async function POST(req: NextRequest) {
     await createSession(user)
     return NextResponse.json({ user })
   } catch (e) {
-    console.error('Register error:', e)
+    // SECURITY: see login route — same sanitization applies. We log only
+    // the error class name + a length-capped message string. Never the
+    // raw error object or stack trace, because Prisma errors can carry
+    // query SQL + connection fragments.
+    const errId = e instanceof Error ? e.constructor.name : typeof e
+    const errMsg = e instanceof Error ? e.message : String(e)
+    console.error('Register error:', { id: errId, message: errMsg.slice(0, 200) })
     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 })
   }
 }

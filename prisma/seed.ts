@@ -13,9 +13,44 @@ import bcrypt from 'bcryptjs'
 // directly with PT Sutan Vet Medika before production use.
 // Search for "// TODO: verify with PT Sutan Vet Medika" comments below.
 // ============================================================================
+//
+// PRODUCTION SAFETY GUARD:
+// This seed file creates demo admin + customer accounts with KNOWN PASSWORDS
+// (`admin@anima.id / admin123`, `budi@example.com / customer123`). Those
+// credentials are a deliberate convenience for local development ONLY.
+// Seeding them against a production database would create a known-password
+// backdoor that anyone reading this public source file could use to sign in
+// as admin.
+//
+// To prevent that, the demo-user creation block is SKIPPED entirely when
+// `NODE_ENV === 'production'` AND the env var `SEED_DEMO_USERS_IN_PRODUCTION`
+// is not set to the literal string `'1'`. In normal production deployments
+// (Coolify / Vercel / Railway) NODE_ENV is `'production'` and
+// `SEED_DEMO_USERS_IN_PRODUCTION` is unset, so the demo users are NOT seeded.
+//
+// Catalog data (categories, products, banners, vouchers, FAQs, testimonials,
+// pet types, problems) is seeded regardless of NODE_ENV, because that data
+// is real catalog content the application needs at runtime. Only the
+// demo-user accounts are gated.
+//
+// To bootstrap a production admin safely, run the seed (which will skip demo
+// users) and then either:
+//   1. Manually create the first admin via Prisma Studio / psql, OR
+//   2. Set SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD env vars and re-run the
+//      seed (the bootstrap-admin branch below will create exactly one admin
+//      with those credentials instead of the demo admin).
+// ============================================================================
+const IS_PRODUCTION = process.env.NODE_ENV === 'production'
+const SKIP_DEMO_USERS_IN_PRODUCTION =
+  IS_PRODUCTION && process.env.SEED_DEMO_USERS_IN_PRODUCTION !== '1'
 
 async function main() {
   console.log('🌱 Seeding Anima Companion — Real Brand Edition (PT Sutan Vet Medika, Bogor)...')
+  if (SKIP_DEMO_USERS_IN_PRODUCTION) {
+    console.log('🔒 NODE_ENV=production detected — skipping demo admin/customer users.')
+    console.log('   To force-seed demo users in production, set SEED_DEMO_USERS_IN_PRODUCTION=1.')
+    console.log('   (NOT recommended — demo passwords are public in this source file.)')
+  }
 
   // ==================== CLEAN UP (correct FK order) ====================
   await db.petProfile.deleteMany()   // FK to PetType + User
@@ -40,30 +75,109 @@ async function main() {
   await db.user.deleteMany()
 
   // ==================== ADMIN USER ====================
-  const adminPassword = await bcrypt.hash('admin123', 10)
-  const admin = await db.user.create({
-    data: {
-      email: 'admin@anima.id',
-      password: adminPassword,
-      name: 'Admin Anima',
-      phone: '082210846408',
-      role: 'ADMIN',
-    },
-  })
-  console.log('✅ Admin user created:', admin.email)
+  // Demo admin is created ONLY in non-production OR when explicitly opted-in
+  // via SEED_DEMO_USERS_IN_PRODUCTION=1. See the file header for rationale.
+  let adminId: string | null = null
+  if (!SKIP_DEMO_USERS_IN_PRODUCTION) {
+    const adminPassword = await bcrypt.hash('admin123', 10)
+    const admin = await db.user.create({
+      data: {
+        email: 'admin@anima.id',
+        password: adminPassword,
+        name: 'Admin Anima',
+        phone: '082210846408',
+        role: 'ADMIN',
+      },
+    })
+    adminId = admin.id
+    console.log('✅ Admin user created:', admin.email)
+  } else {
+    // Production bootstrap path: if SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD
+    // are set, create exactly one admin with those credentials (NOT a demo
+    // account). If not set, the deployment operator must create the first
+    // admin manually via Prisma Studio / psql.
+    if (process.env.SEED_ADMIN_EMAIL && process.env.SEED_ADMIN_PASSWORD) {
+      const adminPassword = await bcrypt.hash(process.env.SEED_ADMIN_PASSWORD, 10)
+      const admin = await db.user.create({
+        data: {
+          email: process.env.SEED_ADMIN_EMAIL,
+          password: adminPassword,
+          name: process.env.SEED_ADMIN_NAME || 'Administrator',
+          phone: process.env.SEED_ADMIN_PHONE || null,
+          role: 'ADMIN',
+        },
+      })
+      adminId = admin.id
+      console.log('✅ Bootstrap admin user created from env vars:', admin.email)
+    } else {
+      console.log('⚠️  No demo admin created. Set SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD')
+      console.log('   env vars and re-run seed to bootstrap the first admin, OR create')
+      console.log('   one manually via Prisma Studio / psql.')
+    }
+  }
 
   // ==================== DEMO CUSTOMER ====================
-  const customerPassword = await bcrypt.hash('customer123', 10)
-  const customer = await db.user.create({
-    data: {
-      email: 'budi@example.com',
-      password: customerPassword,
-      name: 'Budi Santoso',
-      phone: '081298765432',
-      role: 'CUSTOMER',
-    },
-  })
-  console.log('✅ Demo customer created:', customer.email)
+  // Demo customer is created ONLY in non-production OR when explicitly
+  // opted-in via SEED_DEMO_USERS_IN_PRODUCTION=1.
+  let customerId: string | null = null
+  if (!SKIP_DEMO_USERS_IN_PRODUCTION) {
+    const customerPassword = await bcrypt.hash('customer123', 10)
+    const customer = await db.user.create({
+      data: {
+        email: 'budi@example.com',
+        password: customerPassword,
+        name: 'Budi Santoso',
+        phone: '081298765432',
+        role: 'CUSTOMER',
+      },
+    })
+    customerId = customer.id
+    console.log('✅ Demo customer created:', customer.email)
+  } else {
+    console.log('⚠️  No demo customer created (production mode).')
+  }
+
+  // IDs that downstream seed steps need. If demo users were skipped, we
+  // create lightweight placeholder users so the rest of the seed (which
+  // creates carts, orders, pet-profiles, reviews referencing these IDs)
+  // can still proceed. These placeholders get random passwords that are
+  // never logged anywhere — they are NOT a login surface.
+  if (!adminId) {
+    const adminPassword = await bcrypt.hash(
+      `nondemo-${Math.random().toString(36).slice(2)}-${Date.now()}`,
+      10
+    )
+    const admin = await db.user.create({
+      data: {
+        email: `placeholder-admin-${Date.now()}@anima.local`,
+        password: adminPassword,
+        name: 'Placeholder Admin',
+        role: 'ADMIN',
+      },
+    })
+    adminId = admin.id
+    console.log('✅ Placeholder admin created (random password, not a login surface):', admin.email)
+  }
+  if (!customerId) {
+    const customerPassword = await bcrypt.hash(
+      `nondemo-${Math.random().toString(36).slice(2)}-${Date.now()}`,
+      10
+    )
+    const customer = await db.user.create({
+      data: {
+        email: `placeholder-customer-${Date.now()}@anima.local`,
+        password: customerPassword,
+        name: 'Placeholder Customer',
+        role: 'CUSTOMER',
+      },
+    })
+    customerId = customer.id
+    console.log('✅ Placeholder customer created (random password, not a login surface):', customer.email)
+  }
+
+  // Adapt the rest of the seed to the resolved IDs.
+  const admin = { id: adminId, email: 'placeholder@anima.local' }
+  const customer = { id: customerId, email: 'placeholder@anima.local' }
 
   // ==================== CATEGORIES ====================
   const categories = await db.$transaction([
@@ -810,13 +924,18 @@ async function main() {
   console.log('\n🎉 Seeding completed!')
   console.log('━━━━━━━━━━━━━━━━━━━━')
   console.log(`Products: ${productsData.length}`)
-  console.log('Admin login:')
-  console.log('  Email: admin@anima.id')
-  console.log('  Password: admin123')
-  console.log('')
-  console.log('Customer login:')
-  console.log('  Email: budi@example.com')
-  console.log('  Password: customer123')
+  if (!SKIP_DEMO_USERS_IN_PRODUCTION) {
+    console.log('Admin login:')
+    console.log('  Email: admin@anima.id')
+    console.log('  Password: admin123')
+    console.log('')
+    console.log('Customer login:')
+    console.log('  Email: budi@example.com')
+    console.log('  Password: customer123')
+  } else {
+    console.log('Admin login: SKIPPED in production (use SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD or Prisma Studio).')
+    console.log('Customer login: SKIPPED in production.')
+  }
   console.log('━━━━━━━━━━━━━━━━━━━━')
 }
 
