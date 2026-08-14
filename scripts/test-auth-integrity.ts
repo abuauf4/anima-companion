@@ -22,10 +22,17 @@
  * Scenarios covered (per task spec point 11):
  *
  * Pure-static (always run):
- *   RED1–RED8. safeInternalPath() open-redirect defense
- *   AE1–AE4.   AuthError status code mapping + handleAuthError dispatch
- *   SRC1.      register route source does NOT destructure `role` from body
- *   SRC2.      register route hardcodes role: 'CUSTOMER' in db.user.create
+ *   RED1–RED8.  safeInternalPath() open-redirect defense (literal forms)
+ *   RED9–RED12. safeInternalPath() encoded-bypass / control-char / malformed-encoding defense
+ *   AE1–AE4.    AuthError status code mapping + handleAuthError dispatch
+ *   SRC1.       register route source does NOT destructure `role` from body
+ *   SRC2.       register route hardcodes role: 'CUSTOMER' in db.user.create
+ *   SRC3.       register route does NOT pass `role` from body into db.user.create
+ *   SRC4.       login route does NOT accept role from body
+ *   SRC5.       getCurrentUser select clause excludes password
+ *   SRC6.       login + register routes use logAuthError() (no raw console.error on e.message)
+ *   SRC7.       logAuthError production branch logs ONLY { event, status }
+ *   SRC8.       seed.ts has NO SEED_DEMO_USERS_IN_PRODUCTION override
  *
  * HTTP integration (requires BASE_URL):
  *   AU1. unauthenticated → admin endpoint → 401
@@ -143,6 +150,58 @@ function testRedirectSafety() {
   // app's own origin, where it 404s. The threat model is OPEN REDIRECT
   // (sending the user to a different origin), not same-origin path
   // traversal. So this case is correctly accepted.
+
+  console.log('\n[RED9] Encoded // bypass (percent-encoded forward slashes)')
+  // The canonical caller (URLSearchParams.get) already decodes once, but if
+  // someone calls safeInternalPath on a raw still-encoded string, the
+  // encoded `//` form must still be rejected. Otherwise an attacker can
+  // craft a `?next=` URL whose decoded form is a scheme-relative URL.
+  assertEqual(safeInternalPath('%2F%2Fevil.example.com'), null, '%2F%2Fevil.example.com → null (no leading slash)')
+  assertEqual(safeInternalPath('/%2F%2Fevil.example.com'), null, '/%2F%2Fevil.example.com → null (decodes to ///evil)')
+  assertEqual(safeInternalPath('/%2F%2Fevil.example.com/path'), null, '/%2F%2Fevil.example.com/path → null')
+  assertEqual(safeInternalPath('/%2F%5Cevil.example.com'), null, '/%2F%5Cevil.example.com → null (decodes to //\\evil)')
+  // Mixed encoded/decoded form — partial encoding must still be rejected
+  // because the decoded form starts with `//`.
+  assertEqual(safeInternalPath('/%2F/evil.example.com'), null, '/%2F/evil.example.com → null (decodes to ///evil)')
+
+  console.log('\n[RED10] Encoded backslash bypass (percent-encoded backslashes)')
+  assertEqual(safeInternalPath('/%5Cevil.example.com'), null, '/%5Cevil.example.com → null (decodes to /\\evil)')
+  assertEqual(safeInternalPath('/%5C%5Cevil.example.com'), null, '/%5C%5Cevil.example.com → null (decodes to /\\\\evil)')
+  assertEqual(safeInternalPath('/%5C/evil.example.com'), null, '/%5C/evil.example.com → null (decodes to /\\/evil)')
+
+  console.log('\n[RED11] Control characters (0x00–0x1F, 0x7F, whitespace)')
+  // Control chars in URL paths are not valid and can be used to confuse
+  // log readers or downstream consumers. \t \n \r are inside the range.
+  assertEqual(safeInternalPath('/\x00evil'), null, 'path with NUL → null')
+  assertEqual(safeInternalPath('/\x01evil'), null, 'path with SOH (0x01) → null')
+  assertEqual(safeInternalPath('/\tevil'), null, 'path with TAB → null')
+  assertEqual(safeInternalPath('/\nevil'), null, 'path with LF → null')
+  assertEqual(safeInternalPath('/\revil'), null, 'path with CR → null')
+  assertEqual(safeInternalPath('/\x1fevil'), null, 'path with US (0x1F) → null')
+  assertEqual(safeInternalPath('/\x7fevil'), null, 'path with DEL (0x7F) → null')
+  // Sanity: a normal path with no control chars still passes.
+  assertEqual(safeInternalPath('/checkout'), '/checkout', 'normal /checkout still accepted')
+
+  console.log('\n[RED12] Malformed percent-encoding')
+  // Malformed URI sequences cause decodeURIComponent to throw — we treat
+  // any throw as a reject, because we can't safely decide what the input
+  // would decode to.
+  assertEqual(safeInternalPath('/%ZZevil'), null, '/%ZZevil → null (invalid hex %ZZ)')
+  // NOTE: `/%2evil` is NOT malformed — `%2e` is the encoding for `.`, so
+  // `decodeURIComponent('/%2evil')` returns `/.vil`, which is a safe path.
+  // We exclude that case from the malformed-encoding suite. Use `/%2` (a
+  // truly truncated sequence — `%` followed by only ONE hex digit and then
+  // end-of-string) and `/%XY` (two non-hex digits) instead.
+  assertEqual(safeInternalPath('/%2'), null, '/%2 → null (truncated %2 at end of string)')
+  assertEqual(safeInternalPath('/%evil'), null, '/%evil → null (lone %)')
+  assertEqual(safeInternalPath('/checkout%'), null, '/checkout% → null (trailing %)')
+  assertEqual(safeInternalPath('/%2Gevil'), null, '/%2Gevil → null (invalid second hex digit)')
+  assertEqual(safeInternalPath('/%G2evil'), null, '/%G2evil → null (invalid first hex digit)')
+  // Sanity: a valid percent-encoded char that doesn't bypass the
+  // scheme-relative check should still be accepted (e.g. %20 = space, which
+  // we already reject via RED11 because it's a control char — but %41 = 'A'
+  // is a normal letter and must not be rejected just because it's encoded).
+  assertEqual(safeInternalPath('/search?q=%41'), '/search?q=%41', 'encoded ASCII letter in query still accepted')
 }
 
 function testAuthError() {
@@ -274,6 +333,109 @@ function testSourceInvariants() {
     assert(selectFields.includes('id'), 'id in select')
     assert(selectFields.includes('role'), 'role in select')
   }
+
+  console.log('\n[SRC6] Login + register routes use logAuthError() (not raw console.error on e.message)')
+  // After the Auth Security V1 cleanup patch, both auth routes must call
+  // `logAuthError(...)` instead of destructuring `e.message` and logging
+  // it directly. This is the source-level guarantee that production logs
+  // never contain Prisma error fragments.
+  const loginSrcFull = readFileSync(
+    resolve(process.cwd(), 'src/app/api/auth/login/route.ts'),
+    'utf8'
+  )
+  const registerSrcFull = readFileSync(
+    resolve(process.cwd(), 'src/app/api/auth/register/route.ts'),
+    'utf8'
+  )
+  assert(/logAuthError\s*\(/.test(loginSrcFull), 'login route calls logAuthError()')
+  assert(/logAuthError\s*\(/.test(registerSrcFull), 'register route calls logAuthError()')
+  // Forbid the OLD pattern: `console.error(...e.message...)` or
+  // `console.error(..., e)` directly on the raw error object.
+  assert(
+    !/console\.error\s*\([^)]*e\.message/.test(loginSrcFull),
+    'login route does NOT log e.message via console.error'
+  )
+  assert(
+    !/console\.error\s*\([^)]*e\.message/.test(registerSrcFull),
+    'register route does NOT log e.message via console.error'
+  )
+
+  console.log('\n[SRC7] logAuthError production branch logs ONLY {event, status}')
+  // Verify the production branch of logAuthError does NOT reference
+  // e.message / e.constructor.name / e.stack. This is the structural
+  // guarantee that production auth logs are fully sanitized.
+  const logAuthErrorMatch = authSrc.match(
+    /export\s+function\s+logAuthError[\s\S]*?^}/m
+  )
+  if (logAuthErrorMatch) {
+    const fnSrc = logAuthErrorMatch[0]
+    // Find the production branch: `if (process.env.NODE_ENV === 'production') { ... return }`
+    const prodBranchMatch = fnSrc.match(
+      /if\s*\(\s*process\.env\.NODE_ENV\s*===\s*['"]production['"]\s*\)\s*\{([\s\S]*?)\n\s*return\s*\}/
+    )
+    assert(!!prodBranchMatch, 'found logAuthError production branch')
+    if (prodBranchMatch) {
+      // Strip line + block comments so the regex check inspects executable
+      // code only, not the docstring explaining WHY we don't log e.message.
+      const prodBody = prodBranchMatch[1]
+        .replace(/\/\/[^\n]*/g, '') // strip line comments
+        .replace(/\/\*[\s\S]*?\*\//g, '') // strip block comments
+      assert(
+        !/e\.message/.test(prodBody),
+        'production branch does NOT reference e.message'
+      )
+      assert(
+        !/e\.constructor/.test(prodBody),
+        'production branch does NOT reference e.constructor'
+      )
+      assert(
+        !/e\.stack/.test(prodBody),
+        'production branch does NOT reference e.stack'
+      )
+      assert(
+        /event/.test(prodBody) && /status/.test(prodBody),
+        'production branch logs only { event, status }'
+      )
+    }
+  } else {
+    assert(false, 'could not locate logAuthError function in src/lib/auth.ts')
+  }
+
+  console.log('\n[SRC8] seed.ts has NO SEED_DEMO_USERS_IN_PRODUCTION override')
+  // The Auth Security V1 cleanup patch removed the SEED_DEMO_USERS_IN_PRODUCTION=1
+  // escape hatch entirely. In production, demo users must be HARD-DISABLED —
+  // the demo password is public in this source file and must never be
+  // reachable from a production deployment, even with explicit opt-in.
+  const seedSrc = readFileSync(
+    resolve(process.cwd(), 'prisma/seed.ts'),
+    'utf8'
+  )
+  // The env var name must NOT appear anywhere in seed.ts (neither as a
+  // condition nor in a comment that mentions the override as available).
+  // We allow it ONLY inside the comment that explicitly says it was REMOVED.
+  // For the test, we simply ensure no code-path references it as a
+  // conditional. The string `SEED_DEMO_USERS_IN_PRODUCTION !== '1'` was the
+  // old override pattern — it must NOT be present.
+  assert(
+    !/SEED_DEMO_USERS_IN_PRODUCTION\s*!==\s*['"]1['"]/.test(seedSrc),
+    'seed.ts does NOT use SEED_DEMO_USERS_IN_PRODUCTION !== "1" override pattern'
+  )
+  assert(
+    !/SEED_DEMO_USERS_IN_PRODUCTION\s*===\s*['"]1['"]/.test(seedSrc),
+    'seed.ts does NOT use SEED_DEMO_USERS_IN_PRODUCTION === "1" override pattern'
+  )
+  // The production guard must be a simple equality: SKIP = IS_PRODUCTION.
+  // (No `&& ...` clause that would re-enable demo users under any condition.)
+  assert(
+    /SKIP_DEMO_USERS_IN_PRODUCTION\s*=\s*IS_PRODUCTION\b/.test(seedSrc),
+    'seed.ts sets SKIP_DEMO_USERS_IN_PRODUCTION = IS_PRODUCTION (no override clause)'
+  )
+  // The bootstrap-admin path via SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD
+  // must still be present (the legitimate way to create a production admin).
+  assert(
+    /SEED_ADMIN_EMAIL/.test(seedSrc) && /SEED_ADMIN_PASSWORD/.test(seedSrc),
+    'seed.ts retains SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD bootstrap path'
+  )
 }
 
 // ============================================================================

@@ -210,3 +210,43 @@ export async function requireAdmin() {
   }
   return user
 }
+
+// ============================================================================
+// logAuthError — auth-route error logger with production sanitization.
+//
+// SECURITY CONTRACT:
+//   - In PRODUCTION: logs ONLY `{ event, status }`. NEVER logs `e.message`,
+//     `e.constructor.name`, `e.stack`, Prisma error code, or any other
+//     derived string from the error object. Prisma errors can include SQL
+//     fragments, constraint names, field names, and even connection-string
+//     fragments in `e.message` — those must never reach production logs
+//     readable by ops or by log-aggregation sidecars.
+//   - In DEVELOPMENT: logs the event + constructor name + a length-capped
+//     message string so engineers can debug the underlying Prisma/DB error.
+//
+// `event` is a STABLE label chosen by the caller (e.g. 'Login error',
+// 'Register error'). It is safe to log because it does not depend on user
+// input or runtime data.
+//
+// Usage:
+//   } catch (e) {
+//     logAuthError('Login error', e)
+//     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 })
+//   }
+// ============================================================================
+export function logAuthError(event: string, e: unknown, status = 500): void {
+  if (process.env.NODE_ENV === 'production') {
+    // Production: only the stable event label + HTTP status. No derived
+    // strings from the error object. This is the security boundary — even
+    // if a Prisma error carries a connection-string fragment in its
+    // message field, that fragment never reaches the log stream.
+    console.error({ event, status })
+    return
+  }
+  // Development: verbose logging for debugging. The 200-char cap matches
+  // the previous behavior so dev tooling that parses these logs keeps
+  // working.
+  const errId = e instanceof Error ? e.constructor.name : typeof e
+  const errMsg = e instanceof Error ? e.message : String(e)
+  console.error(`${event}:`, { id: errId, message: errMsg.slice(0, 200) })
+}

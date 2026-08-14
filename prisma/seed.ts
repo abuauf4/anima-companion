@@ -22,34 +22,36 @@ import bcrypt from 'bcryptjs'
 // backdoor that anyone reading this public source file could use to sign in
 // as admin.
 //
-// To prevent that, the demo-user creation block is SKIPPED entirely when
-// `NODE_ENV === 'production'` AND the env var `SEED_DEMO_USERS_IN_PRODUCTION`
-// is not set to the literal string `'1'`. In normal production deployments
-// (Coolify / Vercel / Railway) NODE_ENV is `'production'` and
-// `SEED_DEMO_USERS_IN_PRODUCTION` is unset, so the demo users are NOT seeded.
+// HARD-DISABLED IN PRODUCTION — NO OVERRIDE:
+// In production (`NODE_ENV === 'production'`) the demo-user creation block is
+// SKIPPED UNCONDITIONALLY. There is NO escape hatch — the previous
+// `SEED_DEMO_USERS_IN_PRODUCTION=1` override was removed because allowing any
+// path back to a known-password admin in production defeats the entire
+// purpose of the guard. If you genuinely need to (re)create an admin in
+// production, do it via `SEED_ADMIN_EMAIL` + `SEED_ADMIN_PASSWORD` (which
+// creates exactly one admin with YOUR chosen credentials, NOT the demo
+// password) or via Prisma Studio / psql directly. The demo credentials must
+// never be a possible production login surface.
 //
 // Catalog data (categories, products, banners, vouchers, FAQs, testimonials,
 // pet types, problems) is seeded regardless of NODE_ENV, because that data
 // is real catalog content the application needs at runtime. Only the
 // demo-user accounts are gated.
-//
-// To bootstrap a production admin safely, run the seed (which will skip demo
-// users) and then either:
-//   1. Manually create the first admin via Prisma Studio / psql, OR
-//   2. Set SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD env vars and re-run the
-//      seed (the bootstrap-admin branch below will create exactly one admin
-//      with those credentials instead of the demo admin).
 // ============================================================================
 const IS_PRODUCTION = process.env.NODE_ENV === 'production'
-const SKIP_DEMO_USERS_IN_PRODUCTION =
-  IS_PRODUCTION && process.env.SEED_DEMO_USERS_IN_PRODUCTION !== '1'
+// In production, demo users are HARD-DISABLED. There is no override env var.
+// If someone accidentally sets SEED_DEMO_USERS_IN_PRODUCTION=1 in production
+// env, it is intentionally ignored — the demo password is public in this
+// source file and must never be reachable from a production deployment.
+const SKIP_DEMO_USERS_IN_PRODUCTION = IS_PRODUCTION
 
 async function main() {
   console.log('🌱 Seeding Anima Companion — Real Brand Edition (PT Sutan Vet Medika, Bogor)...')
   if (SKIP_DEMO_USERS_IN_PRODUCTION) {
     console.log('🔒 NODE_ENV=production detected — skipping demo admin/customer users.')
-    console.log('   To force-seed demo users in production, set SEED_DEMO_USERS_IN_PRODUCTION=1.')
-    console.log('   (NOT recommended — demo passwords are public in this source file.)')
+    console.log('   Demo credentials are HARD-DISABLED in production (no override).')
+    console.log('   To bootstrap the first admin, set SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD env vars')
+    console.log('   and re-run this seed; or create one manually via Prisma Studio / psql.')
   }
 
   // ==================== CLEAN UP (correct FK order) ====================
@@ -75,8 +77,10 @@ async function main() {
   await db.user.deleteMany()
 
   // ==================== ADMIN USER ====================
-  // Demo admin is created ONLY in non-production OR when explicitly opted-in
-  // via SEED_DEMO_USERS_IN_PRODUCTION=1. See the file header for rationale.
+  // Demo admin is created ONLY in non-production. In production the demo
+  // block is hard-disabled (no override env var) because the demo password
+  // is public in this source file. To bootstrap a production admin, use
+  // SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD (handled in the else branch below).
   let adminId: string | null = null
   if (!SKIP_DEMO_USERS_IN_PRODUCTION) {
     const adminPassword = await bcrypt.hash('admin123', 10)
@@ -117,8 +121,9 @@ async function main() {
   }
 
   // ==================== DEMO CUSTOMER ====================
-  // Demo customer is created ONLY in non-production OR when explicitly
-  // opted-in via SEED_DEMO_USERS_IN_PRODUCTION=1.
+  // Demo customer is created ONLY in non-production. In production the demo
+  // block is hard-disabled (no override env var) because the demo password
+  // is public in this source file.
   let customerId: string | null = null
   if (!SKIP_DEMO_USERS_IN_PRODUCTION) {
     const customerPassword = await bcrypt.hash('customer123', 10)

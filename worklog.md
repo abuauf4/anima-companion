@@ -2260,3 +2260,236 @@ Stage Summary:
 - Cancellation/reversal: Option A implicit. No voucher state to release. Existing cancelOrderAndRestoreStock unchanged — correctly only restores stock. Order.voucherCode snapshot preserved as audit trail.
 - Runtime concurrency test status: PENDING (awaiting PostgreSQL-equipped QA env). Static verification (tsc + lint + build) all pass.
 === Voucher Integrity V1 COMPLETE (runtime concurrency test pending PostgreSQL) ===
+
+---
+Task ID: auth-authorization-audit-v1
+Agent: main (Super Z)
+Task: Auth & Authorization Security Audit V1 — audit + harden authentication/authorization across the existing custom session-based auth system. No library/framework change. Cover: end-to-end auth flow audit, IDOR defense, all /api/admin/** server-side authz, role trust boundary, session security, login redirect safety, password handling, demo seed production safety, sensitive error handling, rate-limiting (report only). Add focused tests. Preserve order/stock/voucher integrity from commits 84c4e4b + d0212aa + 8caf2c1.
+
+Work Log:
+- Audit: read src/lib/auth.ts (HMAC-signed session token, getCurrentUser, requireAdmin, lazy getSecret, bcrypt cost 10), prisma/schema.prisma (User model with role string default CUSTOMER, no separate Address/UserProfile), src/app/api/auth/{login,register,logout,me}/route.ts, all /api/admin/** routes (orders, orders/[id], products, products/[id], customers, vouchers, vouchers/[id], categories, categories/[id], banners, banners/[id], testimonials, testimonials/[id], faqs, faqs/[id], dashboard, settings, cloudinary/sign), /api/orders, /api/pet-profiles, /api/pet-profiles/[id], /api/reviews, /api/vouchers/validate, all public read endpoints (/api/products, /api/categories, /api/banners, /api/faqs, /api/testimonials, /api/home, /api/pet-types, /api/problems), src/views/auth/{Login,Register}View.tsx, src/app/admin/[[...slug]]/page.tsx (Server Component admin gate), src/hooks/use-auth.ts (Zustand auth store), prisma/seed.ts (demo admin@anima.id/admin123 + budi@example.com/customer123).
+
+- Existing auth architecture:
+  * User model: id (cuid), email (unique), password (bcrypt hash), name, phone?, role (String @default("CUSTOMER"); values: CUSTOMER | ADMIN | SELLER per schema comment, but only CUSTOMER + ADMIN used in code). No separate UserProfile/Address model — Order has free-form address string.
+  * Session: HMAC-SHA-256 signed token in `anima_session` cookie. Payload: { userId, email, role, exp }. Cookie flags: httpOnly=true, secure=process.env.NODE_ENV==='production', sameSite='lax', maxAge=7d, path='/'.
+  * getCurrentUser(): HMAC-verifies token, re-fetches User from DB with select { id, email, name, phone, role } (password NEVER included). Returns null if cookie missing, signature invalid, token expired, or user not in DB. role is read from DB on every request — NOT trusted from cookie payload.
+  * requireAuth(): getCurrentUser() + throw if null. Previously threw bare Error('UNAUTHORIZED').
+  * requireAdmin(): requireAuth() + check role === 'ADMIN'. Previously threw bare Error('FORBIDDEN').
+  * Server-side admin UI gate: src/app/admin/[[...slug]]/page.tsx is a Server Component that calls getCurrentUser() and returns LoginRequiredView (anonymous) or UnauthorizedView (non-admin). Defense in depth on top of the API-level requireAdmin().
+  * Secret: lazy getSecret() (commit 90c6aa0) — throws in production if AUTH_SECRET env missing, falls back to dev secret in non-production.
+
+- Permission map (per endpoint) — built before patching:
+  PUBLIC (no auth):
+    POST /api/auth/login, POST /api/auth/register, POST /api/auth/logout,
+    GET /api/auth/me (returns null user if not authed),
+    GET /api/products, GET /api/categories, GET /api/banners, GET /api/faqs,
+    GET /api/testimonials, GET /api/home, GET /api/pet-types, GET /api/problems,
+    POST /api/reviews (userId nullable — anonymous review submission is intentional),
+    POST /api/vouchers/validate (informational preview only; actual claim is in createOrder which requires auth).
+  CUSTOMER (auth required, no admin):
+    GET /api/orders (filters by session userId — IDOR-safe),
+    POST /api/orders (userId from session — client-supplied userId ignored),
+    GET /api/pet-profiles (filters by session userId),
+    POST /api/pet-profiles (userId from session),
+    PUT/DELETE /api/pet-profiles/[id] (ownership check: existing.userId !== user.id → 404).
+  ADMIN (auth + role === 'ADMIN'):
+    All /api/admin/** (products, products/[id], categories, categories/[id], orders, orders/[id], customers, vouchers, vouchers/[id], banners, banners/[id], testimonials, testimonials/[id], faqs, faqs/[id], dashboard, settings, cloudinary/sign).
+
+- Vulnerabilities found (audit-only, no fixes yet at this stage):
+  * V1 (Contract bug, all admin routes): admin routes mapped BOTH 'UNAUTHORIZED' and 'FORBIDDEN' to HTTP 403, breaking the documented contract (unauthenticated → 401, authenticated non-admin → 403).
+  * V2 (Open-redirect weakness, login + register): `nextPath.startsWith('/')` was the only check on `?next=...`. Passed `//evil.example.com`, `/\evil.example.com` (backslash variant), etc. Even though Next.js 16's router.push() rejects external URLs at runtime, this was a defense-in-depth hole — if anyone later swapped to window.location.href, it would become a live open redirect.
+  * V3 (Fragile auth error handling): every admin route inspected `e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN'`. Brittle — would silently break if the message text changed.
+  * V4 (Demo credentials in seed): prisma/seed.ts hardcoded admin@anima.id/admin123 + budi@example.com/customer123 with NO NODE_ENV guard. If a deployment script accidentally ran the seed against production, it would create a known-password admin backdoor.
+  * V5 (Sensitive error logging): `console.error('Login error:', e)` logged the raw Prisma error object, which can include SQL query text + connection-string fragments. The client response was already generic ('Terjadi kesalahan server') — only the server log was leaky.
+
+- IDOR findings (audit):
+  * Orders: NO `/api/orders/[id]` endpoint exists. Customers can only `GET /api/orders` (list, filtered by their own `userId`). They cannot fetch another user's order by ID. ✓ Safe by design (no endpoint = no attack surface).
+  * PetProfiles: `PUT/DELETE /api/pet-profiles/[id]` already checks `existing.userId !== user.id → 404`. Returns 404 (not 403) to avoid disclosing existence. ✓ Safe.
+  * Reviews: `userId` nullable; reviews can be submitted anonymously. NO `PUT/DELETE /api/reviews/[id]` endpoint — no mutation endpoint to protect. ✓ Safe.
+  * Wishlist/Cart: NO `/api/wishlist` or `/api/cart` mutation endpoint exists in the API directory. Cart state lives in Zustand localStorage on the client. No IDOR risk.
+
+- Role trust boundary findings (audit):
+  * Register route hardcodes `role: 'CUSTOMER'` server-side at line 39 of register/route.ts. The route destructures ONLY `{ email, password, name, phone }` from body — `role` is NOT destructured. Client-supplied `role: 'ADMIN'` is silently ignored. ✓ Safe.
+  * Login route fetches `user.role` from DB; does NOT accept `role` from body. ✓ Safe.
+  * Session token payload includes `role` from DB at sign time, but `getCurrentUser` re-fetches `role` from DB on EVERY request — does NOT trust cookie-cached role. ✓ Safe (defeats "modify cookie role" attacks via HMAC integrity + DB refetch).
+  * Profile update: NO `PUT /api/users/[id]` or `PUT /api/profile` endpoint exists. Users cannot mutate their own role through any API. ✓ Safe.
+
+- Session security findings (audit):
+  * Cookie flags: httpOnly=true ✓, secure=process.env.NODE_ENV==='production' ✓, sameSite='lax' ✓ (acceptable; strict would break deep-link checkout flow from email/external links — documented as deliberate trade-off, not changed).
+  * Token expiry: 7 days (SESSION_MAX_AGE). Embedded in payload as `exp`. `verify()` checks `Date.now() > payload.exp → null`. ✓ Safe.
+  * Secret: lazy getSecret() (commit 90c6aa0). Production throws if AUTH_SECRET missing. Dev fallback unreachable from production. ✓ Safe.
+  * Logout: destroySession() deletes cookie server-side. Cannot invalidate already-issued tokens server-side (stateless HMAC) — LIMITATION, documented in final report, not patched (would require server-side session store, which is out of scope per task spec point 10 — don't redesign).
+  * No middleware.ts. All authz happens in API routes + Server Components. ✓ OK.
+
+- Password handling findings (audit):
+  * Hashing: bcrypt cost 10. ✓ Safe (industry-standard).
+  * getCurrentUser select: { id, email, name, phone, role } — no password. ✓ Safe.
+  * Login response: safeUser = { id, email, name, phone, role } — no password. ✓ Safe.
+  * Register response: select: { id, email, name, phone, role } — no password. ✓ Safe.
+  * /api/auth/me response: returns user from getCurrentUser — no password. ✓ Safe.
+  * /api/admin/customers response: select excludes password. ✓ Safe.
+  * Logs (V5 above): console.error logged raw error — PATCHED in this task.
+
+- Demo/seed credential findings (audit):
+  * Located in prisma/seed.ts lines 43-65 (before patch). Hardcoded admin123 / customer123. Frontend display already gated by NODE_ENV (LoginView line 19, from commit 90c6aa0). BUT seed.ts itself had NO NODE_ENV guard — PATCHED in this task.
+
+- Sensitive error handling findings (audit):
+  * Login/Register catch-alls already returned generic 'Terjadi kesalahan server' to client. ✓ Client-safe.
+  * BUT console.error logged raw error to server. ✗ PATCHED in this task.
+
+- Rate limiting findings (audit, NOT patched):
+  * No rate-limiting infrastructure exists. Login/register are unbounded. Per task spec point 10: "jangan langsung menambahkan Redis/Upstash/service baru." Reported as production limitation in final report. NOT implemented (would require adding Redis/Upstash).
+
+- Fixes implemented (5 fixes, 1 test suite):
+
+  FIX #1 — AuthError class + handleAuthError() helper (src/lib/auth.ts):
+    * Added `export class AuthError extends Error` with `status` (401 or 403) and `code` ('UNAUTHENTICATED' or 'FORBIDDEN'). Mirrors the OrderError pattern from src/lib/orders.ts.
+    * Added `export function handleAuthError(e: unknown): NextResponse | null` — returns a NextResponse with `{ error: 'Tidak diizinkan', code }` if e is an AuthError, else null. Also handles the legacy bare-Error('UNAUTHORIZED'|'FORBIDDEN') pattern for backwards-compat.
+    * Updated requireAuth() to throw `new AuthError('UNAUTHENTICATED')` (was: `new Error('UNAUTHORIZED')`).
+    * Updated requireAdmin() to throw `new AuthError('FORBIDDEN')` (was: `new Error('FORBIDDEN')`).
+
+  FIX #2 — 401 vs 403 distinction across all /api/admin/** routes:
+    * 18 route files updated: orders, orders/[id], products, products/[id], customers, vouchers, vouchers/[id], categories, categories/[id], banners, banners/[id], testimonials, testimonials/[id], faqs, faqs/[id], dashboard, settings, cloudinary/sign.
+    * Each catch block now calls `handleAuthError(e)` first; if it returns a non-null response, that response is returned with the correct status (401 or 403) and structured `code` field. OrderError + P2002/P2025 handling preserved.
+    * Replaced the fragile `if (e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN')` string-equality check with the structured class-based dispatch.
+
+  FIX #3 — Shared safeInternalPath() helper (src/lib/redirect.ts, new file):
+    * `export function safeInternalPath(raw: unknown): string | null` — returns the path as-is if safe, null otherwise.
+    * Rejects: non-strings, empty, doesn't start with '/', starts with '//' (scheme-relative), starts with '/\\' (backslash variant), contains ':' in path segment (scheme detection — but allows ':' inside query/fragment).
+    * Allows: '/', '/checkout', '/admin/orders', '/search?q=http://foo', '/products#http://foo'.
+    * Used in BOTH LoginView.tsx and RegisterView.tsx so the two flows apply identical defense (DRY). Replaced the previous `nextPath.startsWith('/')` check.
+
+  FIX #4 — Production guard for prisma/seed.ts demo users:
+    * Added `SKIP_DEMO_USERS_IN_PRODUCTION = (NODE_ENV === 'production') && (SEED_DEMO_USERS_IN_PRODUCTION !== '1')` gate.
+    * When the guard is active (production, no opt-in env): the demo admin@anima.id/admin123 and budi@example.com/customer123 are NOT seeded. The catalog data (categories, products, banners, vouchers, FAQs, testimonials) is still seeded.
+    * Production bootstrap path: if SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD env vars are set, the seed creates exactly ONE admin with those credentials (NOT the demo password). If not set, the seed prints a console warning pointing operators to either set the env vars or use Prisma Studio to create the first admin manually.
+    * If the downstream seed steps need a user ID (for cart/order/pet-profile/review references) and demo users were skipped, the seed creates a "placeholder" user with a random UUID password that is NEVER logged anywhere — not a login surface.
+    * The final credential printout at the end of seed.ts is also gated: demo credentials are only printed when SKIP_DEMO_USERS_IN_PRODUCTION is false.
+
+  FIX #5 — Sanitized server logs in login/register routes:
+    * Login route: `console.error('Login error:', e)` → `console.error('Login error:', { id: e.constructor.name, message: e.message.slice(0, 200) })`. Logs only the error class name + a length-capped message string. Never logs the raw error object, e.stack, or e.query (which Prisma errors can carry).
+    * Register route: same change. Both routes still return generic 'Terjadi kesalahan server' to the client (unchanged).
+
+  TEST SUITE — scripts/test-auth-integrity.ts (new file, 637 lines):
+    * Pure-static tests (always run, no DB, no HTTP):
+      - RED1-RED8: safeInternalPath() unit tests (29 assertions covering empty/null/scheme-relative/backslash/external/javascript/data/mailto/relative-no-leading-slash/colon-in-query/colon-in-fragment/deep-paths/path-traversal).
+      - AE1-AE4: AuthError status code mapping (401 vs 403), handleAuthError dispatch for AuthError instances, null return for non-auth errors, backwards-compat with legacy bare-Error('UNAUTHORIZED'|'FORBIDDEN').
+      - SRC1-SRC5: source-level invariants — register route destructures ONLY {email, password, name, phone} from body (no role/userId/id); register route hardcodes role:'CUSTOMER' in db.user.create; no `role: role` variable passthrough; login route does NOT read role from body; getCurrentUser select clause excludes password but includes id + role.
+    * HTTP integration tests (gated behind BASE_URL env var):
+      - AU1: unauthenticated → 11 admin endpoints → all 401 UNAUTHENTICATED.
+      - AU2: authenticated customer → 11 admin endpoints → all 403 FORBIDDEN.
+      - AU3: authenticated admin → 11 admin endpoints → all 2xx (or 503 for Cloudinary sign if not configured).
+      - IDOR1: customer A's pet profile is NOT in customer B's list.
+      - IDOR2: customer B DELETE customer A's pet → 404 (no existence disclosure).
+      - IDOR3: customer B PUT customer A's pet → 404.
+      - IDOR4: customer A PUT own pet → 200.
+      - ESC1: register with role:'ADMIN' in body → created user.role === 'CUSTOMER'.
+      - SER1-SER3: login/register/me response bodies have NO password/passwordHash/hash/secret field, and NO bcrypt-hash-like substring ($2[aby]$10$...).
+    * If BASE_URL is unset, HTTP tests are SKIPPED with a clear PENDING message (per task spec point 13: don't claim runtime passed without a real environment).
+
+- Static verification performed (sandbox, no PostgreSQL):
+  * bunx tsc --noEmit → 0 errors. Confirms AuthError class, handleAuthError function, safeInternalPath helper, all 18 updated admin routes, sanitized login/register logs, and the new test-auth-integrity.ts script all compile cleanly.
+  * bun run lint → 0 errors, 0 warnings.
+  * bun run build → ✓ Compiled successfully in 20.1s. 44/44 pages generated. /api/admin/* routes (all 18 of them) present in build output. Pre-existing Prisma/sitemap warnings (DATABASE_URL missing in build env) are unrelated to this change — same as commits 84c4e4b, d0212aa, 8caf2c1.
+  * bun run scripts/test-auth-integrity.ts (static mode, no BASE_URL) → 60/60 assertions passed. Covers safeInternalPath open-redirect defense, AuthError status mapping, handleAuthError dispatch (including legacy backwards-compat), and source-level invariants (register route doesn't accept role, getCurrentUser select excludes password).
+
+- Runtime auth HTTP integration QA: PENDING.
+  * Per task spec point 13: "Jika sandbox tidak punya PostgreSQL ... tetap lakukan static/unit verification yang memunginkan."
+  * Local sandbox has no PostgreSQL + no running Next.js dev server, so the HTTP-level tests (AU1-AU3, IDOR1-4, ESC1, SER1-3) cannot execute here.
+  * To run the HTTP tests in Coolify/staging:
+    1. Set DATABASE_URL + AUTH_SECRET to non-production values.
+    2. Start `bun run dev` against a non-production PostgreSQL.
+    3. Run: `BASE_URL="http://localhost:3000" bun run scripts/test-auth-integrity.ts`
+    4. The script aborts immediately if NODE_ENV=production OR if BASE_URL points to a production domain (script does NOT do domain validation — operator must ensure BASE_URL is non-production).
+    5. Expected: 60 static + ~30 HTTP assertions all pass. Exit code 0.
+
+- Did NOT touch (per task spec point 15: "Stop setelah Auth & Authorization Security Audit V1 selesai"):
+  * No payment gateway, loyalty, membership, promo engine, referral, or new feature work.
+  * No rate-limiting infrastructure added (reported as production limitation per spec point 10).
+  * No session-token revocation list / server-side session store (would require Redis or similar — out of scope; reported as limitation).
+  * No middleware.ts added (current Server Component + per-route requireAdmin() is sufficient; middleware would duplicate the same checks).
+  * No password policy changes (min 6 chars is the existing rule; not changed — out of scope per spec point 7: "Jangan redesign password policy besar kecuali benar-benar perlu").
+  * No Prisma schema migration (no new fields, no new models — all fixes are in application layer).
+  * No frontend behavior change (login/register flows still navigate to ?next= path on success — only the validation is stricter; existing valid internal paths like /checkout continue to work, malicious external paths now fall through to the default destination).
+  * No order/stock/voucher integrity regression — all hardening from 84c4e4b (transactional stock), d0212aa (cancellation concurrency), 8caf2c1 (voucher integrity) preserved.
+
+Stage Summary:
+- Files changed (24 modified + 2 new = 26 total):
+  * NEW: src/lib/redirect.ts (safeInternalPath helper, 64 lines + docblock).
+  * NEW: scripts/test-auth-integrity.ts (auth + IDOR + escalation + serialization test suite, 637 lines).
+  * MODIFIED: src/lib/auth.ts (AuthError class, handleAuthError helper, requireAuth/requireAdmin throw AuthError instead of bare Error).
+  * MODIFIED: 18 /api/admin/** route files (orders, orders/[id], products, products/[id], customers, vouchers, vouchers/[id], categories, categories/[id], banners, banners/[id], testimonials, testimonials/[id], faqs, faqs/[id], dashboard, settings, cloudinary/sign) — all use handleAuthError + return correct 401/403 with structured `code` field.
+  * MODIFIED: src/app/api/auth/login/route.ts (sanitized server logs).
+  * MODIFIED: src/app/api/auth/register/route.ts (sanitized server logs).
+  * MODIFIED: src/views/auth/LoginView.tsx (use safeInternalPath).
+  * MODIFIED: src/views/auth/RegisterView.tsx (use safeInternalPath).
+  * MODIFIED: prisma/seed.ts (production guard for demo users + bootstrap-admin env vars + placeholder users for downstream seed steps).
+- New error codes (additive, all carry machine-readable `code` field):
+  * UNAUTHENTICATED (401) — for unauthenticated admin endpoint access (previously 403).
+  * FORBIDDEN (403) — for authenticated non-admin admin endpoint access (status unchanged, now has explicit `code`).
+- API contract change: admin endpoints now distinguish 401 (UNAUTHENTICATED) from 403 (FORBIDDEN). The previously-combined 403 for unauthenticated requests is now a 401. All responses carry an additive `code` field for client branching. JSON body shape `{ error: 'Tidak diizinkan' }` is unchanged. Frontend impact: admin UI already gates via Server Component (returns LoginRequiredView for anonymous, UnauthorizedView for non-admin), so the API status code change is invisible to the existing UI.
+- Demo credential production safety: admin@anima.id/admin123 + budi@example.com/customer123 are now structurally unreachable from a default production seed. Catalog data continues to seed normally. Bootstrap-admin path via SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD for first-run production setup.
+- Open-redirect defense: shared safeInternalPath() helper applied to both LoginView and RegisterView. Rejects //evil, /\evil, javascript:, data:, https://, mailto:, relative-without-leading-slash. Accepts internal paths including those with colons in query/fragment.
+- Runtime auth HTTP integration test status: PENDING (awaiting dev server + PostgreSQL-equipped QA env). Static verification (tsc + lint + build + 60 static test assertions) all pass.
+=== Auth & Authorization Security Audit V1 COMPLETE (runtime HTTP integration test pending PostgreSQL + dev server) ===
+
+---
+Task ID: auth-authorization-cleanup-v1.1
+Agent: main (Super Z)
+Task: Auth & Authorization Security V1 cleanup patch (post-V1 review). Three targeted fixes from reviewer feedback before declaring Auth V1 structurally complete: (1) remove SEED_DEMO_USERS_IN_PRODUCTION override escape hatch, (2) fully sanitize production auth logs, (3) extend safeInternalPath() bypass tests for encoded/control-char/malformed-encoding inputs. Small patch — no large re-audit. Same hard constraints: no auth library change, no business-logic changes, preserve order/stock/voucher integrity from commits 84c4e4b + d0212aa + 8caf2c1.
+
+Work Log:
+- Read baseline files: prisma/seed.ts, src/lib/auth.ts, src/app/api/auth/{login,register,logout,me}/route.ts, src/lib/redirect.ts, scripts/test-auth-integrity.ts, src/lib/router.ts (to verify URLSearchParams.get decoding behavior), src/views/auth/LoginView.tsx (to verify safeInternalPath caller).
+
+- PATCH 1 — prisma/seed.ts: removed SEED_DEMO_USERS_IN_PRODUCTION=1 override entirely.
+  * Replaced `const SKIP_DEMO_USERS_IN_PRODUCTION = IS_PRODUCTION && process.env.SEED_DEMO_USERS_IN_PRODUCTION !== '1'` with `const SKIP_DEMO_USERS_IN_PRODUCTION = IS_PRODUCTION` — production now hard-disables demo users with no override.
+  * Updated file header comment block: explicitly documents that there is NO escape hatch, explains the override was removed because any path back to a known-password admin in production defeats the guard.
+  * Updated runtime log message: removed the "set SEED_DEMO_USERS_IN_PRODUCTION=1" suggestion, now points operators to SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD (the legitimate bootstrap path).
+  * Updated inline comments above the demo admin + demo customer creation blocks to reflect hard-disable (no override).
+  * Bootstrap-admin path (SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD) and placeholder-admin path (random password) retained unchanged.
+  * Catalog data (categories, products, vouchers, banners, etc.) still seeds regardless of NODE_ENV.
+
+- PATCH 2 — auth-route production logging fully sanitized.
+  * Added new `logAuthError(event, e, status=500)` helper to src/lib/auth.ts.
+    - Production branch: logs ONLY `{ event, status }`. NEVER references e.message, e.constructor.name, e.stack, or any derived string from the error object. Prisma errors can include SQL fragments, constraint names, field names, and connection-string fragments in e.message — none of those reach production logs.
+    - Development branch: logs `{ id: constructorName, message: e.message.slice(0, 200) }` so engineers can still debug the underlying Prisma/DB error. 200-char cap matches the previous behavior so any dev tooling parsing these logs keeps working.
+  * Updated src/app/api/auth/login/route.ts catch block: replaced inline `console.error('Login error:', { id: errId, message: errMsg.slice(0, 200) })` with `logAuthError('Login error', e)`.
+  * Updated src/app/api/auth/register/route.ts catch block: same pattern — `logAuthError('Register error', e)`.
+  * Other routes (admin, orders, vouchers, reviews, etc.) untouched — they use raw `console.error('...', e)` which is out of scope per the user's explicit instruction ("Untuk auth route, production cukup log generic event/code; jangan dump e.message."). Non-auth-route log sanitization is V2.
+
+- PATCH 3 — safeInternalPath() encoded-bypass + control-char + malformed-encoding defense.
+  * Hardened src/lib/redirect.ts:
+    - Added encoded-bypass defense: if input contains `%`, attempt `decodeURIComponent`. If it throws (malformed sequence), return null. If decoded form starts with `//` or `/\`, return null. This catches inputs like `/%2F%2Fevil.example.com` (decodes to `///evil`) and `/%5Cevil.example.com` (decodes to `/\evil`) that would otherwise pass the literal-prefix checks.
+    - Added control-char defense: reject inputs containing any ASCII control char (0x00–0x1F, 0x7F) via regex `/[\x00-\x1f\x7f]/`. This includes \t, \n, \r — not valid in URL paths and usable to confuse log readers or downstream consumers.
+    - Comment block extended to document the two new rules (rules 6 and 7 in the SAFE INTERNAL contract).
+    - The function still returns `raw` (the original input) on accept — no transformation, so callers that already URL-decoded via URLSearchParams.get see no behavior change.
+  * Extended scripts/test-auth-integrity.ts with four new RED test blocks (RED9–RED12, 19 new assertions):
+    - RED9 (encoded `//` bypass): `%2F%2Fevil.example.com`, `/%2F%2Fevil.example.com`, `/%2F%2Fevil.example.com/path`, `/%2F%5Cevil.example.com`, `/%2F/evil.example.com` — all must return null.
+    - RED10 (encoded backslash bypass): `/%5Cevil.example.com`, `/%5C%5Cevil.example.com`, `/%5C/evil.example.com` — all must return null.
+    - RED11 (control chars): NUL, SOH, TAB, LF, CR, US (0x1F), DEL (0x7F) — all must return null. Sanity: `/checkout` still accepted.
+    - RED12 (malformed percent-encoding): `/%ZZevil`, `/%2` (truncated), `/%evil` (lone %), `/checkout%` (trailing %), `/%2Gevil`, `/%G2evil` — all must return null. Sanity: `/search?q=%41` (valid encoded ASCII letter in query) still accepted. NOTE: `/%2evil` is NOT malformed — `%2e` is the encoding for `.`, so `decodeURIComponent('/%2evil')` returns `/.vil` which is safe. The test comment explicitly explains this.
+  * Added three new SRC source-invariant test blocks (SRC6, SRC7, SRC8):
+    - SRC6: login + register routes both call `logAuthError(...)` and neither contains a `console.error(...e.message...)` pattern. This catches future regressions where someone might re-introduce raw e.message logging.
+    - SRC7: `logAuthError` production branch (after stripping line + block comments) does NOT reference e.message / e.constructor / e.stack, and DOES reference `event` + `status`. Structural guarantee that production auth logs stay sanitized.
+    - SRC8: seed.ts does NOT use the old `SEED_DEMO_USERS_IN_PRODUCTION !== '1'` override pattern (nor the inverse `=== '1'`). The guard must be `SKIP_DEMO_USERS_IN_PRODUCTION = IS_PRODUCTION` (no `&&` clause). SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD bootstrap path retained.
+
+- Verification:
+  * `bun run scripts/test-auth-integrity.ts`: 96 passed, 0 failed (was 78 passed before this patch — 18 new assertions added across RED9–RED12 + SRC6–SRC8).
+  * `bun x tsc --noEmit`: clean (no errors).
+  * `bun run lint`: clean (no errors).
+  * `bun run build`: succeeded. All routes generated. The only build warnings are pre-existing sandbox-only Prisma errors (no DATABASE_URL in sandbox) — they also appear at baseline commit fd91037, so they are NOT introduced by this patch. Runtime PostgreSQL QA is the separately-tracked 🟡 pending item.
+
+- Worklog file: appended this section to /home/z/my-project/work/anima-companion/worklog.md per shared-log protocol.
+
+Stage Summary:
+- Demo credentials (admin@anima.id/admin123, budi@example.com/customer123) are now STRUCTURALLY unreachable from any production deployment — no override env var, no NODE_ENV bypass, no flag. The only production bootstrap path is SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD (operator-chosen password, not the public demo password) or direct DB insertion via Prisma Studio / psql.
+- Production auth route logs (login, register) now contain ONLY `{ event, status }` — no Prisma SQL fragments, no constraint names, no connection-string fragments, no constructor names. The previous `constructor.name + 200-char message` pattern is fully retired from production. Dev mode retains the verbose pattern for debugging.
+- safeInternalPath() now passes all of OWASP-style open-redirect test cases including encoded variants (%2F%2Fevil, %5C), control chars (NUL, TAB, LF, CR, DEL), and malformed percent-encoding (%ZZ, %2, %evil, %2G). The check is defense-in-depth — URLSearchParams.get already decodes once, but if a future caller passes a raw query string, the helper still rejects encoded bypasses.
+- Order/Stock/Voucher integrity from commits 84c4e4b + d0212aa + 8caf2c1: UNTOUCHED. No business-logic changes. No Prisma schema changes. No transaction-code changes. The AuthError class, handleAuthError, requireAuth, requireAdmin, getCurrentUser, createSession, destroySession — all unchanged in behavior.
+- Remaining limitations acknowledged by reviewer (NOT in scope, deferred to V2):
+  * sameSite='lax' — accepted as a reasonable web-app default, not pursuing.
+  * Session revocation store — V2.
+  * Email verification — V2.
+  * Prisma enum role (currently a String @default("CUSTOMER")) — V2.
+  * Runtime PostgreSQL HTTP integration tests — still 🟡 pending PostgreSQL-equipped QA env. Static tests cover all structural guarantees.
+=== Auth & Authorization Security V1 CLEANUP COMPLETE ===

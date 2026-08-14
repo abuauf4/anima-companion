@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { hashPassword, createSession } from '@/lib/auth'
+import { hashPassword, createSession, logAuthError } from '@/lib/auth'
 
 export async function POST(req: NextRequest) {
   try {
@@ -46,13 +46,11 @@ export async function POST(req: NextRequest) {
     await createSession(user)
     return NextResponse.json({ user })
   } catch (e) {
-    // SECURITY: see login route — same sanitization applies. We log only
-    // the error class name + a length-capped message string. Never the
-    // raw error object or stack trace, because Prisma errors can carry
-    // query SQL + connection fragments.
-    const errId = e instanceof Error ? e.constructor.name : typeof e
-    const errMsg = e instanceof Error ? e.message : String(e)
-    console.error('Register error:', { id: errId, message: errMsg.slice(0, 200) })
+    // SECURITY: see login route — same sanitization applies. In production
+    // we log ONLY a stable event label + HTTP status; in development we log
+    // constructor name + length-capped message. See `logAuthError()` in
+    // src/lib/auth.ts for the full contract.
+    logAuthError('Register error', e)
     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 })
   }
 }
