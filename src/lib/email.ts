@@ -300,3 +300,59 @@ Tim Anima Companion
 PT Sutan Vet Medika`
   await getEmailAdapter().send({ to, subject, text })
 }
+
+/**
+ * Send a 6-digit OTP email for email verification (V2 flow).
+ *
+ * The OTP is the RAW 6-digit code. The caller (the register / send-otp
+ * route) is responsible for delivering it via this function IMMEDIATELY
+ * after `issueOtp()` returns, so the `lastSentAt` timestamp recorded at
+ * issuance time matches the actual email dispatch time (the 60-second
+ * resend cooldown is computed against `lastSentAt`).
+ *
+ * SECURITY:
+ *   - In dev, the DevConsoleEmailAdapter prints the OTP to stdout so the
+ *     developer can read it and paste it into the verify-OTP form.
+ *   - In production with EMAIL_PROVIDER=resend, the OTP is sent via Resend
+ *     to the user's email address. The OTP is short-lived (10 min) and
+ *     single-use, so a leaked email has limited usability.
+ *   - The ResendEmailAdapter NEVER logs the email body (which contains
+ *     the OTP) — only the caller's logAuthError catch can surface a
+ *     stable event label.
+ *
+ * WHY A SUBJECT LINE THAT SAYS "Kode verifikasi" (NOT "Click this link"):
+ *   The V1 link-based flow used a clickable link in the email body. The V2
+ *   OTP flow uses a 6-digit code that the user manually enters into the
+ *   verify-OTP form. The subject line and body must make this clear so
+ *   the user doesn't try to click anything in the email.
+ *
+ * @param to The recipient email address.
+ * @param code The RAW 6-digit OTP code. NEVER log this, NEVER return it
+ *             in an API response body.
+ * @param userName Optional recipient name for the greeting.
+ * @param purposeLabel Optional human-readable label for the email's
+ *                     purpose (e.g. "verifikasi email" or "reset password").
+ *                     Defaults to "verifikasi email".
+ */
+export async function sendOtpEmail(
+  to: string,
+  code: string,
+  userName?: string,
+  purposeLabel: string = 'verifikasi email'
+): Promise<void> {
+  const subject = `Kode ${purposeLabel} Anda — ${code}`
+  const text = `Halo${userName ? ' ' + userName : ''},
+
+Berikut adalah kode ${purposeLabel} untuk akun Anima Companion Anda:
+
+    ${code}
+
+Kode ini berlaku selama 10 menit dan hanya bisa digunakan satu kali.
+
+Jika Anda tidak meminta kode ini, abaikan email ini — akun Anda tetap aman.
+
+Salam,
+Tim Anima Companion
+PT Sutan Vet Medika`
+  await getEmailAdapter().send({ to, subject, text })
+}

@@ -62,16 +62,27 @@ export function RegisterView() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      toast.success(`Akun dibuat! Selamat datang, ${data.user.name}!`)
       await refresh()
-      // Go back to the page the user was trying to reach (e.g. /checkout),
-      // otherwise fall through to the homepage.
-      // safeInternalPath returns null for any external / malformed value.
-      if (nextPath) {
-        navigate(nextPath)
+      // Account Recovery & Verification V2:
+      // After successful registration, the user is logged in but UNVERIFIED.
+      // Redirect them to /verify-email where they can enter the 6-digit OTP
+      // we just emailed. The OTP send is best-effort on the server side —
+      // if `data.otpSent` is false (e.g. email adapter not configured), the
+      // /verify-email page's "Kirim ulang" button lets them retry.
+      //
+      // We DO NOT honor ?next=... here anymore. The user must verify their
+      // email before they can proceed to checkout / their target page.
+      // The /verify-email page itself can carry `?next=...` forward and
+      // redirect there after successful verification (stage 3).
+      if (data.otpSent) {
+        toast.success(`Akun dibuat! Kode verifikasi telah dikirim ke ${form.email}.`)
       } else {
-        navigate('/')
+        toast.success(`Akun dibuat! Klik "Kirim ulang" untuk menerima kode verifikasi.`)
       }
+      // Preserve the original ?next=... so /verify-email can redirect there
+      // after a successful OTP verification.
+      const verifyUrl = nextPath ? `/verify-email?next=${encodeURIComponent(nextPath)}` : '/verify-email'
+      navigate(verifyUrl)
     } catch (e: any) {
       toast.error(e.message || 'Gagal mendaftar')
     } finally {

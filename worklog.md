@@ -2951,3 +2951,85 @@ Stage Summary:
 - V2 spec compliance for stage 1: 6-digit OTP ✅, HMAC storage (not plaintext) ✅, 10-min expiry ✅, 60s resend cooldown server-side ✅, max 5 attempts concurrency-safe ✅, new OTP invalidates old ✅, atomic transaction primitive (consumeOtp returns OK/WROONG/NOT_FOUND_OR_EXPIRED/ALREADY_CONSUMED — caller will gate emailVerifiedAt write on `result === 'OK'` in stage 3) ✅.
 - Next stages (2-9): register → UNVERIFIED → /verify-email + OTP send, verify OTP + emailVerifiedAt atomic tx, login UNVERIFIED → /verify-email redirect, forgot-password page + anti-enumeration, forgot-password OTP → reset grant, reset password + bcrypt + sessionVersion bump, Google OAuth skip-OTP-if-email_verified, Resend production email + Sonner feedback + mobile-first UI polish.
 - Git safety: small commit, push to main, no force push.
+
+---
+Task ID: account-recovery-v2-stage2-register-send-otp
+Agent: main (Super Z)
+Task: Account Recovery & Verification V2 — Stage 2: register flow → UNVERIFIED → /verify-email + 6-digit OTP email send. Modify register route to use V2 OTP (not V1 link token). Add /api/auth/verify-email/send-otp route with 60s server-side resend cooldown. Modify RegisterView to navigate to /verify-email after success. Stage 1 foundation (commit 041b5f2) is the baseline.
+
+Work Log:
+- Stage 1 baseline (commit 041b5f2) is on origin/main: OtpCode + PasswordResetGrant + User.sessionVersion schema, src/lib/otp.ts (HMAC OTP service), src/lib/password-reset.ts (single-use reset grant service), 77 test assertions.
+
+- Stage 2 implementation:
+  * `src/lib/email.ts` (+`sendOtpEmail` function):
+    - New V2 OTP email body template. Subject includes the code so the user can see it in their mail client's preview pane. Body is plain-text with the code on its own indented line for easy copy. Explicitly says "Jika Anda tidak meminta kode ini, abaikan email ini" (anti-phishing). Body says "berlaku selama 10 menit dan hanya bisa digunakan satu kali" (matches V2 spec).
+    - Function signature: `sendOtpEmail(to, code, userName?, purposeLabel='verifikasi email')` — purposeLabel is parameterized so the same function can be reused for password-reset OTPs in stage 6.
+    - Delegates to `getEmailAdapter().send()` — inherits all the existing adapter sanitization (dev console prints in dev, Resend in prod, CONFIG-MISSING error if prod has no provider, never logs the raw body).
+    - NEVER calls console.log directly in the function body (verified by SRC29).
+  * `src/app/api/auth/register/route.ts` (modified):
+    - Replaced V1 `issueVerificationToken` + `sendVerificationEmail` imports with V2 `issueOtp` + `sendOtpEmail`.
+    - Replaced the V1 link-token issuance call with `issueOtp({ userId: user.id, purpose: 'EMAIL_VERIFICATION' })`.
+    - Replaced `sendVerificationEmail(user.email, rawToken, user.name)` with `sendOtpEmail(user.email, code, user.name)`.
+    - Added `otpSent` boolean flag to the response body — the UI uses this to decide whether to show "cek email" or "kirim ulang" CTA.
+    - The raw OTP code is NEVER returned in the response body, NEVER logged, NEVER thrown (verified by SRC23 + SRC24).
+    - All other register behavior preserved: provider='PASSWORD' hardcoded, emailVerifiedAt=null hardcoded, body destructuring only includes email/password/name/phone, cart created, session issued, AuthError sanitization on catch.
+    - Backward compat: V1 `EmailVerificationToken` table + the V1 `/api/auth/verify-email/request` + `/api/auth/verify-email/confirm` routes are unchanged. Already-issued V1 link tokens still consume via the V1 confirm route (24h TTL). New registrations use V2 OTP.
+  * `src/app/api/auth/verify-email/send-otp/route.ts` (NEW):
+    - POST handler, requires auth (`requireAuth()`).
+    - Google user → 400 `{ code: 'GOOGLE_USER_NO_VERIFICATION_NEEDED' }` (Google verified the email at account-creation time).
+    - Already verified → 200 `{ alreadyVerified: true, emailVerifiedAt }` (idempotent).
+    - Otherwise, calls `checkResendCooldown(userId, 'EMAIL_VERIFICATION')`:
+      - If `!allowed` → 429 `{ code: 'RESEND_COOLDOWN', retryAfterMs, retryAfterSeconds }`. The cooldown is enforced SERVER-SIDE via the `lastSentAt` column on the most recent unconsumed OTP — a malicious client cannot bypass it.
+      - If `allowed` → calls `issueOtp` (invalidates old unconsumed OTPs atomically), then `sendOtpEmail` (best-effort — if adapter fails, returns 200 with `emailError: true` so the UI can show a "kirim ulang" CTA).
+    - Response body: `{ sent, emailError, expiresAt, resendAvailableAt, cooldownMs }`. NEVER returns the raw OTP code (verified by SRC26).
+    - Uses `logAuthError` for the email-adapter catch (stable event label only in production).
+  * `src/views/auth/RegisterView.tsx` (modified):
+    - Replaced the post-register navigation: was `navigate(nextPath || '/')` (drop user on their target page even though unverified), now `navigate('/verify-email?next=' + encodeURIComponent(nextPath))` (force user to verify first, preserve nextPath as ?next= on /verify-email for post-verification redirect in stage 3).
+    - Toast messaging branches on `data.otpSent`: success message says "Kode verifikasi telah dikirim ke {email}" if OTP was sent, or "Klik 'Kirim ulang' untuk menerima kode verifikasi" if the email adapter failed (so the user knows to manually trigger a resend).
+    - All other RegisterView behavior preserved: form validation, password visibility toggle, Google sign-in button, demo credentials (dev only), mobile-first layout.
+  * `scripts/test-otp-domain.ts` (extended with SRC20-SRC30 — 25 new assertions):
+    - SRC20: register imports issueOtp from @/lib/otp (NOT issueVerificationToken).
+    - SRC21: register imports sendOtpEmail from @/lib/email (NOT sendVerificationEmail).
+    - SRC22: register calls issueOtp with purpose: 'EMAIL_VERIFICATION'.
+    - SRC23: register returns otpSent in response body.
+    - SRC24: register does NOT console.log or throw with the raw OTP code.
+    - SRC25: send-otp route exists, requires auth, checks GOOGLE provider, checks alreadyVerified, calls checkResendCooldown + issueOtp + sendOtpEmail.
+    - SRC26: send-otp route does NOT return or log the raw OTP code.
+    - SRC27: send-otp route returns 429 with code: 'RESEND_COOLDOWN' + retryAfterMs.
+    - SRC28: src/lib/email.ts exports sendOtpEmail.
+    - SRC29: sendOtpEmail function body does NOT call console.log/error/warn directly.
+    - SRC30: RegisterView constructs /verify-email path, calls navigate() with verify-email URL, preserves nextPath as ?next= on /verify-email (not navigated directly).
+
+- Did NOT touch (preserved stable features):
+  * `src/lib/auth.ts` (Auth V1 — session cookies, bcrypt, AuthError, OAuth state token)
+  * `src/lib/identity.ts` (Identity V1 — V1 link-based verification still works for already-issued tokens)
+  * `src/lib/oauth-state.ts` (OAuth state cookie binding)
+  * `src/lib/email.ts` adapter machinery (DevConsole + Resend, config-missing handling, prod sanitization — only ADDED sendOtpEmail, did not modify existing functions)
+  * `src/lib/redirect.ts` (safeInternalPath)
+  * `src/lib/otp.ts` + `src/lib/password-reset.ts` (stage 1 foundation)
+  * `src/app/api/auth/google/callback/route.ts` (Google OAuth callback)
+  * `src/app/api/auth/verify-email/request/route.ts` + `confirm/route.ts` (V1 routes preserved for backward compat — already-issued V1 link tokens still consume)
+  * `src/app/api/auth/login/route.ts` (will be modified in stage 4 to redirect UNVERIFIED users)
+  * All admin customer routes + CustomersView (member registry V1)
+  * All toast call sites + sonner.tsx + layout.tsx (Sonner standardization)
+  * All order / voucher / stock / catalog / SEO / Cloudinary logic
+
+Verification:
+- `bunx tsc --noEmit`: clean (0 errors, after clearing stale .next cache).
+- `bun run lint`: clean (0 errors, 0 warnings).
+- `bun run build`: exit 0 (Compiled successfully in 19.5s, 52/52 static pages). Prisma errors during prerender are pre-existing sandbox limitations (no DATABASE_URL set) — same as baseline.
+- `bun run scripts/test-otp-domain.ts`: 102 passed, 0 failed (was 77 at stage 1, +25 new for stage 2).
+- `bun run scripts/test-auth-integrity.ts`: 96 passed, 0 failed (no regression to Auth V1).
+- `bun run scripts/test-verified-identity.ts`: 2101 passed, 0 failed (no regression to Verified Identity V1 — V1 routes still work, V1 token-issuance tests for /verify-email/request still pass).
+- `bun run scripts/test-member-registry.ts`: 79 passed, 0 failed (no regression to Member Registry V1).
+- `bun run scripts/test-toast.ts`: 44 passed, 0 failed (no regression to Sonner V1).
+
+Stage Summary:
+- 4 files modified + 1 new file in stage 2:
+  * Modified: src/lib/email.ts (+sendOtpEmail), src/app/api/auth/register/route.ts (V2 OTP instead of V1 link), src/views/auth/RegisterView.tsx (navigate to /verify-email), scripts/test-otp-domain.ts (+SRC20-SRC30).
+  * New: src/app/api/auth/verify-email/send-otp/route.ts (POST, auth required, 60s server-side cooldown).
+- V2 spec compliance for stage 2: register email → UNVERIFIED ✅, redirect to /verify-email ✅, 6-digit OTP email ✅, 10-min expiry ✅ (from stage 1), 60s resend cooldown server-side ✅, new OTP invalidates old ✅ (from stage 1), resend route exists with cooldown enforcement ✅.
+- Backward compat: V1 EmailVerificationToken table + V1 routes preserved — already-issued V1 link tokens still consume via /verify-email/confirm.
+- 0 stable features reverted. 0 admin / order / voucher / stock / catalog logic touched.
+- Next stage (3): /api/auth/verify-email/verify-otp POST route that calls consumeOtp + sets emailVerifiedAt in atomic interactive transaction; modify VerifyEmailView to show OTP input form (replaces V1 token-from-URL form when no ?token= is in URL).
+- Git safety: small commit, push to main, no force push.

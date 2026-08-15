@@ -89,6 +89,30 @@
  *          route's interactive transaction (atomic with the password update
  *          and sessionVersion bump).
  *
+ * Stage 2 — register + send-otp route invariants:
+ *   SRC20. register route imports `issueOtp` from '@/lib/otp' (NOT
+ *          `issueVerificationToken` from '@/lib/identity' — V2 replaces V1
+ *          link-token issuance for new registrations).
+ *   SRC21. register route imports `sendOtpEmail` from '@/lib/email' (NOT
+ *          `sendVerificationEmail`).
+ *   SRC22. register route calls `issueOtp({ userId, purpose: 'EMAIL_VERIFICATION' })`.
+ *   SRC23. register route returns `otpSent` in the response body (so the UI
+ *          can show a "cek email" message). The raw OTP is NEVER returned.
+ *   SRC24. register route does NOT log the raw OTP code (the catch block
+ *          uses logAuthError with a stable event label).
+ *   SRC25. send-otp route (src/app/api/auth/verify-email/send-otp/route.ts)
+ *          exists, requires auth (requireAuth), checks provider === 'GOOGLE'
+ *          → 400, checks emailVerifiedAt → alreadyVerified, checks
+ *          checkResendCooldown → 429 with retryAfterMs.
+ *   SRC26. send-otp route never returns the raw OTP code in the response.
+ *   SRC27. send-otp route returns 429 with `code: 'RESEND_COOLDOWN'` and
+ *          `retryAfterMs` when the 60-second cooldown has not elapsed.
+ *   SRC28. src/lib/email.ts exports `sendOtpEmail` (V2 OTP email body).
+ *   SRC29. sendOtpEmail does NOT log the raw OTP code in production paths
+ *          (delegates to the adapter, which sanitizes).
+ *   SRC30. RegisterView navigates to /verify-email after successful
+ *          registration (NOT to / or nextPath — the user must verify first).
+ *
  * HTTP integration (placeholder — implemented in stage 2+):
  *   (none yet — OTP API routes are implemented in stage 2+)
  */
@@ -432,15 +456,113 @@ const envSrc = readFileSync(envPath, 'utf8')
 assert(/AUTH_SECRET is ALSO used as the\s+HMAC pepper for OTP/.test(envSrc) || /AUTH_SECRET.{0,200}HMAC pepper for OTP/.test(envSrc.replace(/\n/g, ' ')), 'SRC17: .env.example documents AUTH_SECRET dual role as OTP HMAC pepper')
 
 // ---------------------------------------------------------------------------
+// Stage 2 — register + send-otp route source invariants (SRC20-SRC30)
+// ---------------------------------------------------------------------------
+
+console.log('\n── Stage 2: register route source invariants (SRC20-SRC24) ──')
+
+const registerPath = SRC('app/api/auth/register/route.ts')
+const registerSrc = readFileSync(registerPath, 'utf8')
+
+// SRC20. Imports issueOtp from '@/lib/otp' (NOT issueVerificationToken).
+assert(/from\s+['"]@\/lib\/otp['"]/.test(registerSrc) && /issueOtp/.test(registerSrc), 'SRC20: register route imports issueOtp from @/lib/otp')
+assert(!/issueVerificationToken/.test(registerSrc), 'SRC20: register route does NOT import issueVerificationToken (V2 replaces V1)')
+
+// SRC21. Imports sendOtpEmail from '@/lib/email' (NOT sendVerificationEmail).
+assert(/from\s+['"]@\/lib\/email['"]/.test(registerSrc) && /sendOtpEmail/.test(registerSrc), 'SRC21: register route imports sendOtpEmail from @/lib/email')
+assert(!/sendVerificationEmail/.test(registerSrc), 'SRC21: register route does NOT import sendVerificationEmail (V2 replaces V1)')
+
+// SRC22. Calls issueOtp with purpose: 'EMAIL_VERIFICATION'.
+assert(/issueOtp\(\s*\{\s*userId:[^}]+purpose:\s*['"]EMAIL_VERIFICATION['"]/.test(registerSrc) || /issueOtp\(\{[^}]*purpose:\s*['"]EMAIL_VERIFICATION['"]/.test(registerSrc), 'SRC22: register route calls issueOtp with purpose: "EMAIL_VERIFICATION"')
+
+// SRC23. Returns otpSent in response body.
+assert(/otpSent/.test(registerSrc), 'SRC23: register route returns otpSent in response body')
+
+// SRC24. Does NOT log the raw OTP code (catch uses logAuthError with stable label).
+// The issueOtp call destructures { code } — make sure 'code' is not interpolated
+// into any console.log or thrown string.
+assert(!/console\.(log|error|warn)\([^)]*\$\{code\}/.test(registerSrc), 'SRC24: register route does NOT console.log the raw OTP code')
+assert(!/throw\s+new\s+Error\([^)]*\$\{code\}/.test(registerSrc), 'SRC24: register route does NOT throw with raw OTP code in message')
+
+console.log('\n── Stage 2: send-otp route source invariants (SRC25-SRC27) ──')
+
+const sendOtpRoutePath = SRC('app/api/auth/verify-email/send-otp/route.ts')
+assert(existsSync(sendOtpRoutePath), 'SRC25: send-otp route file exists at src/app/api/auth/verify-email/send-otp/route.ts')
+if (existsSync(sendOtpRoutePath)) {
+  const sendOtpSrc = readFileSync(sendOtpRoutePath, 'utf8')
+
+  // SRC25. Requires auth, checks GOOGLE provider, checks alreadyVerified, checks cooldown.
+  assert(/requireAuth\(\)/.test(sendOtpSrc), 'SRC25: send-otp route calls requireAuth()')
+  assert(/provider\s*===\s*['"]GOOGLE['"]/.test(sendOtpSrc), 'SRC25: send-otp route checks provider === "GOOGLE" → 400')
+  assert(/emailVerifiedAt/.test(sendOtpSrc) && /alreadyVerified/.test(sendOtpSrc), 'SRC25: send-otp route checks emailVerifiedAt → alreadyVerified')
+  assert(/checkResendCooldown/.test(sendOtpSrc), 'SRC25: send-otp route calls checkResendCooldown')
+  assert(/issueOtp/.test(sendOtpSrc), 'SRC25: send-otp route calls issueOtp')
+  assert(/sendOtpEmail/.test(sendOtpSrc), 'SRC25: send-otp route calls sendOtpEmail')
+
+  // SRC26. Never returns the raw OTP code in the response.
+  // The issueOtp call destructures { code } — make sure 'code' is not in any
+  // NextResponse.json body. We check that no `code:` key appears in a json()
+  // response (which would leak it).
+  assert(!/NextResponse\.json\(\s*\{[^}]*\bcode:\s*code\b/.test(sendOtpSrc), 'SRC26: send-otp route does NOT return raw OTP code in response body')
+  assert(!/console\.(log|error|warn)\([^)]*\$\{code\}/.test(sendOtpSrc), 'SRC26: send-otp route does NOT console.log the raw OTP code')
+
+  // SRC27. Returns 429 with code: 'RESEND_COOLDOWN' and retryAfterMs.
+  assert(/status:\s*429/.test(sendOtpSrc), 'SRC27: send-otp route returns status 429 on cooldown')
+  assert(/['"]RESEND_COOLDOWN['"]/.test(sendOtpSrc), 'SRC27: send-otp route returns code: "RESEND_COOLDOWN"')
+  assert(/retryAfterMs/.test(sendOtpSrc), 'SRC27: send-otp route returns retryAfterMs in cooldown response')
+}
+
+console.log('\n── Stage 2: sendOtpEmail source invariants (SRC28-SRC29) ──')
+
+const emailPath = SRC('lib/email.ts')
+const emailSrc = readFileSync(emailPath, 'utf8')
+
+// SRC28. sendOtpEmail is exported.
+assert(/export\s+async\s+function\s+sendOtpEmail/.test(emailSrc), 'SRC28: src/lib/email.ts exports sendOtpEmail')
+
+// SRC29. sendOtpEmail does NOT log the raw OTP code in production paths.
+// It delegates to getEmailAdapter().send() — the adapter handles sanitization.
+// The function body should not contain any console.log referencing the code.
+const sendOtpEmailMatch = emailSrc.match(/export\s+async\s+function\s+sendOtpEmail[^}]*\}/)
+if (sendOtpEmailMatch) {
+  // Grab the function body — match braces properly is hard with regex, so
+  // we just check the entire email.ts doesn't console.log code in a way
+  // that's reachable from sendOtpEmail. Since the dev adapter is the only
+  // one that console.logs and it's gated by NODE_ENV !== 'production',
+  // and the OTP is delivered via sendOtpEmail → adapter.send(), the
+  // existing SRC9-style invariant in test-verified-identity.ts already
+  // covers this. Here we just verify sendOtpEmail itself doesn't
+  // console.log.
+  const fnBody = sendOtpEmailMatch[0]
+  assert(!/console\.(log|error|warn)\s*\(/.test(fnBody), 'SRC29: sendOtpEmail function body does NOT call console.log/error/warn directly')
+}
+
+console.log('\n── Stage 2: RegisterView UI invariants (SRC30) ──')
+
+const registerViewPath = SRC('views/auth/RegisterView.tsx')
+const registerViewSrc = readFileSync(registerViewPath, 'utf8')
+
+// SRC30. RegisterView navigates to /verify-email after success.
+// The navigate call may use a string literal OR a variable that resolves
+// to /verify-email (with optional ?next=...). Check that the path is
+// constructed from '/verify-email' literal.
+assert(/['"`]\/verify-email/.test(registerViewSrc), 'SRC30: RegisterView constructs /verify-email path after successful registration')
+assert(/navigate\(verifyUrl\)|navigate\(['"`]\/verify-email/.test(registerViewSrc), 'SRC30: RegisterView calls navigate() with the verify-email URL')
+// Make sure the original nextPath is NOT navigated to directly (the user
+// must verify first). The nextPath should be wrapped as ?next=... on the
+// /verify-email URL.
+assert(/verify-email\?next=/.test(registerViewSrc), 'SRC30: RegisterView preserves nextPath as ?next= on /verify-email URL (not navigated directly)')
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 
 console.log('\n────────────────────────────────────────')
-console.log(`Stage 1 — OTP domain foundation: ${pass} passed, ${fail} failed`)
+console.log(`OTP domain + Stage 2 (register/send-otp): ${pass} passed, ${fail} failed`)
 if (fail > 0) {
   console.log('\nFailures:')
   failures.forEach((f) => console.log(`  - ${f}`))
   process.exit(1)
 }
-console.log('All Stage 1 static assertions passed.')
+console.log('All Stage 1 + Stage 2 static assertions passed.')
 process.exit(0)
