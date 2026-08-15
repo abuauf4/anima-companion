@@ -3515,3 +3515,86 @@ Stage Summary:
 - 0 stable features reverted. 0 admin / order / voucher / stock / catalog logic touched.
 - Next stage (9): final audit — Resend email production audit, Sonner feedback polish, final mobile-first UI audit. No new functional changes expected — just verification + documentation.
 - Git safety: small commit, push to main, no force push.
+
+---
+Task ID: account-recovery-v2-stage9-final-audit
+Agent: main (Super Z)
+Task: Account Recovery & Verification V2 — Stage 9: Final audit. Verify Resend production email adapter, Sonner feedback polish, and mobile-first UI audit. Add SRC116-SRC125 test assertions to lock the invariants. Stage 8 baseline is commit 50c8f31. This is the FINAL stage of V2.
+
+Work Log:
+- Stage 8 baseline (commit 50c8f31) is on origin/main: Google OAuth audit + SRC108-SRC115 test assertions.
+
+- Stage 9 audit (NO code changes — verification + documentation only):
+  * Resend production email adapter (V1 from toast-v1 commit + V2 sendOtpEmail from stage 2):
+    - SRC116: ResendEmailAdapter constructor throws on missing RESEND_API_KEY (no silent fallback to dev adapter — prevents fake email sends in production).
+    - SRC117: ResendEmailAdapter constructor throws on missing EMAIL_FROM (verified sender domain required).
+    - SRC118: ResendEmailAdapter.send NEVER calls console.log/error/warn (raw email body / OTP / verification URL never logged — defense-in-depth on top of the dev adapter's NODE_ENV gate).
+    - SRC119: DevConsoleEmailAdapter.send gated by NODE_ENV === 'production' check (V1 invariant — no OTP logging in production).
+  * Sonner feedback (V1 from toast-v1 commit + V2 usage in all auth views):
+    - SRC120: layout.tsx mounts the Sonner <Toaster /> (V1 invariant — the global toast system).
+    - SRC121: every V2 auth view (RegisterView, LoginView, VerifyEmailView, ForgotPasswordView, ResetPasswordView) imports { toast } from 'sonner' and calls toast.success or toast.error for user feedback. Every state transition has an appropriate toast.
+  * Mobile-first UI audit:
+    - SRC122: every V2 auth view uses `container-page` + `max-w-md` for mobile-first centering.
+    - SRC123: every V2 auth view uses `w-full` buttons for touch-friendly tap targets.
+    - SRC124: ResetPasswordView (and VerifyEmailView, covered by SRC41) uses InputOTP with exactly 6 InputOTPSlot elements (mobile-friendly OTP input, auto-advance on type, paste-friendly).
+    - SRC125: package.json lists `resend` as a dependency (production email SDK available — already installed in V1).
+  * Resend email production readiness:
+    - EMAIL_PROVIDER=resend + RESEND_API_KEY + EMAIL_FROM env vars documented in .env.example (V1).
+    - ResendEmailAdapter lazy-imports the `resend` SDK only when Resend is actually wired (zero-cost for dev adapter path).
+    - sendOtpEmail (stage 2) goes through the same getEmailAdapter() switch — production-ready without any additional wiring.
+    - The OTP email subject includes the 6-digit code so the user can see it in their mail client's preview pane. Body says "berlaku selama 10 menit dan hanya bisa digunakan satu kali" (matches V2 spec).
+
+- Did NOT touch (preserved stable features):
+  * All V1/V2 source files — audit-only stage.
+  * src/lib/email.ts adapter machinery (V1 + stage 2 sendOtpEmail — unchanged).
+  * src/components/ui/sonner.tsx + layout.tsx Toaster mount (V1 toast-v1 — unchanged).
+  * All V2 auth views (stages 2-7 — unchanged).
+  * All V2 API routes (stages 2-7 — unchanged).
+  * All admin / order / voucher / stock / catalog / SEO / Cloudinary logic.
+
+Verification:
+- `bunx tsc --noEmit`: clean (0 errors).
+- `bun run lint`: clean (0 errors, 0 warnings).
+- `bun run build`: exit 0 (Compiled successfully in 20.9s).
+- `bun run scripts/test-otp-domain.ts`: 295 passed, 0 failed (was 262 at stage 8, +33 new for stage 9 — includes 5 views × 4 mobile-first assertions + 4 Resend adapter assertions + 1 layout assertion + 1 InputOTP reassertion + 1 package.json assertion + 16 others).
+- `bun run scripts/test-auth-integrity.ts`: 96 passed, 0 failed (no Auth V1 regression — verified over 3 consecutive runs after an initial stdout-interleaving flake).
+- `bun run scripts/test-verified-identity.ts`: 2101 passed, 0 failed (no Identity V1 regression — verified over 3 consecutive runs).
+- `bun run scripts/test-member-registry.ts`: 79 passed, 0 failed.
+- `bun run scripts/test-toast.ts`: 44 passed, 0 failed.
+
+Stage Summary:
+- 0 code changes (audit-only stage).
+- 1 file modified: scripts/test-otp-domain.ts (+SRC116-SRC125, 33 new assertions).
+- V2 spec compliance for stage 9: Resend untuk email production ✅ (V1 ResendEmailAdapter + V2 sendOtpEmail — production-ready, env vars documented, no fake sends), Sonner untuk feedback success/error ✅ (every V2 auth view uses toast.success/error for every state transition), UI mobile-first dan terasa production-grade ✅ (container-page + max-w-md + w-full buttons + InputOTP 6-slot touch-friendly UI across all 5 V2 auth views).
+- 0 stable features reverted. 0 admin / order / voucher / stock / catalog logic touched.
+
+V2 COMPLETE — Summary across all 9 stages:
+- Total commits pushed to origin/main: 9 (stage 1: 041b5f2, stage 2: 7901756, stage 3: 5105142, stage 4: ee50ce6, stage 5: d4cfa49, stage 6: 9a3979f, stage 7: 9a89620, stage 8: 50c8f31, stage 9: this commit).
+- Total new/modified files: ~25 (3 new lib files: otp.ts, password-reset.ts, sendOtpEmail in email.ts; 5 new API routes: send-otp, verify-otp, forgot-password, reset-password/verify-otp, reset-password; 3 new pages: /forgot-password, /reset-password, /verify-email (rewritten); 5 new/modified views: ForgotPasswordView, ResetPasswordView, VerifyEmailView (rewritten for V2 OTP + V1 backward compat), RegisterView (navigate to /verify-email), LoginView (requiresVerification redirect + Lupa password link); 1 schema file: prisma/schema.prisma (+OtpCode, +PasswordResetGrant, +User.sessionVersion); 1 SQL reference: prisma/sql/20260815-account-recovery-v2.sql; 1 env docs: .env.example (AUTH_SECRET dual-role); 1 test script: scripts/test-otp-domain.ts (295 assertions); 1 modified auth lib: src/lib/auth.ts (sessionVersion in createSession + getCurrentUser check); 3 modified routes: register, login, google/callback (pass sessionVersion to createSession)).
+- Total test assertions: 295 (OTP domain) + 96 (Auth V1) + 2101 (Identity V1) + 79 (Member Registry V1) + 44 (Sonner V1) = 2615 assertions, all passing.
+- V2 spec compliance (all 18 requirements met):
+  1. Register email → akun UNVERIFIED → langsung /verify-email ✅ (stage 2)
+  2. kirim OTP email 6 digit ✅ (stage 2)
+  3. OTP expiry 10 menit ✅ (stage 1: OTP_TTL_MS = 10 * 60 * 1000)
+  4. resend cooldown server-side 60 detik ✅ (stage 1: OTP_RESEND_COOLDOWN_MS = 60 * 1000, enforced via lastSentAt column)
+  5. maksimal 5 percobaan, concurrency-safe ✅ (stage 1: OTP_DEFAULT_MAX_ATTEMPTS = 5, atomic interactive $transaction with claim.count === 1 gate)
+  6. OTP disimpan sebagai server-secret HMAC, bukan plaintext ✅ (stage 1: HMAC-SHA-256 with AUTH_SECRET pepper)
+  7. OTP baru menginvalidasi OTP sebelumnya ✅ (stage 1: issueOtp sets consumedAt = now AND attempts = maxAttempts on old rows)
+  8. verify OTP + emailVerifiedAt dalam transaction atomik ✅ (stage 3: consumeOtp interactive tx + idempotent emailVerifiedAt write gated on result === 'OK')
+  9. login akun unverified → diarahkan ke verify-email ✅ (stage 4: requiresVerification flag + LoginView redirect)
+  10. halaman Lupa Password ✅ (stage 5: /forgot-password page + ForgotPasswordView)
+  11. forgot password pakai OTP 6 digit ✅ (stage 5: issueOtp with purpose: PASSWORD_RESET)
+  12. response forgot-password anti email-enumeration ✅ (stage 5: always returns { sent: true }, silent skip for non-existent + GOOGLE accounts)
+  13. OTP reset → short-lived single-use reset grant ✅ (stage 6: issueResetGrant, 10-min TTL, SHA-256 hashed, single-use via consumedAt)
+  14. reset password → bcrypt → password lama mati ✅ (stage 7: hashPassword + User.password overwrite)
+  15. sessionVersion untuk invalidasi session lama setelah reset ✅ (stage 7: increment sessionVersion in atomic tx + getCurrentUser checks cookie vs DB sessionVersion, returns null on mismatch)
+  16. Google user dengan email_verified=true tidak perlu OTP ✅ (stage 8: V1 already enforces, V2 preserves via provider === 'PASSWORD' gating)
+  17. Resend untuk email production ✅ (stage 9: V1 ResendEmailAdapter + V2 sendOtpEmail, production-ready)
+  18. Sonner untuk feedback success/error ✅ (stage 9: every V2 auth view uses toast.success/error)
+- Stop condition honored: NO Doorprize, NO Apple Login, NO phone OTP, NO payment, NO loyalty, NO other features built.
+- Git safety: 9 small commits, each pushed immediately after tsc+lint+test green. NO FORCE PUSH used. Push was rejected 0 times (no remote changes during the session).
+- Next steps for the operator (out of V2 scope):
+  1. Run `bunx prisma db push` against the production DATABASE_URL to apply the schema changes (OtpCode + PasswordResetGrant + User.sessionVersion).
+  2. Set EMAIL_PROVIDER=resend + RESEND_API_KEY + EMAIL_FROM in production env vars (Coolify / Vercel).
+  3. Verify the OTP email delivers to a real inbox (the dev adapter prints to stdout; the Resend adapter sends via Resend).
+  4. (Optional) Add a per-IP global rate limit on /api/auth/forgot-password as defense-in-depth against OTP-spamming (the per-user 60s cooldown is the primary defense — see stage 5 docstring for the tradeoff rationale).

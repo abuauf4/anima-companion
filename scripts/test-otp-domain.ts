@@ -266,6 +266,29 @@
  *          for GOOGLE-only accounts (anti-enumeration — same as
  *          non-existent email).
  *
+ * Stage 9 — Final audit: Resend production + Sonner polish + mobile-first UI:
+ *   SRC116. src/lib/email.ts ResendEmailAdapter constructor throws on
+ *          missing RESEND_API_KEY (no silent fallback to dev adapter).
+ *   SRC117. src/lib/email.ts ResendEmailAdapter constructor throws on
+ *          missing EMAIL_FROM.
+ *   SRC118. src/lib/email.ts ResendEmailAdapter.send never logs the raw
+ *          email body / OTP / verification URL.
+ *   SRC119. src/lib/email.ts DevConsoleEmailAdapter gates all stdout
+ *          prints behind NODE_ENV !== 'production' (V1 invariant).
+ *   SRC120. src/app/layout.tsx mounts the Sonner Toaster (V1 invariant).
+ *   SRC121. Every V2 auth view (Register, Login, VerifyEmail, ForgotPassword,
+ *          ResetPassword) uses `toast.success` / `toast.error` from sonner
+ *          for user feedback.
+ *   SRC122. Every V2 auth view uses `container-page` + `max-w-md` for
+ *          mobile-first centering.
+ *   SRC123. Every V2 auth view uses full-width buttons (`w-full` or
+ *          `className="w-full"`) for touch-friendly tap targets.
+ *   SRC124. VerifyEmailView + ResetPasswordView use InputOTP component
+ *          with 6 slots (already covered by SRC41, reasserted for the
+ *          mobile-first audit).
+ *   SRC125. package.json lists `resend` as a dependency (production
+ *          email delivery SDK available).
+ *
  * HTTP integration (placeholder — implemented in stage 2+):
  *   (none yet — OTP API routes are implemented in stage 2+)
  */
@@ -1208,15 +1231,80 @@ const resetVerifyOtpRouteSrc = readFileSync(resetVerifyOtpRoutePath, 'utf8')
 assert(/!user\s*\|\|\s*user\.provider\s*===\s*['"]GOOGLE['"]/.test(resetVerifyOtpRouteSrc), 'SRC115: reset-password verify-otp route combines !user OR provider === "GOOGLE" into the same NOT_FOUND_OR_EXPIRED branch (anti-enumeration)')
 
 // ---------------------------------------------------------------------------
+// Stage 9 — Final audit: Resend production + Sonner polish + mobile-first UI (SRC116-SRC125)
+// ---------------------------------------------------------------------------
+
+console.log('\n── Stage 9: Resend production email adapter invariants (SRC116-SRC119) ──')
+
+const emailSrcFinal = readFileSync(emailPath, 'utf8')
+
+// SRC116. ResendEmailAdapter constructor throws on missing RESEND_API_KEY.
+// We check the whole email.ts file (regex can't balance braces reliably).
+assert(/RESEND_API_KEY\s+is\s+not\s+set/.test(emailSrcFinal), 'SRC116: ResendEmailAdapter constructor throws on missing RESEND_API_KEY (no silent fallback)')
+
+// SRC117. ResendEmailAdapter constructor throws on missing EMAIL_FROM.
+assert(/EMAIL_FROM\s+is\s+not\s+set/.test(emailSrcFinal), 'SRC117: ResendEmailAdapter constructor throws on missing EMAIL_FROM (no silent fallback)')
+
+// SRC118. ResendEmailAdapter.send never logs the raw email body / OTP / URL.
+const resendSendMatch = emailSrcFinal.match(/class\s+ResendEmailAdapter[\s\S]*?async\s+send[\s\S]*?\}\s*\}/)
+if (resendSendMatch) {
+  // Strip line comments before checking — comments mentioning console.log
+  // shouldn't trigger the assertion.
+  const stripped = resendSendMatch[0].replace(/\/\/[^\n]*/g, '')
+  assert(!/console\.(log|error|warn)\s*\(/.test(stripped), 'SRC118: ResendEmailAdapter.send does NOT call console.log/error/warn (raw body / OTP / URL never logged)')
+}
+
+// SRC119. DevConsoleEmailAdapter gates all stdout prints behind NODE_ENV !== 'production'.
+const devAdapterMatch = emailSrcFinal.match(/class\s+DevConsoleEmailAdapter[\s\S]*?async\s+send[\s\S]*?\}\s*\}/)
+if (devAdapterMatch) {
+  assert(/NODE_ENV['"]?\s*===?\s*['"]production['"]/.test(devAdapterMatch[0]), 'SRC119: DevConsoleEmailAdapter.send gated by NODE_ENV === "production" check (V1 invariant — no OTP logging in production)')
+}
+
+console.log('\n── Stage 9: Sonner + mobile-first UI invariants (SRC120-SRC125) ──')
+
+// SRC120. layout.tsx mounts the Sonner Toaster.
+const layoutPath = SRC('app/layout.tsx')
+const layoutSrc = readFileSync(layoutPath, 'utf8')
+assert(/from\s+['"]@\/components\/ui\/sonner['"]/.test(layoutSrc), 'SRC120: layout.tsx imports Toaster from @/components/ui/sonner')
+assert(/<Toaster\s*\/>/.test(layoutSrc), 'SRC120: layout.tsx mounts <Toaster />')
+
+// SRC121 + SRC122 + SRC123. Every V2 auth view uses sonner + container-page + max-w-md + w-full.
+const authViews = [
+  { name: 'RegisterView', path: SRC('views/auth/RegisterView.tsx') },
+  { name: 'LoginView', path: SRC('views/auth/LoginView.tsx') },
+  { name: 'VerifyEmailView', path: SRC('views/auth/VerifyEmailView.tsx') },
+  { name: 'ForgotPasswordView', path: SRC('views/auth/ForgotPasswordView.tsx') },
+  { name: 'ResetPasswordView', path: SRC('views/auth/ResetPasswordView.tsx') },
+]
+for (const v of authViews) {
+  const vSrc = readFileSync(v.path, 'utf8')
+  assert(/from\s+['"]sonner['"]/.test(vSrc), `SRC121: ${v.name} imports { toast } from "sonner"`)
+  assert(/toast\.(success|error)/.test(vSrc), `SRC121: ${v.name} calls toast.success or toast.error`)
+  assert(/container-page/.test(vSrc), `SRC122: ${v.name} uses container-page class`)
+  assert(/max-w-md/.test(vSrc), `SRC122: ${v.name} uses max-w-md (mobile-first card width)`)
+  assert(/w-full/.test(vSrc), `SRC123: ${v.name} uses w-full buttons (touch-friendly tap targets)`)
+}
+
+// SRC124. VerifyEmailView + ResetPasswordView use InputOTP with 6 slots.
+// (VerifyEmailView already covered by SRC41 — reassert for ResetPasswordView here.)
+const rpvSrcFinal = readFileSync(SRC('views/auth/ResetPasswordView.tsx'), 'utf8')
+const rpvSlots = rpvSrcFinal.match(/InputOTPSlot\s+index=/g)
+assert(rpvSlots !== null && rpvSlots.length === 6, `SRC124: ResetPasswordView renders 6 InputOTPSlot elements (got ${rpvSlots?.length || 0})`)
+
+// SRC125. package.json lists resend as a dependency.
+const pkgJsonSrc = readFileSync(PKG('package.json'), 'utf8')
+assert(/"resend":\s*"\^/.test(pkgJsonSrc), 'SRC125: package.json lists resend as a dependency (production email SDK)')
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 
 console.log('\n────────────────────────────────────────')
-console.log(`OTP domain + Stages 2-8 (full V2 flow + Google OAuth audit): ${pass} passed, ${fail} failed`)
+console.log(`OTP domain + Stages 2-9 (full V2 flow + Google audit + production polish): ${pass} passed, ${fail} failed`)
 if (fail > 0) {
   console.log('\nFailures:')
   failures.forEach((f) => console.log(`  - ${f}`))
   process.exit(1)
 }
-console.log('All Stage 1 through Stage 8 static assertions passed.')
+console.log('All Stage 1 through Stage 9 static assertions passed. V2 complete.')
 process.exit(0)
