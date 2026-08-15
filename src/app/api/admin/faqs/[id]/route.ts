@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin, handleAuthError } from '@/lib/auth'
+import { requirePermission, handleAuthError } from '@/lib/admin-auth'
 import { invalidate } from '@/lib/cache'
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireAdmin()
+    await requirePermission('faqs.manage')
     const { id } = await params
     const body = await req.json()
     const { question, answer, order, isActive } = body
@@ -37,7 +37,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireAdmin()
+    await requirePermission('faqs.manage')
     const { id } = await params
     await db.fAQ.delete({ where: { id } })
     invalidate('home:')

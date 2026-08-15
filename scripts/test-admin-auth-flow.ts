@@ -215,20 +215,20 @@ assert(!changePwView.match(/view.*current.*password|show.*current.*password/i) |
 // ============================================================================
 // PHASE I — /admin/[[...slug]] catch-all dual-auth
 // ============================================================================
-console.log('\n=== PHASE I — /admin/[[...slug]] catch-all dual-auth ===')
+console.log('\n=== PHASE I — /admin/[[...slug]] catch-all (Stage 4 final: new-realm only) ===')
 
 const catchAll = readSrc('src/app/admin/[[...slug]]/page.tsx')
 assert(catchAll.includes('getCurrentAdminUser'), 'catch-all checks new admin realm (getCurrentAdminUser)')
-assert(catchAll.includes('getCurrentUser'), 'catch-all falls back to legacy customer auth (getCurrentUser)')
-assert(catchAll.includes('mustChangePassword'), 'catch-all checks mustChangePassword on new admin path')
+assert(catchAll.includes('mustChangePassword'), 'catch-all checks mustChangePassword')
 assert(catchAll.includes("redirect('/admin/change-password')"), 'catch-all redirects mustChangePassword to /admin/change-password')
-// New admin path renders AdminLayout WITHOUT AdminGate (server-side check is authoritative):
 assert(catchAll.includes('<AdminLayout'), 'catch-all renders AdminLayout')
-// Legacy path preserved with AdminGate:
-assert(catchAll.includes('AdminGate'), 'catch-all wraps legacy path in AdminGate (backward compat)')
-assert(catchAll.includes('user.role !== \'ADMIN\''), 'catch-all legacy path checks User.role === ADMIN')
-assert(catchAll.includes('LoginRequiredView'), 'catch-all legacy anonymous path shows LoginRequiredView')
-assert(catchAll.includes('UnauthorizedView'), 'catch-all legacy non-admin path shows UnauthorizedView')
+assert(catchAll.includes('AdminLoginRequiredView'), 'catch-all shows AdminLoginRequiredView for anonymous visitors (NOT customer LoginRequiredView)')
+// Stage 4: legacy fallback REMOVED — no getCurrentUser, no AdminGate, no User.role check:
+assert(!catchAll.includes('getCurrentUser'), 'catch-all does NOT use legacy getCurrentUser (Stage 4 removed fallback)')
+assert(!catchAll.includes('AdminGate'), 'catch-all does NOT use AdminGate (legacy wrapper removed)')
+assert(!catchAll.match(/(?<!Admin)LoginRequiredView/), 'catch-all does NOT use customer LoginRequiredView (only AdminLoginRequiredView)')
+assert(!catchAll.includes('UnauthorizedView'), 'catch-all does NOT use customer UnauthorizedView (legacy path removed)')
+assert(!catchAll.includes("user.role !== 'ADMIN'"), 'catch-all does NOT check User.role === ADMIN (legacy path removed)')
 
 // ============================================================================
 // PHASE J — Cross-realm cookie separation

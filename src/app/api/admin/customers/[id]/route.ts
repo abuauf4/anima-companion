@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin, handleAuthError, logAuthError } from '@/lib/auth'
+import { requirePermission, handleAuthError, logAuthError } from '@/lib/admin-auth'
 
 /**
  * GET /api/admin/customers/[id] — Member detail.
@@ -30,7 +30,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAdmin()
+    await requirePermission('customers.view')
     const { id } = await params
 
     // findFirst (NOT findUnique) — we add `role: 'CUSTOMER'` so an id

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin, handleAuthError } from '@/lib/auth'
+import { requirePermission, handleAuthError } from '@/lib/admin-auth'
 
 // PUT /api/admin/vouchers/[id] — update an existing voucher.
 // DELETE /api/admin/vouchers/[id] — permanently delete a voucher.
@@ -15,7 +15,7 @@ import { requireAdmin, handleAuthError } from '@/lib/auth'
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireAdmin()
+    await requirePermission('vouchers.manage')
     const { id } = await params
     const body = await req.json()
     const { code, type, value, minSpend, description, isActive, validUntil } = body
@@ -50,7 +50,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireAdmin()
+    await requirePermission('vouchers.manage')
     const { id } = await params
     await db.voucher.delete({ where: { id } })
     return NextResponse.json({ success: true })

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAdmin, handleAuthError } from '@/lib/auth'
+import { requirePermission, handleAuthError } from '@/lib/admin-auth'
 import {
   buildSignatureResponse,
   getCloudinaryConfig,
@@ -35,7 +35,7 @@ import {
  */
 export async function GET() {
   try {
-    await requireAdmin()
+    await requirePermission('products.manage')
   } catch (e: any) {
     const authRes = handleAuthError(e)
     if (authRes) return authRes

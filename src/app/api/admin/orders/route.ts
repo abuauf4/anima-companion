@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin, handleAuthError } from '@/lib/auth'
+import { requirePermission, handleAuthError } from '@/lib/admin-auth'
 import { ORDER_STATUS } from '@/lib/format'
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAdmin()
+    await requirePermission('orders.view')
     const { searchParams } = new URL(req.url)
     const status = searchParams.get('status')
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'))

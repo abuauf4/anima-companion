@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin, handleAuthError } from '@/lib/auth'
+import { requirePermission, handleAuthError } from '@/lib/admin-auth'
 
 export async function GET() {
   try {
-    await requireAdmin()
+    await requirePermission('vouchers.view')
     const vouchers = await db.voucher.findMany({
       orderBy: { createdAt: 'desc' },
     })
@@ -18,7 +18,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAdmin()
+    await requirePermission('vouchers.manage')
     const body = await req.json()
     const { code, type, value, minSpend, description, isActive, validUntil } = body
 

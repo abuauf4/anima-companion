@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdmin, handleAuthError } from '@/lib/auth'
+import { requirePermission, handleAuthError } from '@/lib/admin-auth'
 import { updateOrderStatus, OrderError } from '@/lib/orders'
 
 /**
@@ -18,7 +18,7 @@ import { updateOrderStatus, OrderError } from '@/lib/orders'
  */
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireAdmin()
+    await requirePermission('orders.manage')
     const { id } = await params
     const body = await req.json()
     const { status } = body

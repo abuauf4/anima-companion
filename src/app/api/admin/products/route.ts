@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin, handleAuthError } from '@/lib/auth'
+import { requirePermission, handleAuthError } from '@/lib/admin-auth'
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAdmin()
+    await requirePermission('products.view')
     const { searchParams } = new URL(req.url)
     const search = searchParams.get('search')
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAdmin()
+    await requirePermission('products.manage')
     const body = await req.json()
     const {
       name, sku, brand, price, salePrice, stock, weight,

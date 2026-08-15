@@ -4016,3 +4016,73 @@ Stage Summary:
 - Customer auth UNTOUCHED: 0 changes to anima_session, requireAdmin (legacy), /api/auth/*, /api/admin/** (legacy routes still use requireAdmin — Stage 4 will migrate), OTP, Google OAuth, Brevo, member registry, LoginView, GuestGate, useAuth.
 - Next stage:
   * Stage 4: Migrate /api/admin/** from requireAdmin (legacy) to requirePermission / requireDeveloper. Remove legacy fallback from /admin/[[...slug]] catch-all. QA full admin panel with new-realm admin.
+
+---
+Task ID: admin-realm-stage-4
+Agent: main
+Task: Admin Realm Separation + Developer RBAC V1 — Stage 4: migrate /api/admin/** to new admin auth + QA
+
+Work Log:
+- Stage 3 was committed (0938086) and pushed to origin/main. Continued to Stage 4 (FINAL).
+- Stage 4 AUDIT: found 20 /api/admin/** routes using legacy `requireAdmin` from `@/lib/auth` (excluding /auth/* built in Stage 2 and /users/* built in Stage 3, both already on new realm). Mapped each route's (resource, HTTP method) → permission key. Special: customers/export GET → customers.export; cloudinary/sign GET → products.manage.
+- Stage 4 IMPLEMENTATION:
+  * scripts/migrate-admin-routes.py — migration script (persisted per script-persistence rule). Mechanically replaces `import { requireAdmin, handleAuthError } from '@/lib/auth'` → `import { requirePermission, handleAuthError } from '@/lib/admin-auth'` and `await requireAdmin()` → `await requirePermission('<resource>.<action>')` in each handler. 53 total replacements across 20 files. Idempotent (skips already-migrated routes).
+  * 20 route files migrated:
+    - dashboard/route.ts (GET → dashboard.view)
+    - categories/route.ts (GET → categories.view, POST → categories.manage)
+    - categories/[id]/route.ts (PUT/DELETE → categories.manage)
+    - products/route.ts (GET → products.view, POST → products.manage)
+    - products/[id]/route.ts (PUT/DELETE → products.manage)
+    - orders/route.ts (GET → orders.view)
+    - orders/[id]/route.ts (PUT → orders.manage)
+    - customers/route.ts (GET → customers.view)
+    - customers/[id]/route.ts (GET → customers.view)
+    - customers/export/route.ts (GET → customers.export)
+    - banners/route.ts + [id]/route.ts (view/manage)
+    - testimonials/route.ts + [id]/route.ts (view/manage)
+    - faqs/route.ts + [id]/route.ts (view/manage)
+    - vouchers/route.ts + [id]/route.ts (view/manage)
+    - settings/route.ts (GET → settings.view, PUT → settings.manage)
+    - cloudinary/sign/route.ts (GET → products.manage)
+  * src/app/admin/[[...slug]]/page.tsx — REWROTE. Removed legacy customer admin fallback (getCurrentUser + User.role === 'ADMIN' + AdminGate + LoginRequiredView + UnauthorizedView). Now EXCLUSIVELY uses getCurrentAdminUser from @/lib/admin-auth. Anonymous → AdminLoginRequiredView. mustChangePassword → redirect /admin/change-password. Active admin → AdminLayout.
+  * src/components/admin/AdminLoginRequiredView.tsx — NEW. Client component shown when anonymous visitor hits /admin/*. Links to /admin/login (NOT customer /login). Uses ShieldCheck icon. Button "Masuk Admin".
+  * scripts/test-admin-migration.ts — NEW 180-assertion static test suite. 7 phases (A-G): all migrated routes use requirePermission from @/lib/admin-auth (NOT requireAdmin from @/lib/auth), no `await requireAdmin()` calls remain, permission keys correct per (resource, method), special permissions (customers.export, products.manage for cloudinary), catch-all new-realm only (no legacy fallback), AdminLoginRequiredView exists and links to /admin/login, legacy requireAdmin still exported from @/lib/auth (not deleted — may have non-admin callers) but NOT imported by any /api/admin/** route, customer /api/auth/** routes untouched (still use requireAuth/getCurrentUser), all 19 permission keys used in routes exist in PERMISSION_KEYS.
+  * scripts/test-admin-auth-flow.ts — UPDATED Phase I assertions to reflect Stage 4 final state (legacy fallback removed, AdminLoginRequiredView instead of LoginRequiredView).
+  * scripts/test-admin-rbac.ts — UPDATED Phase G assertions: /api/admin/dashboard now uses requirePermission (not legacy requireAdmin).
+
+- Verification (all run in this sandbox):
+  * bunx tsc --noEmit           → exit 0
+  * bun run lint                → exit 0
+  * bun run build               → exit 0
+  * scripts/test-admin-realm    → 148/148 PASS (Stage 1 intact)
+  * scripts/test-admin-auth-flow → 113/113 PASS (Stage 2, updated for Stage 4)
+  * scripts/test-admin-rbac     → 104/104 PASS (Stage 3, updated for Stage 4)
+  * scripts/test-admin-migration → 180/180 PASS (Stage 4 NEW)
+  * scripts/test-auth-integrity → PASS
+  * scripts/test-verified-identity → PASS
+  * scripts/test-otp-domain     → 295/295 PASS
+  * scripts/test-google-oauth   → 114/114 PASS
+  * scripts/test-email-brevo    → 37/37 PASS
+  * scripts/test-member-registry → PASS
+  * scripts/test-toast          → 44/44 PASS
+  * Total: 1000+ static assertions pass. 0 customer-auth regressions.
+
+Stage Summary:
+- 22 files changed (20 migrated routes + catch-all rewrite + 3 new files + 2 test updates): ~600 insertions/deletions across migrated routes.
+- ALL /api/admin/** routes now use requirePermission / requireDeveloper from @/lib/admin-auth:
+  * GET → <resource>.view (read-only)
+  * POST/PATCH/PUT/DELETE → <resource>.manage (write)
+  * customers/export GET → customers.export (special)
+  * cloudinary/sign GET → products.manage (upload is a manage op)
+  * /api/admin/users/** → requireDeveloper (Stage 3)
+  * /api/admin/auth/** → requireAdminSession (Stage 2)
+- /admin/[[...slug]] catch-all: new-realm ONLY. Legacy customer admin fallback REMOVED. Anonymous → AdminLoginRequiredView (links to /admin/login). mustChangePassword → redirect. Active admin → AdminLayout.
+- Customer auth UNTOUCHED: 0 changes to anima_session, /api/auth/**, OTP, Google OAuth, Brevo, member registry, LoginView, GuestGate, useAuth. requireAdmin still exported from @/lib/auth (not deleted — backward compat for any non-/api/admin/** callers, though none exist currently).
+- FINAL STATE (V1 complete):
+  * Customer realm: /login + /register + Google/OTP + anima_session + User table.
+  * Admin realm: /admin/login (username+password) + anima_admin_session + AdminUser table.
+  * DEVELOPER: created via env-var bootstrap seed. Bypasses all permissions. Can manage AdminUser via /admin/users (Setting User Admin). Protected from ADMIN modification.
+  * ADMIN: created by DEVELOPER. Has explicit AdminPermission rows. Sees only permitted sidebar items. Cannot manage other admins.
+  * Permission-aware sidebar: DEVELOPER sees all + Setting User Admin. ADMIN sees only permitted items. Both see Ganti Password + Keluar.
+  * sessionVersion revocation on password change/reset. mustChangePassword forced change gate. Cross-realm cookie separation (realm:'admin' marker). Anti-enumeration login. bcrypt cost 10.
+- OUT OF SCOPE (per task spec): feature toggle, payment, loyalty, Apple Login, Doorprize, new finance, new business features. User.role column NOT dropped (deprecation only — V1 stops here).

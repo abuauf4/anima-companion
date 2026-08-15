@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin, handleAuthError } from '@/lib/auth'
+import { requirePermission, handleAuthError } from '@/lib/admin-auth'
 
 export async function GET() {
   try {
-    await requireAdmin()
+    await requirePermission('banners.view')
     const banners = await db.banner.findMany({
       orderBy: [{ position: 'asc' }, { order: 'asc' }],
     })
@@ -18,7 +18,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAdmin()
+    await requirePermission('banners.manage')
     const body = await req.json()
     const { title, subtitle, imageUrl, link, position, order, isActive } = body
     if (!title || !imageUrl) {

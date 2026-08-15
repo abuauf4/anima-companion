@@ -214,9 +214,10 @@ const customerLoginView = readSrc('src/views/auth/LoginView.tsx')
 assert(customerLoginView.includes('GoogleSignInButton'), 'customer LoginView still has Google sign-in')
 assert(customerLoginView.includes('forgot-password'), 'customer LoginView still has forgot-password')
 
-// Legacy /api/admin/** routes still use requireAdmin (NOT yet migrated — Stage 4):
+// Stage 4: /api/admin/** routes are NOW migrated to requirePermission (NOT requireAdmin):
 const adminDashboard = readSrc('src/app/api/admin/dashboard/route.ts')
-assert(adminDashboard.includes('requireAdmin') || adminDashboard.includes('getCurrentUser'), 'legacy /api/admin/dashboard still uses legacy auth (Stage 4 will migrate)')
+assert(adminDashboard.includes('requirePermission'), '/api/admin/dashboard now uses requirePermission (Stage 4 migrated)')
+assert(!adminDashboard.includes('await requireAdmin()'), '/api/admin/dashboard does NOT use legacy requireAdmin (Stage 4 migrated)')
 
 // ============================================================================
 // PHASE H — Stage 1 + Stage 2 helpers still intact

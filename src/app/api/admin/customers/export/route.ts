@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin, handleAuthError, logAuthError } from '@/lib/auth'
+import { requirePermission, handleAuthError, logAuthError } from '@/lib/admin-auth'
 
 /**
  * GET /api/admin/customers/export — CSV export of member registry.
@@ -34,7 +34,7 @@ import { requireAdmin, handleAuthError, logAuthError } from '@/lib/auth'
  */
 export async function GET(req: NextRequest) {
   try {
-    await requireAdmin()
+    await requirePermission('customers.export')
     const { searchParams } = new URL(req.url)
     const search = searchParams.get('search')?.trim() || ''
     const verifiedParam = searchParams.get('verified')?.toLowerCase() || ''

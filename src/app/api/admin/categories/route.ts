@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin, handleAuthError } from '@/lib/auth'
+import { requirePermission, handleAuthError } from '@/lib/admin-auth'
 
 export async function GET() {
   try {
-    await requireAdmin()
+    await requirePermission('categories.view')
     const categories = await db.category.findMany({
       orderBy: { name: 'asc' },
       include: { _count: { select: { products: true } } },
@@ -19,7 +19,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAdmin()
+    await requirePermission('categories.manage')
     const body = await req.json()
     const { name, icon } = body
     if (!name) return NextResponse.json({ error: 'Nama wajib diisi' }, { status: 400 })

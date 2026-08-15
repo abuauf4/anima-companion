@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin, handleAuthError } from '@/lib/auth'
+import { requirePermission, handleAuthError } from '@/lib/admin-auth'
 import { invalidate } from '@/lib/cache'
 
 export async function GET() {
   try {
-    await requireAdmin()
+    await requirePermission('faqs.view')
     const faqs = await db.fAQ.findMany({
       orderBy: [{ isActive: 'desc' }, { order: 'asc' }],
     })
@@ -19,7 +19,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAdmin()
+    await requirePermission('faqs.manage')
     const body = await req.json()
     const { question, answer, order, isActive } = body
 

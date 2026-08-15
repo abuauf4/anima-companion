@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin, handleAuthError } from '@/lib/auth'
+import { requirePermission, handleAuthError } from '@/lib/admin-auth'
 import { invalidate } from '@/lib/cache'
 
 export async function GET() {
   try {
-    await requireAdmin()
+    await requirePermission('testimonials.view')
     const testimonials = await db.testimonial.findMany({
       orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
     })
@@ -19,7 +19,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAdmin()
+    await requirePermission('testimonials.manage')
     const body = await req.json()
     const { name, petName, petType, message, rating, avatar, isActive } = body
 

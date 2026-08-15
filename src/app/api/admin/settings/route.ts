@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin, handleAuthError } from '@/lib/auth'
+import { requirePermission, handleAuthError } from '@/lib/admin-auth'
 import { invalidate } from '@/lib/cache'
 
 /**
@@ -9,7 +9,7 @@ import { invalidate } from '@/lib/cache'
  */
 export async function GET() {
   try {
-    await requireAdmin()
+    await requirePermission('settings.view')
     let settings = await db.siteSetting.findUnique({ where: { id: 'singleton' } })
     if (!settings) {
       settings = await db.siteSetting.create({ data: { id: 'singleton' } })
@@ -28,7 +28,7 @@ export async function GET() {
  */
 export async function PUT(req: NextRequest) {
   try {
-    await requireAdmin()
+    await requirePermission('settings.manage')
     const body = await req.json()
 
     // Coerce & sanitize all known fields
