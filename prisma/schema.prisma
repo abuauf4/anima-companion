@@ -117,6 +117,108 @@ model User {
   passwordResetGrants PasswordResetGrant[]
 }
 
+// ==================== ADMIN REALM (V1 — Developer RBAC) ====================
+//
+// SEPARATE IDENTITY REALM for internal admin users. This is intentionally
+// a DIFFERENT table from `User` (the customer/member registry) so that:
+//   - Customer auth (`anima_session` cookie, /api/auth/* routes, OTP, Google
+//     OAuth, forgot/reset-password, member registry) is fully decoupled
+//     from internal admin auth.
+//   - An admin session (`anima_admin_session` cookie) CANNOT be derived
+//     from a customer session and vice versa — the two realms use
+//     different cookie names AND different DB tables.
+//   - Customer data (orders, carts, wishlists, pet-profiles) stays in the
+//     `User` registry; admin actions are auditable via `AdminUser`.
+//
+// SECURITY CONTRACT — never break these invariants:
+//   - `passwordHash` is the ONLY password field. The plaintext password
+//     is NEVER stored, NEVER logged, NEVER returned by any API. The
+//     DEVELOPER who creates an admin sets a TEMPORARY password that the
+//     admin MUST change on first login (`mustChangePassword = true`).
+//   - `systemRole` is one of: DEVELOPER | ADMIN. DEVELOPER is the highest
+//     privilege level and bypasses ALL permission checks. ADMIN must be
+//     granted explicit `AdminPermission` rows.
+//   - `sessionVersion` works exactly like `User.sessionVersion` — encoded
+//     into the HMAC admin session cookie at sign time, re-checked on every
+//     request. Bumped on password change/reset so all prior sessions are
+//     invalidated immediately.
+//   - `mustChangePassword = true` blocks access to ALL admin panels except
+//     `/admin/change-password`. The admin session IS issued (so they can
+//     reach the change-password page) but every other admin route rejects
+//     them with 403 MUST_CHANGE_PASSWORD.
+//   - `isActive = false` blocks login AND invalidates existing sessions
+//     (the session re-fetches `isActive` from the DB on every request —
+//     never trusts the cookie).
+//   - `createdByAdminId` is a self-referential FK to the AdminUser who
+//     created this admin. Nullable for the bootstrap DEVELOPER (who was
+//     created from env vars, not by another admin).
+//   - A DEVELOPER account CANNOT be deleted, deactivated, or have its
+//     role downgraded by an ADMIN — enforced server-side in the
+//     admin-users API (not just hidden in the UI).
+//
+// PERMISSION MODEL (V1 — coarse-grained, keyed on real admin menu items):
+//   AdminPermission rows are (adminUserId, permissionKey) pairs where
+//   permissionKey is one of PERMISSION_KEYS in src/lib/admin-permissions.ts.
+//   DEVELOPER bypasses all permission checks. ADMIN gets only the keys
+//   present in their AdminPermission set. No wildcards, no inheritance,
+//   no role hierarchy beyond DEVELOPER > ADMIN.
+model AdminUser {
+  id                String   @id @default(cuid())
+  // Username for /admin/login. CASE-INSENSITIVE lookup at login time
+  // (we normalize to lower-case before both insert and findUnique), but
+  // the column is case-sensitive UNIQUE so two admins cannot differ
+  // only by case. Stored lower-case to make the unique constraint
+  // behavior predictable.
+  username          String   @unique
+  passwordHash      String
+  displayName       String
+  // DEVELOPER | ADMIN. DEVELOPER is the highest privilege level.
+  // NEVER trust a client-supplied value for this field — the
+  // create-admin API hardcodes 'ADMIN' and only the bootstrap seed
+  // (env-var-driven, no public API) can create a DEVELOPER.
+  systemRole        String   @default("ADMIN")
+  isActive          Boolean  @default(true)
+  mustChangePassword Boolean  @default(true)
+  sessionVersion    Int      @default(0)
+  // Self-referential FK to the admin who created this admin. NULL for
+  // the bootstrap DEVELOPER (created from env vars, not by another admin).
+  createdByAdminId  String?
+  lastLoginAt       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  permissions       AdminPermission[]
+  createdBy         AdminUser? @relation("AdminCreatedBy", fields: [createdByAdminId], references: [id], onDelete: SetNull)
+  createdAdmins     AdminUser[] @relation("AdminCreatedBy")
+
+  @@index([createdByAdminId])
+}
+
+// ==================== ADMIN PERMISSIONS (V1 RBAC) ====================
+//
+// Granular permission keys for ADMIN users. DEVELOPER bypasses all checks
+// (see src/lib/admin-auth.ts → requirePermission).
+//
+// PERMISSION_KEYS is the authoritative list — defined in
+// src/lib/admin-permissions.ts so the lib + tests can import it without
+// duplicating string literals. The DB does NOT enforce membership in
+// PERMISSION_KEYS (that would require an enum or check constraint per
+// key, which is brittle to evolve) — instead, the create/update-admin
+// API rejects unknown keys before writing.
+//
+// UNIQUE (adminUserId, permissionKey) — an admin either has a key or
+// doesn't; duplicates are not allowed.
+model AdminPermission {
+  id            String   @id @default(cuid())
+  adminUserId   String
+  permissionKey String
+
+  adminUser     AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@unique([adminUserId, permissionKey])
+  @@index([adminUserId])
+}
+
 // ==================== EMAIL VERIFICATION TOKENS ====================
 // Single-use, time-limited tokens for proving control of an email address
 // during PASSWORD registration. GOOGLE users do not use this table — their

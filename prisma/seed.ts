@@ -2,6 +2,76 @@ import { db } from '../src/lib/db'
 import bcrypt from 'bcryptjs'
 
 // ============================================================================
+// ADMIN REALM V1 — DEVELOPER BOOTSTRAP (idempotent, env-var-driven).
+//
+// Creates the first DEVELOPER AdminUser from DEVELOPER_USERNAME / DEVELOPER_PASSWORD /
+// DEVELOPER_DISPLAY_NAME env vars. Idempotent — if the AdminUser already exists,
+// NO field is overwritten (the operator's later password changes via /admin/change-password
+// are preserved across re-seeds).
+//
+// In dev (NODE_ENV !== 'production'), if env vars are unset, a demo developer
+// (devonly / devonly123) is created for frictionless local development. This is
+// HARD-DISABLED in production — same pattern as the customer demo accounts.
+// ============================================================================
+async function bootstrapDeveloperAdmin(): Promise<void> {
+  const IS_PROD = process.env.NODE_ENV === 'production'
+  const envUsername = process.env.DEVELOPER_USERNAME?.trim()
+  const envPassword = process.env.DEVELOPER_PASSWORD
+  const envDisplayName = process.env.DEVELOPER_DISPLAY_NAME?.trim() || 'Developer'
+
+  // Resolve the desired username/password for THIS run.
+  // - If env vars are set → use them (any environment).
+  // - Else if dev → use demo credentials (HARD-DISABLED in production).
+  // - Else (production, no env) → skip with a warning.
+  let username: string | null = null
+  let password: string | null = null
+  let displayName: string = envDisplayName
+
+  if (envUsername && envPassword) {
+    username = envUsername.toLowerCase()
+    password = envPassword
+  } else if (!IS_PROD) {
+    username = 'devonly'
+    password = 'devonly123'
+    displayName = 'Demo Developer'
+  } else {
+    console.log('⚠️  No DEVELOPER_USERNAME / DEVELOPER_PASSWORD env vars set.')
+    console.log('   Set them and re-run this seed to bootstrap the first developer admin,')
+    console.log('   OR create one manually via Prisma Studio / psql against the AdminUser table.')
+    return
+  }
+
+  // Idempotency: if an AdminUser with this username already exists, do NOT
+  // touch any field. The operator may have changed the password via
+  // /admin/change-password, may have changed the display name via the
+  // developer UI, etc. Re-running the seed must never clobber those changes.
+  const existing = await db.adminUser.findUnique({ where: { username } })
+  if (existing) {
+    console.log(`✅ Developer admin already exists (username=${username}) — bootstrap skipped (idempotent).`)
+    return
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10)
+  await db.adminUser.create({
+    data: {
+      username,
+      passwordHash,
+      displayName,
+      systemRole: 'DEVELOPER',
+      isActive: true,
+      mustChangePassword: false, // operator chose the password at bootstrap
+      sessionVersion: 0,
+      // createdByAdminId is null — the bootstrap developer has no creator.
+    },
+  })
+  console.log(`✅ Developer admin created (username=${username}).`)
+  if (!IS_PROD && !envUsername) {
+    console.log('   ⚠️  Demo credentials (devonly/devonly123) — DEV ONLY, hard-disabled in production.')
+  }
+}
+
+
+// ============================================================================
 // Anima Companion — Real Brand Seed
 // Brand: Anima Companion (PT Sutan Vet Medika, Bogor, Jawa Barat, Indonesia)
 // Tagline: "Elevating Animal Health"
@@ -195,6 +265,29 @@ async function main() {
     customerId = customer.id
     console.log('✅ Placeholder customer created (random password, not a login surface):', customer.email)
   }
+
+  // ==================== ADMIN REALM V1 — DEVELOPER BOOTSTRAP ====================
+  //
+  // Idempotent: if an AdminUser with DEVELOPER_USERNAME already exists, the
+  // seed DOES NOT overwrite the password, role, or any other field. The
+  // env vars are read ONLY on first run (when no such AdminUser exists).
+  //
+  // The bootstrap developer is created with:
+  //   - systemRole = 'DEVELOPER' (highest privilege, bypasses all permission checks)
+  //   - isActive = true
+  //   - mustChangePassword = false (the operator chose the password at bootstrap)
+  //   - sessionVersion = 0 (default)
+  //
+  // In production, this is the ONLY way to create the first DEVELOPER. The
+  // /api/admin/users POST route (Stage 3) can only create ADMIN accounts —
+  // it hardcodes systemRole='ADMIN' and rejects any client-supplied
+  // systemRole=DEVELOPER.
+  //
+  // In dev (NODE_ENV !== 'production'), if DEVELOPER_USERNAME/PASSWORD are
+  // unset, we create a demo developer (devonly/devonly123) for frictionless
+  // local development. This is HARD-DISABLED in production — same pattern
+  // as the customer demo accounts.
+  await bootstrapDeveloperAdmin()
 
   // Adapt the rest of the seed to the resolved IDs.
   const admin = { id: adminId, email: 'placeholder@anima.local' }
@@ -956,6 +1049,16 @@ async function main() {
   } else {
     console.log('Admin login: SKIPPED in production (use SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD or Prisma Studio).')
     console.log('Customer login: SKIPPED in production.')
+  }
+  console.log('')
+  console.log('Admin Realm V1 (AdminUser table):')
+  console.log('  /admin/login — username + password (no Google, no OTP, no register)')
+  if (process.env.DEVELOPER_USERNAME && process.env.DEVELOPER_PASSWORD) {
+    console.log(`  Developer: bootstrap from env (username=${process.env.DEVELOPER_USERNAME})`)
+  } else if (!IS_PRODUCTION) {
+    console.log('  Developer: devonly / devonly123 (dev-only demo — hard-disabled in production)')
+  } else {
+    console.log('  Developer: NOT bootstrapped (set DEVELOPER_USERNAME / DEVELOPER_PASSWORD env vars)')
   }
   console.log('━━━━━━━━━━━━━━━━━━━━')
 }
