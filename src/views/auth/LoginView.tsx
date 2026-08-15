@@ -174,6 +174,20 @@ export function LoginView() {
               </div>
             </div>
 
+            {/* Forgot password link — V2 stage 5. Routes to /forgot-password
+                where the user enters their email to receive a PASSWORD_RESET
+                OTP. Anti-enumeration: the server always returns { sent: true }
+                whether or not the email exists. */}
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => navigate('/forgot-password')}
+                className="text-xs text-muted-foreground hover:text-primary hover:underline"
+              >
+                Lupa password?
+              </button>
+            </div>
+
             <Button type="submit" className="w-full" size="lg" disabled={loading}>
               {loading ? (
                 <>

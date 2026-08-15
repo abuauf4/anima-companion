@@ -160,6 +160,33 @@
  *          requiresVerification is true.
  *   SRC55. LoginView preserves nextPath as ?next= on /verify-email URL.
  *
+ * Stage 5 — forgot-password route + page + anti-enumeration invariants:
+ *   SRC56. forgot-password route (src/app/api/auth/forgot-password/route.ts)
+ *          exists, NO AUTH REQUIRED (user can't log in — that's the point).
+ *   SRC57. forgot-password route always returns { sent: true } on 200
+ *          (anti-enumeration — same response whether email exists or not).
+ *   SRC58. forgot-password route does NOT include the user email or any
+ *          user-identifying info in the response body.
+ *   SRC59. forgot-password route calls issueOtp with purpose: 'PASSWORD_RESET'.
+ *   SRC60. forgot-password route checks checkResendCooldown (60s server-side).
+ *   SRC61. forgot-password route returns 429 with code: 'RESEND_COOLDOWN' +
+ *          retryAfterMs when cooldown active.
+ *   SRC62. forgot-password route handles GOOGLE-only accounts by returning
+ *          { sent: true } (anti-enumeration — doesn't leak that this is a
+ *          Google account).
+ *   SRC63. forgot-password route handles non-existent emails by returning
+ *          { sent: true } (anti-enumeration — doesn't leak that email
+ *          doesn't exist).
+ *   SRC64. forgot-password route never logs the raw OTP code.
+ *   SRC65. forgot-password route validates email format (basic regex).
+ *   SRC66. /forgot-password page exists at src/app/forgot-password/page.tsx.
+ *   SRC67. ForgotPasswordView exists at src/views/auth/ForgotPasswordView.tsx.
+ *   SRC68. ForgotPasswordView calls /api/auth/forgot-password.
+ *   SRC69. ForgotPasswordView shows "cek email" state after submit (regardless
+ *          of whether the email actually exists — anti-enumeration UX).
+ *   SRC70. ForgotPasswordView handles 429 RESEND_COOLDOWN with countdown.
+ *   SRC71. LoginView has a "Lupa password?" link to /forgot-password.
+ *
  * HTTP integration (placeholder — implemented in stage 2+):
  *   (none yet — OTP API routes are implemented in stage 2+)
  */
@@ -772,15 +799,111 @@ assert(rvIdx > 0 && npIdx > 0 && rvIdx < npIdx, 'SRC54: LoginView checks require
 assert(/verify-email\?next=/.test(loginViewSrc), 'SRC55: LoginView preserves nextPath as ?next= on /verify-email URL')
 
 // ---------------------------------------------------------------------------
+// Stage 5 — forgot-password route + page + anti-enumeration invariants (SRC56-SRC71)
+// ---------------------------------------------------------------------------
+
+console.log('\n── Stage 5: forgot-password route source invariants (SRC56-SRC65) ──')
+
+const forgotPwRoutePath = SRC('app/api/auth/forgot-password/route.ts')
+assert(existsSync(forgotPwRoutePath), 'SRC56: forgot-password route file exists at src/app/api/auth/forgot-password/route.ts')
+if (existsSync(forgotPwRoutePath)) {
+  const forgotPwSrc = readFileSync(forgotPwRoutePath, 'utf8')
+
+  // SRC56. NO AUTH REQUIRED — the route must NOT call requireAuth.
+  // (Anti-pattern check: the route is the entry point for users who can't
+  // log in, so it must not require auth.)
+  assert(!/requireAuth\(\)/.test(forgotPwSrc), 'SRC56: forgot-password route does NOT require auth (entry point for users who can\'t log in)')
+
+  // SRC57. Always returns { sent: true } on 200.
+  // Count the NextResponse.json({ sent: true }) occurrences — should be
+  // at least 3 (success path, user-not-found path, google-user path).
+  const sentTrueMatches = forgotPwSrc.match(/sent:\s*true/g) || []
+  assert(sentTrueMatches.length >= 3, `SRC57: forgot-password route returns { sent: true } in at least 3 branches (got ${sentTrueMatches.length} — anti-enumeration)`)
+
+  // SRC58. Does NOT include user email or user-identifying info in the
+  // response body. The response should only contain `sent: true` (or
+  // error info on 4xx).
+  // Check that no NextResponse.json contains user.email or user.name
+  // interpolated into the body.
+  assert(!/NextResponse\.json\(\s*\{[^}]*\$\{user\./.test(forgotPwSrc), 'SRC58: forgot-password route does NOT include user.email/user.name in response body (anti-enumeration)')
+
+  // SRC59. Calls issueOtp with purpose: 'PASSWORD_RESET'.
+  assert(/issueOtp\(/.test(forgotPwSrc), 'SRC59: forgot-password route calls issueOtp')
+  assert(/purpose:\s*['"]PASSWORD_RESET['"]/.test(forgotPwSrc), 'SRC59: forgot-password route calls issueOtp with purpose: "PASSWORD_RESET"')
+
+  // SRC60. Calls checkResendCooldown.
+  assert(/checkResendCooldown/.test(forgotPwSrc), 'SRC60: forgot-password route calls checkResendCooldown')
+  assert(/PASSWORD_RESET/.test(forgotPwSrc), 'SRC60: forgot-password route checks cooldown for PASSWORD_RESET purpose')
+
+  // SRC61. Returns 429 with RESEND_COOLDOWN + retryAfterMs.
+  assert(/status:\s*429/.test(forgotPwSrc), 'SRC61: forgot-password route returns 429 on cooldown')
+  assert(/['"]RESEND_COOLDOWN['"]/.test(forgotPwSrc), 'SRC61: forgot-password route returns code: "RESEND_COOLDOWN"')
+  assert(/retryAfterMs/.test(forgotPwSrc), 'SRC61: forgot-password route returns retryAfterMs in cooldown response')
+
+  // SRC62. GOOGLE-only accounts return { sent: true } (anti-enumeration).
+  assert(/provider\s*===\s*['"]GOOGLE['"]/.test(forgotPwSrc), 'SRC62: forgot-password route checks provider === "GOOGLE"')
+  // After the GOOGLE check, the route should return { sent: true } (not
+  // an error or a "this is a Google account" message).
+  // We check that the GOOGLE branch contains a sent: true return.
+  const googleBranchMatch = forgotPwSrc.match(/if\s*\(\s*user\.provider\s*===\s*['"]GOOGLE['"]\s*\)\s*\{[\s\S]*?\}/)
+  if (googleBranchMatch) {
+    assert(/sent:\s*true/.test(googleBranchMatch[0]), 'SRC62: forgot-password route GOOGLE branch returns { sent: true } (anti-enumeration)')
+  }
+
+  // SRC63. Non-existent emails return { sent: true } (anti-enumeration).
+  // Check that the !user branch returns sent: true.
+  const notFoundBranchMatch = forgotPwSrc.match(/if\s*\(\s*!user\s*\)\s*\{[\s\S]*?\}/)
+  if (notFoundBranchMatch) {
+    assert(/sent:\s*true/.test(notFoundBranchMatch[0]), 'SRC63: forgot-password route non-existent-email branch returns { sent: true } (anti-enumeration)')
+  }
+
+  // SRC64. Never logs the raw OTP code.
+  assert(!/console\.(log|error|warn)\([^)]*\$\{code\}/.test(forgotPwSrc), 'SRC64: forgot-password route does NOT console.log the raw OTP code')
+
+  // SRC65. Validates email format (basic regex).
+  // The route should reject malformed emails with a 400 response.
+  assert(/Format email tidak valid/.test(forgotPwSrc), 'SRC65: forgot-password route validates email format (rejects malformed with 400)')
+}
+
+console.log('\n── Stage 5: forgot-password page + view source invariants (SRC66-SRC71) ──')
+
+// SRC66. Page exists.
+const forgotPwPagePath = SRC('app/forgot-password/page.tsx')
+assert(existsSync(forgotPwPagePath), 'SRC66: /forgot-password page exists at src/app/forgot-password/page.tsx')
+
+// SRC67. View exists.
+const forgotPwViewPath = SRC('views/auth/ForgotPasswordView.tsx')
+assert(existsSync(forgotPwViewPath), 'SRC67: ForgotPasswordView exists at src/views/auth/ForgotPasswordView.tsx')
+if (existsSync(forgotPwViewPath)) {
+  const forgotPwViewSrc = readFileSync(forgotPwViewPath, 'utf8')
+
+  // SRC68. Calls /api/auth/forgot-password.
+  assert(/\/api\/auth\/forgot-password/.test(forgotPwViewSrc), 'SRC68: ForgotPasswordView calls /api/auth/forgot-password')
+
+  // SRC69. Shows "cek email" state after submit.
+  assert(/setSent\(true\)/.test(forgotPwViewSrc), 'SRC69: ForgotPasswordView sets sent=true after submit')
+  assert(/Cek email Anda/.test(forgotPwViewSrc) || /cek email/i.test(forgotPwViewSrc), 'SRC69: ForgotPasswordView shows "cek email" message after submit (anti-enumeration UX)')
+
+  // SRC70. Handles 429 RESEND_COOLDOWN with countdown.
+  assert(/RESEND_COOLDOWN/.test(forgotPwViewSrc), 'SRC70: ForgotPasswordView handles RESEND_COOLDOWN wire code')
+  assert(/startCooldown/.test(forgotPwViewSrc), 'SRC70: ForgotPasswordView has startCooldown function')
+  assert(/cooldownSeconds/.test(forgotPwViewSrc), 'SRC70: ForgotPasswordView has cooldownSeconds state')
+}
+
+// SRC71. LoginView has a "Lupa password?" link to /forgot-password.
+assert(/\/forgot-password/.test(loginViewSrc), 'SRC71: LoginView has a link to /forgot-password')
+assert(/Lupa password/.test(loginViewSrc), 'SRC71: LoginView has "Lupa password?" link text')
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 
 console.log('\n────────────────────────────────────────')
-console.log(`OTP domain + Stages 2-4 (register/send-otp/verify-otp/login-redirect): ${pass} passed, ${fail} failed`)
+console.log(`OTP domain + Stages 2-5 (register/send-otp/verify-otp/login/forgot-password): ${pass} passed, ${fail} failed`)
 if (fail > 0) {
   console.log('\nFailures:')
   failures.forEach((f) => console.log(`  - ${f}`))
   process.exit(1)
 }
-console.log('All Stage 1 + Stage 2 + Stage 3 + Stage 4 static assertions passed.')
+console.log('All Stage 1 + Stage 2 + Stage 3 + Stage 4 + Stage 5 static assertions passed.')
 process.exit(0)

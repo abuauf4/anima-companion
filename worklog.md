@@ -3194,3 +3194,89 @@ Stage Summary:
 - 0 stable features reverted. 0 admin / order / voucher / stock / catalog logic touched.
 - Next stages (5-7): forgot-password page + anti-enumeration response, forgot-password OTP → short-lived single-use reset grant, reset password + bcrypt + sessionVersion bump.
 - Git safety: small commit, push to main, no force push.
+
+---
+Task ID: account-recovery-v2-stage5-forgot-password-anti-enumeration
+Agent: main (Super Z)
+Task: Account Recovery & Verification V2 — Stage 5: forgot-password page + anti-enumeration response. Add /api/auth/forgot-password POST route that issues a PASSWORD_RESET OTP if the email exists + is a PASSWORD account, else silently does nothing. Response is always { sent: true } (anti-enumeration). Add /forgot-password page + ForgotPasswordView. Add "Lupa password?" link to LoginView. Stage 4 baseline is commit ee50ce6.
+
+Work Log:
+- Stage 4 baseline (commit ee50ce6) is on origin/main: login UNVERIFIED → /verify-email redirect.
+
+- Stage 5 implementation:
+  * `src/app/api/auth/forgot-password/route.ts` (NEW):
+    - POST handler, NO AUTH REQUIRED (user can't log in — that's the point).
+    - ANTI-ENUMERATION CONTRACT (V2 spec — critical):
+      * Always returns 200 with `{ sent: true }` whether the email exists or not.
+      * Non-existent email: silently returns `{ sent: true }` (no log entry — logging would create an operator-readable record of "this email does not exist" which could be abused).
+      * GOOGLE-only account (provider === 'GOOGLE'): silently returns `{ sent: true }` (doesn't leak that this is a Google account — the user is expected to remember they use Google Sign-In).
+      * PASSWORD account: checks 60s server-side resend cooldown → 429 with retryAfterMs if active (minor enumeration vector — see docstring tradeoff rationale); else issues PASSWORD_RESET OTP via issueOtp + sends via sendOtpEmail with purposeLabel='reset password'.
+      * Email adapter failure is swallowed silently (best-effort) — telling the user "email failed to send" would leak that the email exists but the adapter is broken.
+    - Input validation: email must be present + match basic regex `/^[^\s@]+@[^\s@]+\.[^\s@]+$/`. Returns 400 on missing/malformed (NOT an enumeration vector — attacker already knows they didn't send a real email).
+    - The 429 response IS a minor enumeration vector (attacker learns "email exists AND was used to request reset in last 60s") — accepted tradeoff because the cooldown is necessary to prevent OTP-spamming abuse. Stage 9 can add per-IP global rate limit as defense-in-depth.
+    - Uses logAuthError for the email-adapter catch (stable event label only in production).
+    - Never logs the raw OTP code (verified by SRC64).
+  * `src/views/auth/ForgotPasswordView.tsx` (NEW):
+    - Email input form with leading Mail icon, full-width on mobile.
+    - Submit handler: POST to /api/auth/forgot-password. On 200, sets `sent=true` state and shows "Cek email Anda" message (anti-enumeration UX — same message whether the email exists or not). Starts 60-second cooldown countdown.
+    - On 429 RESEND_COOLDOWN: reads retryAfterSeconds from server, starts countdown, shows error toast. Does NOT set sent=true (user hasn't successfully submitted yet).
+    - Resend button: disabled during cooldown, shows countdown text "Kirim ulang dalam Ns".
+    - "Kembali ke login" link at the bottom.
+    - Mobile-first: Card max-w-md, full-width buttons, touch-friendly tap targets.
+    - Stage 6 will add: "Saya sudah punya kode → enter OTP + new password" link to /reset-password (currently the user must wait for the OTP and stage 6 will ship the reset-password page).
+  * `src/app/forgot-password/page.tsx` (NEW):
+    - Next.js page route that renders ForgotPasswordView inside SiteShell.
+    - Metadata: noIndex=true (don't index the forgot-password page).
+  * `src/views/auth/LoginView.tsx` (modified):
+    - Added "Lupa password?" link below the password input, before the submit button. Routes to /forgot-password.
+    - All other LoginView behavior preserved (requiresVerification check, nextPath handling, role-based default, demo credentials, Google sign-in button, mobile-first layout).
+  * `scripts/test-otp-domain.ts` (extended with SRC56-SRC71 — 26 new assertions):
+    - SRC56: forgot-password route does NOT call requireAuth (entry point for users who can't log in).
+    - SRC57: returns { sent: true } in at least 3 branches (success, user-not-found, google-user) — anti-enumeration.
+    - SRC58: does NOT include user.email/user.name in response body.
+    - SRC59: calls issueOtp with purpose: 'PASSWORD_RESET'.
+    - SRC60: calls checkResendCooldown for PASSWORD_RESET purpose.
+    - SRC61: returns 429 with RESEND_COOLDOWN + retryAfterMs.
+    - SRC62: GOOGLE branch returns { sent: true } (anti-enumeration).
+    - SRC63: non-existent-email branch returns { sent: true } (anti-enumeration).
+    - SRC64: never logs the raw OTP code.
+    - SRC65: validates email format (rejects malformed with 400).
+    - SRC66: /forgot-password page exists.
+    - SRC67: ForgotPasswordView exists.
+    - SRC68: ForgotPasswordView calls /api/auth/forgot-password.
+    - SRC69: shows "cek email" state after submit (anti-enumeration UX).
+    - SRC70: handles 429 RESEND_COOLDOWN with countdown timer.
+    - SRC71: LoginView has "Lupa password?" link to /forgot-password.
+
+- Did NOT touch (preserved stable features):
+  * `src/lib/auth.ts`, `src/lib/identity.ts`, `src/lib/oauth-state.ts`, `src/lib/redirect.ts`, `src/lib/google.ts`
+  * `src/lib/otp.ts` + `src/lib/password-reset.ts` (stage 1 foundation)
+  * `src/lib/email.ts` (sendOtpEmail from stage 2 — unchanged, reused with purposeLabel='reset password')
+  * `src/app/api/auth/google/callback/route.ts`, all V1 verify-email routes, register/login/send-otp/verify-otp routes (stages 2-4 — unchanged)
+  * `src/views/auth/VerifyEmailView.tsx`, `RegisterView.tsx` (stages 2-3 — unchanged)
+  * All admin customer routes + CustomersView (member registry V1)
+  * All toast call sites + sonner.tsx + layout.tsx (Sonner standardization)
+  * All order / voucher / stock / catalog / SEO / Cloudinary logic
+
+Verification:
+- `bunx tsc --noEmit`: clean (0 errors, after clearing stale .next cache).
+- `bun run lint`: clean (0 errors, 0 warnings).
+- `bun run build`: exit 0 (Compiled successfully in 19.3s).
+- `bun run scripts/test-otp-domain.ts`: 188 passed, 0 failed (was 162 at stage 4, +26 new for stage 5).
+- `bun run scripts/test-auth-integrity.ts`: 96 passed, 0 failed (no Auth V1 regression).
+- `bun run scripts/test-verified-identity.ts`: 2101 passed, 0 failed (no Identity V1 regression).
+- `bun run scripts/test-member-registry.ts`: 79 passed, 0 failed (no Member Registry V1 regression).
+- `bun run scripts/test-toast.ts`: 44 passed, 0 failed (no Sonner regression).
+
+Stage Summary:
+- 4 new files + 2 modified in stage 5:
+  * New: src/app/api/auth/forgot-password/route.ts (POST, no auth, anti-enumeration { sent: true } response, 60s cooldown, GOOGLE + non-existent-email silent skip).
+  * New: src/views/auth/ForgotPasswordView.tsx (email input form, "cek email" state, resend cooldown countdown, mobile-first).
+  * New: src/app/forgot-password/page.tsx (Next.js page route).
+  * Modified: src/views/auth/LoginView.tsx (+ "Lupa password?" link).
+  * Modified: scripts/test-otp-domain.ts (+SRC56-SRC71, 26 new assertions).
+  * Modified: worklog.md (this entry).
+- V2 spec compliance for stage 5: halaman Lupa Password ✅, forgot password pakai OTP 6 digit ✅ (PASSWORD_RESET purpose, same OTP service as email verification), response forgot-password anti email-enumeration ✅ (always { sent: true }, GOOGLE + non-existent silent skip), 60s server-side resend cooldown ✅.
+- 0 stable features reverted. 0 admin / order / voucher / stock / catalog logic touched.
+- Next stages (6-7): forgot-password OTP → short-lived single-use reset grant (verify-otp + reset-grant routes + /reset-password UI), reset password + bcrypt + sessionVersion bump.
+- Git safety: small commit, push to main, no force push.
