@@ -93,6 +93,16 @@ model User {
   // NEVER set this from a client request body — only from trusted server
   // flows (token verification / OAuth callback).
   emailVerifiedAt  DateTime?
+  // === Account Recovery & Verification V2 ===
+  // Monotonically-increasing version number for the user's session
+  // authority. Encoded into the HMAC session cookie at sign time and
+  // re-checked at every `getCurrentUser()` call. Bumped on password reset
+  // (and any other credential-changing event) so all sessions issued
+  // before the bump are immediately invalid — the user must re-authenticate
+  // with the new credentials. Defaults to 0 so existing rows are
+  // backwards-compatible. NEVER read from a client request body — only
+  // the server-side reset-password flow increments this.
+  sessionVersion   Int      @default(0)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -103,6 +113,8 @@ model User {
   wishlist         Wishlist[]
   seller           Seller?
   verificationTokens EmailVerificationToken[]
+  otpCodes         OtpCode[]
+  passwordResetGrants PasswordResetGrant[]
 }
 
 // ==================== EMAIL VERIFICATION TOKENS ====================
@@ -131,6 +143,129 @@ model EmailVerificationToken {
   userId      String
   // SHA-256 hex of the raw 32-byte token. Never store the raw token.
   tokenHash   String    @unique
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ==================== OTP CODES (Account Recovery & Verification V2) ====================
+// 6-digit one-time passwords for (a) email verification on new PASSWORD
+// registrations and (b) password-reset identity proof. Replaces the V1
+// link-based EmailVerificationToken flow for new issuances — V1 tokens
+// already in the DB remain valid until consumed or expired, but new
+// requests use this OTP table.
+//
+// SECURITY CONTRACT:
+//   - The raw 6-digit code is NEVER stored. The DB stores only
+//     `codeHash = HMAC-SHA-256(code, secret)` where `secret` is the
+//     server's AUTH_SECRET (same secret used to sign session cookies).
+//     HMAC (not plain SHA-256) is mandatory because the 6-digit code
+//     space is only 10^6 — without a server-secret pepper, a DB-leak
+//     attacker could brute-force the hash in microseconds. With the
+//     HMAC pepper, the attacker must know AUTH_SECRET to mount even an
+//     offline brute force.
+//   - `purpose` discriminates email-verification OTPs from password-reset
+//     OTPs so a code issued for one flow cannot be redeemed in the other.
+//   - `attempts` counts failed verification attempts against this code.
+//     When `attempts >= maxAttempts` (default 5), the code is LOCKED —
+//     further verification attempts return `LOCKED` and the user must
+//     request a new code (subject to the 60s resend cooldown).
+//   - `expiresAt` is 10 minutes after creation (V2 spec).
+//   - `lastSentAt` records when the most recent EMAIL carrying this code
+//     was dispatched. The resend-cooldown check is
+//     `now - lastSentAt < 60s` → reject the resend. This is enforced
+//     server-side, not client-side, so a malicious client cannot bypass it.
+//   - `consumedAt` is NULL until the code is successfully verified.
+//     Once set, the code can never be used again — single-use enforcement.
+//   - On requesting a new OTP, all UNCONSUMED OTPs for the same
+//     (userId, purpose) pair are invalidated by setting `consumedAt = now()`
+//     AND `attempts = maxAttempts` (so a partially-attacked old code can't
+//     be revived). Only the newest OTP is valid at any time.
+//   - Concurrency-safe consumption: the verify path uses an interactive
+//     `db.$transaction(async (tx) => { ... })` that (1) looks up the
+//     newest unconsumed OTP for the (userId, purpose) pair inside the tx,
+//     (2) atomically claims it via `updateMany WHERE id = row.id AND
+//     consumedAt IS NULL AND expiresAt > now AND attempts < maxAttempts`,
+//     (3) GATES on `claim.count === 1` — if the claim lost the race (a
+//     concurrent verify won it, or a new OTP was issued between lookup
+//     and claim, or the code expired between lookup and claim, or the
+//     attempts just hit maxAttempts), NO further mutation happens.
+//     Only when `claim.count === 1` does the verify proceed to its
+//     purpose-specific side effect (set emailVerifiedAt, or issue a
+//     PasswordResetGrant).
+//   - On a WRONG code (hash mismatch), `attempts` is incremented inside
+//     the SAME transaction. Two concurrent wrong-code requests can race,
+//     but the `updateMany WHERE id = row.id AND attempts < maxAttempts`
+//     re-asserts the cap atomically — when attempts hits maxAttempts,
+//     further wrong-code requests return LOCKED without incrementing
+//     past the cap. The cap is hard.
+model OtpCode {
+  id          String    @id @default(cuid())
+  userId      String
+  // 'EMAIL_VERIFICATION' | 'PASSWORD_RESET'. Discriminates the two OTP
+  // flows so a code issued for one cannot be redeemed in the other.
+  purpose     String
+  // HMAC-SHA-256(code, AUTH_SECRET) — hex digest. The raw 6-digit code
+  // is NEVER persisted. See the SECURITY CONTRACT above for why HMAC
+  // (not plain SHA-256) is mandatory for a 6-digit code space.
+  codeHash    String
+  // Failed verification attempts against THIS code. When this reaches
+  // `maxAttempts`, the code is LOCKED — the user must request a new one.
+  attempts    Int       @default(0)
+  // Denormalized cap (default 5) for auditability — could be tuned per
+  // purpose in the future without a schema change.
+  maxAttempts Int       @default(5)
+  expiresAt   DateTime
+  // NULL until successfully consumed (single-use enforcement).
+  consumedAt  DateTime?
+  // When the most recent EMAIL carrying this code was dispatched. The
+  // 60-second resend cooldown is `now - lastSentAt < 60s`.
+  lastSentAt  DateTime
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@index([expiresAt])
+}
+
+// ==================== PASSWORD RESET GRANTS (V2) ====================
+// Short-lived, single-use grants issued AFTER a valid password-reset OTP
+// consumption. The raw grant is a 32-byte CSPRNG hex string delivered
+// to the user's email OR returned to the OTP-verify response (the route
+// will decide; current V2 plan: returned in the verify-OTP response,
+// then submitted by the reset-password form).
+//
+// SECURITY CONTRACT:
+//   - The raw grant is 32 bytes of CSPRNG output, hex-encoded (64 chars).
+//   - The DB stores only `sha256(rawGrant)` as `grantHash` — a DB
+//     compromise does NOT reveal active grants. SHA-256 is sufficient
+//     here (unlike the 6-digit OTP) because the input is 32 bytes of
+//     CSPRNG entropy — already brute-force-infeasible.
+//   - `expiresAt` is 10 minutes after creation (V2 spec — short-lived).
+//   - `consumedAt` is NULL until the grant is consumed by the
+//     reset-password route. Once set, the grant can never be used again.
+//   - Concurrency-safe consumption: the reset-password route uses
+//     `updateMany WHERE consumedAt IS NULL AND expiresAt > now()` and
+//     checks `count === 1` — only one of two concurrent requests with
+//     the same grant can win. The loser is rejected.
+//   - On successful consumption, the route atomically (in the SAME
+//     interactive transaction) (a) sets the new bcrypt password,
+//     (b) bumps `User.sessionVersion` (invalidating all prior sessions),
+//     (c) marks the grant as consumed.
+//   - A successful password reset ALSO invalidates all unconsumed OTPs
+//     for the user (any purpose) by setting `consumedAt = now()` — so
+//     a partially-attacked password-reset OTP cannot be used after the
+//     password is changed.
+model PasswordResetGrant {
+  id          String    @id @default(cuid())
+  userId      String
+  // SHA-256 hex of the raw 32-byte grant. Never store the raw grant.
+  grantHash   String    @unique
   expiresAt   DateTime
   consumedAt  DateTime?
   createdAt   DateTime  @default(now())

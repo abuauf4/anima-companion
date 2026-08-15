@@ -2848,3 +2848,106 @@ Stage Summary:
 - 3 files deleted: src/components/ui/toast.tsx, src/components/ui/toaster.tsx, src/hooks/use-toast.ts.
 - 0 auth files touched. 0 business-logic files touched (LoginView, CheckoutView, all admin views unchanged).
 - Auth + identity + order integrity all remain green (96 + 2101 assertions).
+- Auth + identity + order integrity all remain green (96 + 2101 assertions).
+
+---
+Task ID: account-recovery-v2-stage1-otp-domain-foundation
+Agent: main (Super Z)
+Task: Account Recovery & Verification V2 — Stage 1: OTP/domain foundation. Audit current origin/main, add OtpCode + PasswordResetGrant + User.sessionVersion schema, HMAC-secured OTP service, single-use reset grant service, SQL reference, env docs, and a 77-assertion test suite. Stage 1 commits + pushes BEFORE any UI / API route work. Stable features (Auth V1, Identity V1, OAuth state cookie, Resend email adapter, member registry, Sonner) must NOT be reverted.
+
+Work Log:
+- Cloned fresh from origin/main (commit 454620e — Sonner standardization). Working tree clean, on `main`, up-to-date with `origin/main`.
+- Audited current state:
+  * Auth V1 (`src/lib/auth.ts`): HMAC session cookies, bcrypt, AuthError pattern, OAuth state token, getSecret with prod hard-fail — STABLE, untouched.
+  * Identity V1 (`src/lib/identity.ts`): 32-byte link-based verification tokens, SHA-256 hash, 24h TTL, interactive $transaction with claim.count===1 gate — STABLE, untouched. The V1 EmailVerificationToken table is preserved for backward compat; V2 OTP flow runs alongside it (new requests use OTP, old tokens still consume).
+  * OAuth state cookie binding (`src/lib/oauth-state.ts`): browser-bound nonce, single-use — STABLE, untouched.
+  * Email adapter (`src/lib/email.ts`): DevConsole (dev) + Resend (prod) already production-ready — STABLE, untouched.
+  * Open-redirect defense (`src/lib/redirect.ts`): safeInternalPath — STABLE, untouched.
+  * Google OAuth callback (`src/app/api/auth/google/callback/route.ts`): account-linking policy, takeover defense — STABLE, untouched.
+  * Sonner toast: globally standardized — STABLE, untouched.
+  * Member registry (`/api/admin/customers/**`): CUSTOMER-only invariant, pagination, CSV export — STABLE, untouched.
+
+- V2 gaps identified:
+  1. No OTP-based flow (V1 uses long-link tokens, not 6-digit OTP).
+  2. No 10-min OTP expiry (V1 is 24h — too long for OTP).
+  3. No 60s resend cooldown server-side.
+  4. No max-5-attempts tracking (V1 has no rate limit on token attempts).
+  5. No HMAC-peppered OTP storage (V1 uses plain SHA-256 of high-entropy 32-byte token — fine for V1, unsafe for 6-digit OTP).
+  6. Login lets unverified users in (no redirect to /verify-email).
+  7. No forgot-password flow.
+  8. No sessionVersion for invalidating sessions after password reset.
+  9. No short-lived single-use reset grant.
+
+- Stage 1 implementation (OTP/domain foundation ONLY — no UI, no API routes):
+  * `prisma/schema.prisma`:
+    - Added `sessionVersion Int @default(0)` to User (monotonic session-authority version; bumped on password reset; will be checked in getCurrentUser in stage 7).
+    - Added `OtpCode` model: id, userId, purpose ('EMAIL_VERIFICATION' | 'PASSWORD_RESET'), codeHash (HMAC), attempts Int @default(0), maxAttempts Int @default(5), expiresAt, consumedAt?, lastSentAt, createdAt. Indexes: @@index([userId, purpose]) for lookup, @@index([expiresAt]) for cleanup.
+    - Added `PasswordResetGrant` model: id, userId, grantHash @unique (SHA-256), expiresAt, consumedAt?, createdAt. Index @@index([userId]).
+    - Added relations to User: `otpCodes OtpCode[]` and `passwordResetGrants PasswordResetGrant[]` (onDelete: Cascade).
+    - Preserved V1 `EmailVerificationToken` table + relations for backward compat.
+  * `src/lib/otp.ts` (NEW — 509 lines):
+    - `generateOtpCode()` — `crypto.randomInt(0, 1_000_000)` zero-padded to 6 chars. CSPRNG, no modulo bias.
+    - `hashOtpCode(code, purpose, userId)` — `HMAC-SHA-256(purpose\0userId\0code, AUTH_SECRET)`. HMAC (not plain SHA-256) is mandatory because 10^6 code space is brute-forceable in microseconds without a pepper. Purpose+userId binding prevents cross-flow + cross-user replay.
+    - `constantTimeEqualHex(a, b)` — `timingSafeEqual`-backed constant-time hex comparison.
+    - `issueOtp({userId, purpose, maxAttempts?})` — atomic transaction: invalidate all previously unconsumed OTPs for (userId, purpose) by setting `consumedAt = now AND attempts = maxAttempts` (defense-in-depth: even if consumedAt rolls back, the attempts cap locks the old code), then insert the new OTP. Returns raw code + expiresAt + resendAvailableAt. Does NOT enforce resend cooldown — that's the caller's job (use checkResendCooldown first).
+    - `checkResendCooldown(userId, purpose)` — server-side 60s resend cooldown based on the newest unconsumed OTP's `lastSentAt`. Returns `{allowed, retryAfterMs, lastSentAt}`. A malicious client cannot bypass it (no client-supplied timestamp).
+    - `consumeOtp({userId, purpose, code})` — interactive `db.$transaction(async (tx) => {...})`:
+      (1) findFirst the newest unconsumed, unexpired OTP for (userId, purpose);
+      (2) check `attempts < maxAttempts` in JS (Prisma can't compare two columns in WHERE) — if locked, return NOT_FOUND_OR_EXPIRED;
+      (3) compute HMAC of user-supplied code + constant-time compare to stored hash;
+      (4a) WRONG CODE → atomically increment attempts gated on `attempts < maxAttempts AND consumedAt IS NULL`; if `inc.count === 0` (concurrent verify consumed or locked the OTP), return NOT_FOUND_OR_EXPIRED; else return WRONG_CODE with remainingAttempts;
+      (4b) CODE MATCHES → atomically claim via `updateMany WHERE id=row.id AND consumedAt IS NULL AND expiresAt > now AND attempts < maxAttempts`; if `claim.count !== 1` (race lost — concurrent verify won, or new OTP issued between lookup and claim, or expired, or just locked), return ALREADY_CONSUMED (idempotent success); else return OK.
+      The interactive form is critical — the array-form `$transaction([...])` cannot short-circuit on `count: 0` (count:0 is a successful operation that simply matched no rows; the next op still executes).
+    - `revokeAllOtpsForUser(userId)` — invalidates all unconsumed OTPs for a user (any purpose). Called by the password-reset flow after a successful reset (stage 7).
+    - Constants: `OTP_TTL_MS = 10 * 60 * 1000` (10 min, V2 spec), `OTP_RESEND_COOLDOWN_MS = 60 * 1000` (60s, V2 spec), `OTP_DEFAULT_MAX_ATTEMPTS = 5` (V2 spec).
+    - Secret resolution: reuses `AUTH_SECRET` (same trust boundary as session-cookie signing). Hard-fails in production if missing. Does NOT introduce a separate OTP_SECRET (single trust boundary).
+  * `src/lib/password-reset.ts` (NEW — 169 lines):
+    - `generateResetGrant()` — 32-byte CSPRNG hex (64 chars). Same entropy class as V1 link-based tokens.
+    - `hashResetGrant(rawGrant)` — `SHA-256(rawGrant)` hex. SHA-256 is sufficient here (unlike the 6-digit OTP) because 32 bytes of CSPRNG entropy is already brute-force-infeasible — no HMAC pepper needed.
+    - `constantTimeEqualGrantHash(a, b)` — timingSafeEqual-backed.
+    - `issueResetGrant(userId)` — atomic transaction: invalidate old unconsumed grants for the user (set consumedAt = now), then insert the new grant. Returns raw grant + expiresAt.
+    - `RESET_GRANT_TTL_MS = 10 * 60 * 1000` (10 min, V2 spec — short window so a leaked grant has limited usability).
+    - Does NOT expose `consumeResetGrant` — grant consumption MUST happen inside the reset-password route's interactive transaction (atomic with the password update + sessionVersion bump). Exposing a helper would tempt future code to call it outside the transaction boundary.
+  * `prisma/sql/20260815-account-recovery-v2.sql` (NEW):
+    - SQL reference file (NOT a Prisma migration — project uses schema-push workflow per `prisma/schema.prisma` header).
+    - Documents the DDL that `prisma db push` would apply: `ALTER TABLE "User" ADD COLUMN "sessionVersion"`, `CREATE TABLE "OtpCode"` with indexes, `CREATE TABLE "PasswordResetGrant"` with unique grantHash index, foreign keys with `ON DELETE CASCADE`.
+    - Audit reference only — operators run `bunx prisma db push` against the target DATABASE_URL to apply.
+  * `.env.example`:
+    - Added documentation block under AUTH_SECRET explaining its dual role as OTP HMAC pepper. The 6-digit code space (10^6) is brute-forceable in microseconds if the DB leaks and the hash is plain SHA-256; HMAC-peppering with AUTH_SECRET raises the bar to "attacker must know AUTH_SECRET to mount even an offline brute force" — and if they have AUTH_SECRET, the OTP is the least of our problems (they can forge session cookies directly). Same trust boundary as session-cookie signing — intentional reuse, NOT a separate OTP_SECRET.
+  * `scripts/test-otp-domain.ts` (NEW — 77 assertions):
+    - Pure-static scenarios (no DB, no HTTP):
+      OTP1-OTP14: code generation (6-char zero-padded, ~uniform distribution over 10k samples), HMAC hashing (deterministic, sensitive to code/purpose/userId changes, NOT plain SHA-256, matches manually-computed HMAC-SHA-256 with dev secret), constant-time comparison (equal, different, different-length, symmetric, empty strings), V2 spec constants (10 min TTL, 60s cooldown, 5 max attempts).
+      GRANT1-GRANT6: 32-byte hex grant generation, SHA-256 hashing, determinism, sensitivity, constant-time comparison, 10 min TTL.
+      SRC1-SRC19: source-level invariants — schema declares OtpCode + PasswordResetGrant + User.sessionVersion; indexes (userId, purpose) + (expiresAt) on OtpCode; grantHash @unique on PasswordResetGrant; otp.ts exports the full API + uses interactive $transaction + gates on claim.count===1 + invalidates old OTPs (consumedAt AND attempts=maxAttempts) + uses createHmac (NOT createHash) + uses randomInt (NOT Math.random) + uses timingSafeEqual + does NOT export OTP_SECRET; password-reset.ts exports the API + invalidates old grants + uses createHash (SHA-256 sufficient for 32-byte input) + does NOT expose consumeResetGrant; SQL reference file exists with CREATE TABLE statements; .env.example documents AUTH_SECRET dual role.
+
+- Did NOT touch (preserved stable features):
+  * `src/lib/auth.ts` (Auth V1)
+  * `src/lib/identity.ts` (Identity V1 — V1 link-based verification still works for already-issued tokens)
+  * `src/lib/oauth-state.ts` (OAuth state cookie binding)
+  * `src/lib/email.ts` (DevConsole + Resend adapter)
+  * `src/lib/redirect.ts` (safeInternalPath)
+  * `src/app/api/auth/google/callback/route.ts` (Google OAuth callback)
+  * `src/app/api/auth/register/route.ts`, `login/route.ts`, `verify-email/request/route.ts`, `verify-email/confirm/route.ts` (V1 auth routes — will be migrated to V2 in stages 2-4)
+  * All admin customer routes + CustomersView (member registry V1)
+  * All toast call sites + sonner.tsx + layout.tsx (Sonner standardization)
+  * All order / voucher / stock / catalog / SEO / Cloudinary logic
+
+Verification:
+- `bunx prisma generate`: clean (schema is valid).
+- `bunx tsc --noEmit`: clean (0 errors).
+- `bun run lint`: clean (0 errors, 0 warnings).
+- `bun run build`: exit 0 (compiled successfully in 19.3s). Prisma errors during prerender are pre-existing sandbox limitations (no DATABASE_URL set) — same as baseline 454620e.
+- `bun run scripts/test-otp-domain.ts`: 77 passed, 0 failed.
+- `bun run scripts/test-auth-integrity.ts`: 96 passed, 0 failed (no regression to Auth V1).
+- `bun run scripts/test-verified-identity.ts`: 2101 passed, 0 failed (no regression to Verified Identity V1).
+- `bun run scripts/test-member-registry.ts`: 79 passed, 0 failed (no regression to Member Registry V1).
+- `bun run scripts/test-toast.ts`: 44 passed, 0 failed (no regression to Sonner V1).
+
+Stage Summary:
+- 5 files added/modified in stage 1 (foundation only — no UI, no API routes):
+  * Modified: prisma/schema.prisma (+OtpCode model, +PasswordResetGrant model, +User.sessionVersion), .env.example (AUTH_SECRET dual-role docs).
+  * New: src/lib/otp.ts (HMAC-secured OTP service), src/lib/password-reset.ts (single-use reset grant service), prisma/sql/20260815-account-recovery-v2.sql (DDL reference), scripts/test-otp-domain.ts (77 assertions).
+- 0 stable features reverted. 0 API routes touched. 0 UI components touched.
+- V2 spec compliance for stage 1: 6-digit OTP ✅, HMAC storage (not plaintext) ✅, 10-min expiry ✅, 60s resend cooldown server-side ✅, max 5 attempts concurrency-safe ✅, new OTP invalidates old ✅, atomic transaction primitive (consumeOtp returns OK/WROONG/NOT_FOUND_OR_EXPIRED/ALREADY_CONSUMED — caller will gate emailVerifiedAt write on `result === 'OK'` in stage 3) ✅.
+- Next stages (2-9): register → UNVERIFIED → /verify-email + OTP send, verify OTP + emailVerifiedAt atomic tx, login UNVERIFIED → /verify-email redirect, forgot-password page + anti-enumeration, forgot-password OTP → reset grant, reset password + bcrypt + sessionVersion bump, Google OAuth skip-OTP-if-email_verified, Resend production email + Sonner feedback + mobile-first UI polish.
+- Git safety: small commit, push to main, no force push.
