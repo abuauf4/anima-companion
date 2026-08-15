@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logAuthError } from '@/lib/auth'
 import { consumeVerificationToken, VerifyTokenResult } from '@/lib/identity'
-import { sendVerifiedConfirmation } from '@/lib/email'
-import { db } from '@/lib/db'
 
 /**
  * POST /api/auth/verify-email/confirm — verify an email verification token.
@@ -88,25 +86,14 @@ export async function POST(req: NextRequest) {
     let emailVerifiedAt: Date | null = null
     if (result.result === 'OK' || result.result === 'ALREADY_VERIFIED') {
       emailVerifiedAt = result.emailVerifiedAt ?? null
-      // Send a confirmation email — best-effort, don't fail the verify
-      // if the email adapter can't send. Use logAuthError for the catch
-      // so production never logs a raw email-adapter error message that
-      // could include PII / config fragments.
-      if (result.userId) {
-        try {
-          const user = await db.user.findUnique({
-            where: { id: result.userId },
-            select: { email: true, name: true },
-          })
-          if (user) {
-            await sendVerifiedConfirmation(user.email, user.name ?? undefined)
-          }
-        } catch (e) {
-          // Email adapter failure is non-fatal — the verification itself
-          // already committed. Log a stable event label only.
-          logAuthError('Verify-email confirmation email send failed', e)
-        }
-      }
+      // NOTE: We deliberately do NOT send a "your email is verified"
+      // confirmation email here. The user has just proven control of
+      // their inbox by clicking the verification link — a second email
+      // would be redundant noise. The success state is communicated
+      // via the response body (`code: 'OK', emailVerifiedAt`) and the
+      // UI's Sonner toast / success card. This mirrors the V2 OTP
+      // verification flow in verify-email/verify-otp/route.ts which
+      // also sends zero post-verification emails.
     }
 
     // Map internal result to wire-level code.
