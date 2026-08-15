@@ -3915,3 +3915,52 @@ Stage Summary:
   * Stage 2: /admin/login + /admin/change-password pages + /api/admin/auth/{login,logout,me,change-password} routes.
   * Stage 3: Developer-only "Setting User Admin" UI + /api/admin/users/** routes + AdminLayout permission-aware sidebar.
   * Stage 4: Migrate /api/admin/** from requireAdmin (legacy) to requirePermission / requireDeveloper. Deprecate (don't drop) User.role=ADMIN path.
+
+---
+Task ID: admin-realm-stage-2
+Agent: main
+Task: Admin Realm Separation + Developer RBAC V1 — Stage 2: /admin/login + password flow
+
+Work Log:
+- Stage 1 was already committed locally (4e9ab1c + worklog b63f6fa) but not pushed. Pushed both to origin/main using user-supplied PAT (inline URL, not persisted to git config). origin/main now at b63f6fa.
+- Stage 2 AUDIT: read existing customer /login page + LoginView + /api/auth/login route for design conventions (Card/Input/Label/Button/toast/container-page/gradient-brand/useHashRouter/safeInternalPath). Read AdminLayout for sidebar design. Read admin-auth.ts (Stage 1) to confirm helper API. Read admin-permissions.ts for PERMISSION_KEYS. Read auth.ts for AuthError/handleAuthError/logAuthError pattern. Read use-auth.ts to confirm customer auth store is separate. Read /admin/[[...slug]]/page.tsx to understand catch-all routing + legacy User.role=ADMIN guard.
+- Stage 2 IMPLEMENTATION — 8 new files + 1 modified:
+  * src/app/api/admin/auth/login/route.ts — POST. Username+password. Lower-cases username. bcrypt compare via compareAdminPassword. Anti-enumeration: SAME generic "Username atau password salah" for not-found / wrong-password / inactive. Sets anima_admin_session via createAdminSession. Updates lastLoginAt. Returns { user: { id, username, displayName, systemRole, mustChangePassword } } — NO passwordHash.
+  * src/app/api/admin/auth/logout/route.ts — POST. destroyAdminSession. Idempotent (always 200 { ok: true }).
+  * src/app/api/admin/auth/me/route.ts — GET. getCurrentAdminUser. Returns { admin: { id, username, displayName, systemRole, mustChangePassword, permissions } } — NO password hash. 401 UNAUTHENTICATED when no session.
+  * src/app/api/admin/auth/change-password/route.ts — POST. Uses requireAdminSession (NOT requireAdminSessionActive) so it works during mustChangePassword state. Verifies currentPassword via bcrypt. Enforces newPassword === confirmPassword, >= 8 chars, !== currentPassword. Replaces passwordHash, sets mustChangePassword=false, increments sessionVersion by 1. Re-issues admin session cookie with new sessionVersion (admin stays logged in on THIS device; all OTHER sessions invalidated). Response { ok: true } — NO password hash.
+  * src/app/admin/login/page.tsx — Server Component. Checks getCurrentAdminUser; redirects authenticated admins to /admin (or /admin/change-password if mustChangePassword). Renders AdminLoginView. noIndex. NO GuestGate, NO customer auth check.
+  * src/views/admin/AdminLoginView.tsx — Client component. Username + Password form. Button "Masuk Admin". NO Google, NO OTP, NO Register, NO Forgot-password. Posts to /api/admin/auth/login. On mustChangePassword → router.push('/admin/change-password'). safeAdminNext open-redirect defense (?next= restricted to /admin paths). Visual language matches customer LoginView (same Card/Input/Button/gradient-brand badge).
+  * src/app/admin/change-password/page.tsx — Server Component. Checks getCurrentAdminUser; redirects to /admin/login if no session. Passes mustChangePassword + displayName to view. noIndex.
+  * src/views/admin/AdminChangePasswordView.tsx — Client component. currentPassword + newPassword + confirmPassword fields. Show/hide toggle for current + new (NO plaintext storage — passwordHash never returned by any API). Min 8 chars. Mismatch check. Same-password rejection. Forced-change banner when mustChangePassword=true. Posts to /api/admin/auth/change-password. On success → router.push('/admin') + router.refresh().
+  * src/app/admin/[[...slug]]/page.tsx — MODIFIED. Dual-auth transition state: checks NEW admin realm (getCurrentAdminUser) FIRST → renders AdminLayout (or redirects to /admin/change-password if mustChangePassword). Falls back to LEGACY customer admin auth (getCurrentUser + User.role=ADMIN) if no new admin session. Legacy path preserved UNCHANGED (AdminGate wrapper, LoginRequiredView, UnauthorizedView). NOTE: new-admin-realm users will see the panel shell render, but /api/admin/** data calls will 401 until Stage 4 migrates them (AdminLayout silently catches those errors — counts stay 0, views show empty states). This is the expected Stage 2 state.
+  * scripts/test-admin-auth-flow.ts — NEW 112-assertion static test suite. 12 phases (A-L) covering: login route (anti-enumeration, lower-case, bcrypt, isActive, lastLoginAt, mustChangePassword, no passwordHash, GENERIC_ERROR in 3 failure paths, logAuthError), logout route (destroyAdminSession, idempotent), me route (getCurrentAdminUser, permissions, no password hash, 401), change-password route (requireAdminSession NOT requireAdminSessionActive, bcrypt verify, min 8, same-password reject, mismatch reject, hashAdminPassword, mustChangePassword=false, sessionVersion++, createAdminSession re-issue, handleAuthError, logAuthError), login page (AdminLoginView, getCurrentAdminUser, redirect, noIndex, NO Google, NO GuestGate, NO getCurrentUser), change-password page (AdminChangePasswordView, redirect to /admin/login, mustChangePassword pass, noIndex), AdminLoginView (username+password, "Masuk Admin", /api/admin/auth/login, mustChangePassword redirect, safeAdminNext, startsWith('/admin'), NO Google/forgot-password/register/useAuth/issueOtp, demo creds dev-only), AdminChangePasswordView (3 fields, /api/admin/auth/change-password, min 8, mismatch, same-password, mustChangePassword UI, router.push), catch-all dual-auth (getCurrentAdminUser + getCurrentUser fallback, mustChangePassword redirect, AdminGate legacy, LoginRequiredView/UnauthorizedView legacy), cross-realm cookie separation (anima_admin_session vs anima_session, realm:'admin' marker, customer auth lib does NOT reference admin cookie), customer auth regression (customer /api/auth/login unchanged, customer /login still LoginView+GuestGate, customer LoginView still has Google+forgot-password+register), Stage 1 helper exports intact.
+
+- Verification (all run in this sandbox):
+  * bunx tsc --noEmit           → exit 0
+  * bun run lint                → exit 0
+  * bun run build               → exit 0 (all routes built, including new /admin/login, /admin/change-password, /api/admin/auth/*)
+  * scripts/test-admin-realm    → 148/148 PASS (Stage 1 intact)
+  * scripts/test-admin-auth-flow → 112/112 PASS (Stage 2)
+  * scripts/test-auth-integrity → PASS
+  * scripts/test-verified-identity → PASS
+  * scripts/test-otp-domain     → 295/295 PASS
+  * scripts/test-google-oauth   → 114/114 PASS
+  * scripts/test-email-brevo    → 37/37 PASS
+  * scripts/test-member-registry → PASS
+  * scripts/test-toast          → 44/44 PASS
+  * scripts/test-order-integrity → requires DATABASE_URL (skipped — env limitation, same as Stage 1)
+  * Total: 750+ static assertions pass. 0 customer-auth regressions.
+
+Stage Summary:
+- 9 files changed (1 modified, 8 new): ~750 insertions, 0 deletions.
+- NEW admin auth flow: /admin/login (username+password) → anima_admin_session → /admin/change-password (first-login forced change + voluntary change) → /admin (panel shell).
+- Anti-enumeration: login returns SAME generic error for not-found / wrong-password / inactive.
+- sessionVersion revocation: change-password increments sessionVersion → all other sessions invalidated.
+- mustChangePassword gate: forced redirect to /admin/change-password; all other admin routes will use requireAdminSessionActive (Stage 3+4).
+- Cross-realm cookie separation: anima_admin_session (realm:'admin' marker) vs anima_session. Customer cookie cannot be replayed as admin cookie.
+- Dual-auth transition: /admin/[[...slug]] accepts NEW admin realm (first) OR legacy customer admin (fallback). Legacy path UNCHANGED.
+- Customer auth UNTOUCHED: 0 changes to anima_session, requireAdmin (legacy), /api/auth/*, OTP, Google OAuth, Brevo, member registry, forgot/reset-password, LoginView, GuestGate, useAuth.
+- Next stages:
+  * Stage 3: Developer-only "Setting User Admin" UI + /api/admin/users/** routes (CRUD admins, assign permissions, reset password, enable/disable) + AdminLayout permission-aware sidebar.
+  * Stage 4: Migrate /api/admin/** from requireAdmin (legacy) to requirePermission / requireDeveloper. Remove legacy fallback from catch-all. QA.

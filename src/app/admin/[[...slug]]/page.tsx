@@ -1,32 +1,50 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { SiteShell } from "@/components/layout/SiteShell";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { AdminGate } from "@/components/layout/AuthGate";
 import { buildMetadata } from "@/lib/seo";
 import { getCurrentUser } from "@/lib/auth";
+import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { LoginRequiredView, UnauthorizedView } from "@/components/layout/AuthViews";
 
 // /admin/* — admin dashboard. Catch-all route.
 //
-// Server-side authorization (task: "Admin isolation and full functional audit"):
-//   - The page is a Server Component, so we call getCurrentUser() here at
-//     request time. The cookie is HMAC-signed and re-verified against the
-//     database on every request (see src/lib/auth.ts -> getCurrentUser),
-//     so an anonymous visitor or a non-admin authenticated customer
-//     cannot reach <AdminLayout> on the server. This complements the
-//     requireAdmin() guard already present in every /api/admin/* handler,
-//     so mutations are also fully server-side protected.
-//   - The client-side <AdminGate> wrapper below is kept as a thin
-//     additional safety net (it is harmless) but is no longer the only
-//     line of defense.
+// ============================================================================
+// DUAL-AUTH TRANSITION STATE (Admin Realm V1, Stage 2 → Stage 4)
+// ============================================================================
+// This page accepts EITHER of two admin auth realms during the transition:
 //
-// Behavior:
-//   - Anonymous visitor → <LoginRequiredView /> (link to /login)
-//   - Authenticated non-admin → <UnauthorizedView />
-//   - Authenticated admin → <AdminLayout section=... />
+//   1. NEW admin realm (AdminUser + anima_admin_session cookie):
+//      - Authenticates via /admin/login (username + password).
+//      - Verified by getCurrentAdminUser() from @/lib/admin-auth.
+//      - If mustChangePassword === true → redirect to /admin/change-password.
+//      - Otherwise → render <AdminLayout /> directly (no AdminGate — the
+//        server-side check is authoritative).
+//
+//   2. LEGACY customer admin realm (User.role === 'ADMIN' + anima_session):
+//      - Authenticates via /login (email + password + OTP).
+//      - Verified by getCurrentUser() from @/lib/auth.
+//      - Preserved UNCHANGED from the pre-Stage-2 behavior so legacy admins
+//        continue to work during the transition.
+//
+// The NEW realm is checked FIRST. If it succeeds, the legacy path is skipped.
+// If the NEW realm has no session, we fall through to the legacy check —
+// legacy admins who log in via /login still reach the panel.
+//
+// STAGE 4 will remove the legacy fallback and migrate the /api/admin/**
+// routes to requireAdminSession / requirePermission. Until then, a NEW-realm
+// admin (no anima_session cookie) will see the panel SHELL render, but the
+// /api/admin/** data calls will 401 (the AdminLayout silently catches those
+// errors — counts stay 0, views show empty states). This is the expected
+// Stage 2 state; data loads correctly again after Stage 4.
+// ============================================================================
 //
 // All /admin/* nested routes (products, orders, settings, etc.) go through
 // this same Server Component because the route is an optional catch-all.
+// NOTE: /admin/login and /admin/change-password are SEPARATE static routes
+// (src/app/admin/login/page.tsx, src/app/admin/change-password/page.tsx)
+// and take precedence over this catch-all — they do NOT pass through here.
 
 interface Params {
   params: Promise<{ slug?: string[] }>
@@ -46,9 +64,24 @@ export default async function AdminPage({ params }: Params) {
   //   /admin/orders    → section='orders'
   const section = slug?.[0] || 'dashboard'
 
-  // Server-side admin role guard. Re-fetches the user from the database
-  // (cookie is HMAC-verified, payload.userId is checked against the live
-  // User row, role is read from the row — not from the cookie payload).
+  // ----- NEW admin realm check (Stage 2) -----
+  const admin = await getCurrentAdminUser()
+  if (admin) {
+    if (admin.mustChangePassword) {
+      redirect('/admin/change-password')
+    }
+    // New admin auth succeeded — render the panel.
+    // NOTE: /api/admin/** routes still use legacy requireAdmin (customer
+    // session) until Stage 4 migrates them. The panel shell renders; data
+    // calls will 401 for new-realm admins until Stage 4.
+    return (
+      <SiteShell>
+        <AdminLayout section={section} />
+      </SiteShell>
+    )
+  }
+
+  // ----- LEGACY customer admin realm check (pre-Stage-2 behavior) -----
   const user = await getCurrentUser()
 
   if (!user) {
