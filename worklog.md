@@ -3964,3 +3964,55 @@ Stage Summary:
 - Next stages:
   * Stage 3: Developer-only "Setting User Admin" UI + /api/admin/users/** routes (CRUD admins, assign permissions, reset password, enable/disable) + AdminLayout permission-aware sidebar.
   * Stage 4: Migrate /api/admin/** from requireAdmin (legacy) to requirePermission / requireDeveloper. Remove legacy fallback from catch-all. QA.
+
+---
+Task ID: admin-realm-stage-3
+Agent: main
+Task: Admin Realm Separation + Developer RBAC V1 — Stage 3: Developer User Admin management + RBAC
+
+Work Log:
+- Stage 2 was committed (fcf2e2c) and pushed to origin/main. Continued to Stage 3.
+- Stage 3 AUDIT: confirmed AdminLayout NAV_ITEMS + section structure. Confirmed Stage 1 admin-auth helpers (requireDeveloper, requirePermission, hashAdminPassword) and Stage 2 auth APIs (/api/admin/auth/me returns permissions). Read PERMISSION_KEYS (19 keys) for permission grid UI. Read customer auth regression targets.
+- Stage 3 IMPLEMENTATION — 6 new files + 1 modified:
+  * src/app/api/admin/users/route.ts — GET (list all admins with permissions, NO passwordHash) + POST (create admin). requireDeveloper on both. POST: systemRole HARDCODED to SYSTEM_ROLE_ADMIN (body cannot create DEVELOPER), username lower-cased, bcrypt hash, mustChangePassword=true, createdByAdminId=developer.id, permissions validated against PERMISSION_KEY_SET (unknown keys rejected 400), atomic transaction for admin+permissions.
+  * src/app/api/admin/users/[id]/route.ts — GET (detail, NO passwordHash) + PATCH (displayName, isActive). requireDeveloper. DEVELOPER PROTECTION: 403 if target.systemRole === DEVELOPER. username/passwordHash/systemRole/mustChangePassword/sessionVersion NOT mutable via PATCH.
+  * src/app/api/admin/users/[id]/reset-password/route.ts — POST (developer reset). requireDeveloper. DEVELOPER PROTECTION: 403 if target is DEVELOPER. Hashes new password, sets mustChangePassword=true, sessionVersion++ (all existing sessions invalidated). Does NOT issue new session (admin must re-login). Min 8 chars.
+  * src/app/api/admin/users/[id]/permissions/route.ts — PUT (full replace). requireDeveloper. DEVELOPER PROTECTION: 403 if target is DEVELOPER. Validates all keys against PERMISSION_KEY_SET (unknown rejected 400). Atomic transaction: deleteMany + createMany. Idempotent.
+  * src/views/admin/AdminUsersView.tsx — Developer-only "Setting User Admin" screen. List all admins (username, displayName, systemRole badge, isActive, mustChangePassword, lastLoginAt, permissions count). Create dialog (username, displayName, temp password with show/hide, initial permissions checkbox grid). Edit dialog (displayName only; username immutable). Permissions dialog (checkbox grid of all PERMISSION_KEYS). Reset password dialog (new temp password). Toggle active button. DEVELOPER rows: ALL action buttons disabled (server rejects 403 anyway; UI is courtesy). NO passwordHash display. NO systemRole field in create form.
+  * src/components/admin/AdminLayout.tsx — MODIFIED. Permission-aware sidebar: fetches /api/admin/auth/me on mount. DEVELOPER: sees all NAV_ITEMS + "Setting User Admin" + "Ganti Password" + "Keluar". ADMIN: sees only items where permissions.includes(section.view). Legacy fallback: if /api/admin/auth/me returns 401 (legacy customer admin), shows all NAV_ITEMS (backward compat) but NO "Setting User Admin" and NO "Ganti Password"/"Keluar" (legacy admins use customer /reset-password and /logout). Added SECTION_PERMISSION mapping (dashboard→dashboard.view, products→products.view, etc.). Added "users" section rendering AdminUsersView (Developer-only; non-developer sees unauthorized message).
+  * scripts/test-admin-rbac.ts — NEW 103-assertion static test suite. 8 phases (A-H): users route (requireDeveloper, systemRole hardcoded ADMIN, lower-case, bcrypt, mustChangePassword=true, createdByAdminId, PERMISSION_KEY_SET validation, transaction, no body systemRole, no passwordHash return), user detail route (requireDeveloper, Developer protection 403, no systemRole/username/password/mustChangePassword mutation via PATCH, displayName+isActive mutable), reset-password route (requireDeveloper, Developer protection, hashAdminPassword, mustChangePassword=true, sessionVersion++, NO createAdminSession, min 8), permissions route (requireDeveloper, Developer protection, PERMISSION_KEY_SET validation, deleteMany+createMany full replace, transaction), AdminUsersView (create/edit/permissions/reset/disable UI, Developer rows disabled, NO passwordHash display, NO systemRole field, show/hide temp password, PERMISSION_KEYS grid), AdminLayout (permission-aware sidebar, /api/admin/auth/me fetch, SECTION_PERMISSION mapping, Developer sees all, visibleNavItems filter, legacy fallback, Ganti Password + Keluar, AdminUsersView import, section=users), customer auth regression (auth.ts no AdminUser reference, LoginView unchanged, legacy /api/admin/dashboard still uses requireAdmin), Stage 1+2 helpers intact.
+
+- Verification (all run in this sandbox):
+  * bunx tsc --noEmit           → exit 0
+  * bun run lint                → exit 0
+  * bun run build               → exit 0
+  * scripts/test-admin-realm    → 148/148 PASS (Stage 1 intact)
+  * scripts/test-admin-auth-flow → 112/112 PASS (Stage 2 intact)
+  * scripts/test-admin-rbac     → 103/103 PASS (Stage 3)
+  * scripts/test-auth-integrity → PASS
+  * scripts/test-verified-identity → PASS
+  * scripts/test-otp-domain     → 295/295 PASS
+  * scripts/test-google-oauth   → 114/114 PASS
+  * scripts/test-email-brevo    → 37/37 PASS
+  * scripts/test-member-registry → PASS
+  * scripts/test-toast          → 44/44 PASS
+  * Total: 850+ static assertions pass. 0 customer-auth regressions.
+
+Stage Summary:
+- 7 files changed (1 modified, 6 new): ~1200 insertions, 0 deletions.
+- Developer-only admin management: list/create/edit/reset-password/permissions/enable-disable.
+- DEVELOPER PROTECTIONS (server-enforced, UI-mirrored):
+  * Body systemRole ignored — create always sets ADMIN. Only env-var bootstrap can create DEVELOPER.
+  * PATCH/PUT/POST on a DEVELOPER target → 403. Developer accounts cannot be modified, disabled, or have permissions changed via any API.
+  * reset-password on a DEVELOPER → 403. Developer manages own password via /admin/change-password.
+  * Permission keys validated against PERMISSION_KEY_SET — unknown keys rejected 400 (no silent drop, no typo bypass).
+  * Full-replace semantics for permissions (idempotent, atomic transaction).
+  * sessionVersion++ on reset-password → all existing sessions invalidated.
+  * mustChangePassword=true on create AND on reset → admin forced to change on next login.
+- Permission-aware sidebar:
+  * DEVELOPER: all items + Setting User Admin + Ganti Password + Keluar.
+  * ADMIN: only items where permissions.includes(section.view) + Ganti Password + Keluar.
+  * Legacy customer admin (no admin session): all items, NO Setting User Admin, NO Ganti Password/Keluar (uses customer flows).
+- Customer auth UNTOUCHED: 0 changes to anima_session, requireAdmin (legacy), /api/auth/*, /api/admin/** (legacy routes still use requireAdmin — Stage 4 will migrate), OTP, Google OAuth, Brevo, member registry, LoginView, GuestGate, useAuth.
+- Next stage:
+  * Stage 4: Migrate /api/admin/** from requireAdmin (legacy) to requirePermission / requireDeveloper. Remove legacy fallback from /admin/[[...slug]] catch-all. QA full admin panel with new-realm admin.
