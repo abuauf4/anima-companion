@@ -66,6 +66,16 @@ export async function POST(req: NextRequest) {
     // 10-minute TTL, single-use, max 5 verification attempts. The user
     // enters the code into the /verify-email form (NOT a click-link flow).
     //
+    // `issueOtp` now does the cooldown check + invalidate-old + create-new
+    // all inside a single `pg_advisory_xact_lock`-protected transaction.
+    // For a brand-new user there is no prior OTP, so the first call always
+    // returns `ISSUED`. If the user somehow already has an unconsumed OTP
+    // within the 60s cooldown (e.g. they registered, immediately deleted
+    // their browser, and re-registered with the same email — but registration
+    // would have 409'd on the email), `issueOtp` returns `COOLDOWN` and we
+    // set `otpSent = false`. The user is still registered and logged in;
+    // they can resend from /verify-email.
+    //
     // Best-effort — if the email adapter fails (e.g. production without
     // EMAIL_PROVIDER configured), the user is still registered and
     // logged in; they can request another OTP from the /verify-email
@@ -87,9 +97,14 @@ export async function POST(req: NextRequest) {
     //   always available for as long as the account exists.
     let otpSent = false
     try {
-      const { code } = await issueOtp({ userId: user.id, purpose: 'EMAIL_VERIFICATION' })
-      await sendOtpEmail(user.email, code, user.name)
-      otpSent = true
+      const outcome = await issueOtp({ userId: user.id, purpose: 'EMAIL_VERIFICATION' })
+      if (outcome.result === 'ISSUED') {
+        await sendOtpEmail(user.email, outcome.code, user.name)
+        otpSent = true
+      }
+      // If outcome.result === 'COOLDOWN' (defensive — should not happen
+      // for a brand-new user), otpSent stays false and the user is
+      // redirected to /verify-email where they can resend.
     } catch (emailErr) {
       // Don't fail registration — log a stable event label only. The raw
       // `emailErr.message` may contain SMTP/Prisma error fragments that

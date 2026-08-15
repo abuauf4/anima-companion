@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, handleAuthError, logAuthError } from '@/lib/auth'
-import { issueOtp, checkResendCooldown, OTP_RESEND_COOLDOWN_MS } from '@/lib/otp'
+import { issueOtp, OTP_RESEND_COOLDOWN_MS } from '@/lib/otp'
 import { sendOtpEmail } from '@/lib/email'
 
 /**
@@ -72,28 +72,44 @@ export async function POST(_req: NextRequest) {
       })
     }
 
-    // Check the 60-second server-side resend cooldown BEFORE issuing.
-    // This is the V2 improvement over V1 (which had no rate limit).
-    const cooldown = await checkResendCooldown(user.id, 'EMAIL_VERIFICATION')
-    if (!cooldown.allowed) {
+    // Account Recovery & Verification V2 — issue a new OTP atomically.
+    //
+    // `issueOtp` now does the cooldown check + invalidate-old + create-new
+    // all inside a single `pg_advisory_xact_lock`-protected transaction.
+    // This is the race-free contract: under 10 parallel requests, exactly
+    // ONE will get `ISSUED` (and send the email), the other 9 will get
+    // `COOLDOWN` (and NOT send any email). See `src/lib/otp.ts` for the
+    // full serialization design.
+    //
+    // We NO LONGER call `checkResendCooldown` separately — that was the
+    // root cause of the V2 QA Test 2 race (10 parallel callers could all
+    // read `allowed: true` before any had committed their `issueOtp`).
+    const outcome = await issueOtp({
+      userId: user.id,
+      purpose: 'EMAIL_VERIFICATION',
+    })
+
+    if (outcome.result === 'COOLDOWN') {
+      // Cooldown still active — surface to the UI so it can show
+      // "coba lagi dalam N detik". We did NOT insert a new OTP and we
+      // MUST NOT send any email.
       return NextResponse.json(
         {
           error: 'Terlalu sering mengirim OTP. Coba lagi sebentar.',
           code: 'RESEND_COOLDOWN',
-          retryAfterMs: cooldown.retryAfterMs,
+          retryAfterMs: outcome.retryAfterMs,
           // Round up to the nearest second for client display. Always >= 1
-          // when allowed === false (because retryAfterMs > 0).
-          retryAfterSeconds: Math.max(1, Math.ceil(cooldown.retryAfterMs / 1000)),
+          // when result === 'COOLDOWN' (because retryAfterMs > 0).
+          retryAfterSeconds: Math.max(1, Math.ceil(outcome.retryAfterMs / 1000)),
         },
         { status: 429 }
       )
     }
 
-    // Issue a new OTP (invalidates previous unconsumed OTPs atomically).
-    const { code, expiresAt, resendAvailableAt } = await issueOtp({
-      userId: user.id,
-      purpose: 'EMAIL_VERIFICATION',
-    })
+    // outcome.result === 'ISSUED' — we are the SOLE owner of the email-send
+    // for this issuance. Losing concurrent callers received `COOLDOWN` and
+    // did NOT send any email.
+    const { code, expiresAt, resendAvailableAt } = outcome
 
     // Send the OTP via the configured email adapter.
     // Best-effort — if the adapter fails, we still return 200 with

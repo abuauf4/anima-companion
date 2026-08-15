@@ -37,10 +37,17 @@ async function main() {
 
   // Issue one fresh OTP. The raw `code` is captured for later sanity-check
   // (we want to verify that after lockout, even the CORRECT code is rejected).
-  const { code: correctCode } = await issueOtp({
+  const issueOutcome = await issueOtp({
     userId: user.id,
     purpose: 'EMAIL_VERIFICATION',
   })
+  if (issueOutcome.result !== 'ISSUED') {
+    throw new Error(
+      `Setup issueOtp returned ${issueOutcome.result} — expected ISSUED for fresh user. ` +
+        'Is the QA DB clean? Run seed-qa first.'
+    )
+  }
+  const correctCode = issueOutcome.code
   console.log(`[setup] Issued OTP for ${user.id}. Raw code captured (NOT displayed in prod logs).`)
 
   // Sanity: verify the HMAC round-trips — correctCode should consume OK on first try

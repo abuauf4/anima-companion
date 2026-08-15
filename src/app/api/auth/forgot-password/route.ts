@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { logAuthError } from '@/lib/auth'
-import { issueOtp, checkResendCooldown } from '@/lib/otp'
+import { issueOtp } from '@/lib/otp'
 import { sendOtpEmail } from '@/lib/email'
 
 /**
@@ -152,35 +152,44 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ sent: true })
     }
 
-    // ---- Check the 60-second resend cooldown ----
-    // This is the SAME cooldown mechanism as the email-verification flow,
-    // but keyed on (userId, 'PASSWORD_RESET') instead of (userId,
-    // 'EMAIL_VERIFICATION').
-    const cooldown = await checkResendCooldown(user.id, 'PASSWORD_RESET')
-    if (!cooldown.allowed) {
-      // ⚠️ Minor enumeration vector: an attacker who gets a 429 knows
-      // the email exists AND was used to request a reset in the last 60s.
-      // See the docstring above for the tradeoff rationale.
-      return NextResponse.json(
-        {
-          error: 'Terlalu sering mengirim OTP. Coba lagi sebentar.',
-          code: 'RESEND_COOLDOWN',
-          retryAfterMs: cooldown.retryAfterMs,
-          retryAfterSeconds: Math.max(1, Math.ceil(cooldown.retryAfterMs / 1000)),
-        },
-        { status: 429 }
-      )
-    }
-
     // ---- Issue the OTP + send the email ----
-    // Best-effort send — if the adapter fails, we still return 200
-    // (anti-enumeration: telling the user "email failed to send" would
-    // leak that the email exists but the adapter is broken, which is
-    // a minor info leak). The user can retry (subject to the 60s
-    // cooldown).
+    //
+    // `issueOtp` now does the cooldown check + invalidate-old + create-new
+    // all inside a single `pg_advisory_xact_lock`-protected transaction.
+    // This is the race-free contract: under 10 parallel forgot-password
+    // requests, exactly ONE will get `ISSUED` (and send the email), the
+    // other 9 will get `COOLDOWN` (and NOT send any email). See
+    // `src/lib/otp.ts` for the full serialization design.
+    //
+    // We NO LONGER call `checkResendCooldown` separately — that was the
+    // root cause of the V2 QA Test 2 race. The cooldown is enforced
+    // atomically inside `issueOtp` under the advisory lock.
+    //
+    // Anti-enumeration note: the 429 RESEND_COOLDOWN response is ONLY
+    // returned when the email exists AND was used to request a reset in
+    // the last 60s — this is the SAME minor enumeration vector as the
+    // previous implementation, accepted as a tradeoff (see the docstring
+    // above). The race-free guarantee is preserved: under 10 parallel
+    // requests, at most 1 OTP is issued, at most 1 email is sent.
     try {
-      const { code } = await issueOtp({ userId: user.id, purpose: 'PASSWORD_RESET' })
-      await sendOtpEmail(user.email, code, user.name, 'reset password')
+      const outcome = await issueOtp({ userId: user.id, purpose: 'PASSWORD_RESET' })
+      if (outcome.result === 'COOLDOWN') {
+        // Cooldown still active — surface the SAME 429 response shape as
+        // the previous implementation (preserves API contract). We did
+        // NOT insert a new OTP and we MUST NOT send any email.
+        return NextResponse.json(
+          {
+            error: 'Terlalu sering mengirim OTP. Coba lagi sebentar.',
+            code: 'RESEND_COOLDOWN',
+            retryAfterMs: outcome.retryAfterMs,
+            retryAfterSeconds: Math.max(1, Math.ceil(outcome.retryAfterMs / 1000)),
+          },
+          { status: 429 }
+        )
+      }
+      // outcome.result === 'ISSUED' — we are the SOLE owner of the
+      // email-send for this issuance.
+      await sendOtpEmail(user.email, outcome.code, user.name, 'reset password')
     } catch (emailErr) {
       // Log a stable event label only — don't leak the failure to the
       // client. The user sees `{ sent: true }` either way.

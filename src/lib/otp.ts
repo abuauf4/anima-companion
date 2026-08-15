@@ -181,61 +181,225 @@ export interface IssueOtpInput {
   maxAttempts?: number
 }
 
-export interface IssueOtpResult {
-  /** The raw 6-digit code. The caller MUST deliver it via the email channel
-   *  and MUST NEVER log it, return it in an API response body, or persist
-   *  it in plaintext anywhere. */
-  code: string
-  /** When this OTP expires (10 minutes from now). */
-  expiresAt: Date
-  /** Earliest moment the user is allowed to request a resend. */
-  resendAvailableAt: Date
-}
+/**
+ * Outcome of an `issueOtp` call. The caller MUST branch on `result`:
+ *
+ *   - `ISSUED`: a NEW OTP challenge was created. The caller is the SOLE
+ *     owner of the email-send for this issuance — the caller MUST call
+ *     `sendOtpEmail(to, code, ...)` exactly once. The raw 6-digit `code`
+ *     is returned here and is NOT persisted in plaintext anywhere.
+ *
+ *   - `COOLDOWN`: the 60-second resend cooldown is still active for this
+ *     (userId, purpose). The caller MUST NOT send any email. The caller
+ *     SHOULD surface `retryAfterMs` to the user (e.g. HTTP 429 with the
+ *     `RESEND_COOLDOWN` code, or set `otpSent = false` for register/login).
+ *
+ * This single return type is the race-free contract: before this change,
+ * the caller did a separate `checkResendCooldown` read + `issueOtp` write,
+ * and 10 parallel callers could all see "allowed: true" before any had
+ * committed, leading to 10 issuances and 10 emails. Now the cooldown
+ * check + invalidation + create all happen atomically inside a single
+ * `pg_advisory_xact_lock`-protected transaction — see the implementation
+ * below for the full serialization design.
+ */
+export type IssueOtpOutcome =
+  | {
+      result: 'ISSUED'
+      /** The RAW 6-digit code. Caller MUST deliver via the email channel and
+       *  MUST NEVER log it, return it in an API response body, or persist
+       *  it in plaintext anywhere. */
+      code: string
+      /** When this OTP expires (10 minutes from now). */
+      expiresAt: Date
+      /** Earliest moment the user is allowed to request a resend. */
+      resendAvailableAt: Date
+    }
+  | {
+      result: 'COOLDOWN'
+      /** Milliseconds until the next resend is allowed. Always > 0. */
+      retryAfterMs: number
+      /** When the most recent OTP-bearing email was dispatched (for client display). */
+      lastSentAt: Date
+    }
 
 /**
- * Issue a new OTP for (userId, purpose). INVALIDATES all previously
- * unconsumed OTPs for the same (userId, purpose) pair by setting
- * `consumedAt = now()` AND `attempts = maxAttempts` on them — only the
- * newest OTP is valid at any time.
+ * Issue a new OTP for (userId, purpose). Atomic, concurrency-safe, and
+ * race-free under tight parallel load.
  *
- * Returns the RAW 6-digit code. The caller is responsible for delivering
- * it to the user's email via the configured adapter and for NEVER logging
- * it or returning it in an API response body.
+ * SERIALIZATION DESIGN (fix for the resend-concurrency race documented in
+ * the V2 QA report — Test 2 Run A failure):
  *
- * The DB row that gets created stores ONLY `hashOtpCode(code, purpose, userId)`.
+ *   1. We open an INTERACTIVE `db.$transaction(async (tx) => { ... })`.
+ *      The interactive form (not the array form) is mandatory because
+ *      we need to branch on the cooldown check result BEFORE deciding
+ *      whether to insert.
  *
- * NOTE: This function does NOT enforce the 60-second resend cooldown.
- * The resend-cooldown check is the caller's responsibility (use
- * `checkResendCooldown` below). The reason for splitting them: the
- * caller may want to surface a "please wait N seconds" message to the
- * user, which requires reading the cooldown state BEFORE attempting to
- * issue. The issuance itself is unconditional — once the caller has
- * decided to issue (either because the cooldown has elapsed or because
- * this is the first issuance), this function does the DB work.
+ *   2. Inside the transaction, we acquire a TRANSACTION-SCOPED advisory
+ *      lock keyed on (userId, purpose):
+ *
+ *        SELECT pg_advisory_xact_lock(hashtext(userId || ':' || purpose)::bigint)
+ *
+ *      `pg_advisory_xact_lock(bigint)` blocks until no other transaction
+ *      holds the same key. The lock is automatically released at COMMIT
+ *      or ROLLBACK — no explicit unlock is needed, and a crashed
+ *      transaction cannot leak the lock.
+ *
+ *      `hashtext(text)` returns a 32-bit integer; we cast to bigint to
+ *      use the single-argument form. Hash collisions are POSSIBLE
+ *      (32-bit space) but are correctness-preserving — a collision just
+ *      means two unrelated (userId, purpose) pairs serialize
+ *      unnecessarily. The partial unique index backstop (see step 5)
+ *      enforces the actual invariant regardless.
+ *
+ *      Concurrent issuances for DIFFERENT (userId, purpose) pairs are
+ *      NOT blocked — the lock is per-key, not global.
+ *
+ *   3. AFTER acquiring the lock (NOT before), we re-read the authoritative
+ *      current challenge for (userId, purpose) — the NEWEST unconsumed
+ *      OTP. Pre-lock reads are NOT trusted; another transaction may
+ *      have committed a new OTP between our pre-lock read and our lock
+ *      acquisition.
+ *
+ *   4. We enforce the 60-second resend cooldown against the post-lock
+ *      read. If `now - latest.lastSentAt < 60s`, we return `COOLDOWN`
+ *      WITHOUT inserting. The transaction commits as a no-op (only the
+ *      advisory lock acquisition was the side-effect, plus the read).
+ *
+ *      This is the critical fix: the cooldown is enforced AFTER the
+ *      lock, so even if 10 concurrent issueOtp calls fire simultaneously,
+ *      they serialize on the advisory lock — only the first sees
+ *      "cooldown elapsed" (or "no prior OTP"), issues a new OTP, and
+ *      commits. The other 9 acquire the lock after the first commits,
+ *      re-read, see the new OTP's lastSentAt = now, and return `COOLDOWN`.
+ *
+ *   5. If the cooldown has elapsed (or there was no prior OTP), we:
+ *        (a) INVALIDATE all prior unconsumed OTPs for (userId, purpose)
+ *            by setting `consumedAt = now` AND `attempts = maxAttempts`
+ *            (defense-in-depth — see comment below).
+ *        (b) CREATE exactly one new OTP row with `consumedAt = null`.
+ *        (c) COMMIT — the advisory lock is released.
+ *
+ *      The invalidation in (a) MUST run BEFORE the create in (b), so
+ *      that the partial unique index backstop
+ *      `OtpCode_userId_purpose_active_uniq ON OtpCode(userId, purpose)
+ *      WHERE consumedAt IS NULL` does not reject the new insert. (The
+ *      index is a defense-in-depth backstop applied via raw SQL — see
+ *      `prisma/sql/20260815-otp-active-uniq-backstop.sql`. It is NOT
+ *      expressed in the Prisma schema because Prisma's schema language
+ *      does not support partial unique indexes with a `WHERE` clause.)
+ *
+ *   6. After the transaction commits, we return `ISSUED` with the raw
+ *      code. The caller is the SOLE entity allowed to send the email
+ *      for this issuance — losing concurrent callers return `COOLDOWN`
+ *      and MUST NOT send any email.
+ *
+ * INVARIANT: For each (userId, purpose), there is NEVER more than ONE
+ * unconsumed active/current OTP challenge after issuance completes.
+ * This is enforced by BOTH:
+ *   - The advisory lock (primary serialization mechanism).
+ *   - The partial unique index (DB-level backstop — catches the bug
+ *     even if the application logic is wrong).
+ *
+ * SECURITY:
+ *   - The raw 6-digit code is generated OUTSIDE the transaction (no DB
+ *     contention for `crypto.randomInt`). Only the winning transaction
+ *     persists the HMAC of the code.
+ *   - The HMAC is computed with `AUTH_SECRET` pepper (see `hashOtpCode`).
+ *   - The raw code is NEVER persisted — only `hashOtpCode(code, purpose, userId)`.
+ *
+ * ATTEMPTS CAP ON INVALIDATED ROWS:
+ *   We set `attempts = maxAttempts` on the invalidated rows in addition
+ *   to `consumedAt = now()`. This is defense-in-depth: if the
+ *   `consumedAt` write is somehow rolled back (e.g. by a future code
+ *   change that breaks atomicity), the old code is still LOCKED by
+ *   the attempts cap and cannot be verified.
  */
-export async function issueOtp(input: IssueOtpInput): Promise<IssueOtpResult> {
+export async function issueOtp(input: IssueOtpInput): Promise<IssueOtpOutcome> {
   const { userId, purpose } = input
   const maxAttempts = input.maxAttempts ?? OTP_DEFAULT_MAX_ATTEMPTS
+
+  // Pre-compute the new OTP material OUTSIDE the transaction. The code +
+  // hash are cheap to compute and don't touch the DB — only the winning
+  // transaction will persist the hash. Pre-computing avoids holding the
+  // advisory lock any longer than necessary.
   const code = generateOtpCode()
   const codeHash = hashOtpCode(code, purpose, userId)
-  const now = new Date()
-  const expiresAt = new Date(now.getTime() + OTP_TTL_MS)
 
-  // Atomically: invalidate old unconsumed OTPs for this (userId, purpose)
-  // AND insert the new one. We use a transaction so a crash between the
-  // two operations can't leave the user with TWO active OTPs.
-  //
-  // We set `attempts = maxAttempts` on the invalidated rows in addition
-  // to `consumedAt = now()` — this is defense-in-depth: if the
-  // `consumedAt` write is somehow rolled back (e.g. by a future code
-  // change that breaks atomicity), the old code is still LOCKED by
-  // the attempts cap and cannot be verified.
-  await db.$transaction([
-    db.otpCode.updateMany({
+  return db.$transaction(async (tx) => {
+    // (1) Acquire a transaction-scoped advisory lock keyed on (userId, purpose).
+    //
+    //     Prisma's tagged-template `$executeRaw` parameterizes the
+    //     interpolated values — `${userId}` and `${purpose}` become
+    //     bind parameters ($1, $2), NOT string-interpolated SQL. This
+    //     is safe from SQL injection.
+    //
+    //     `hashtext(text)` returns int4; we cast to bigint to use the
+    //     single-argument form of `pg_advisory_xact_lock`.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId} || ':' || ${purpose})::bigint)`
+
+    // (2) Re-read the authoritative current challenge AFTER acquiring
+    //     the lock. We do NOT filter on `expiresAt > now` here — the
+    //     cooldown is keyed on `lastSentAt`, not on `expiresAt`. An
+    //     expired-but-unconsumed OTP still enforces the 60s cooldown
+    //     until it is explicitly invalidated by a new issuance.
+    //
+    //     We also do NOT filter on `attempts < maxAttempts` here — a
+    //     LOCKED OTP (attempts === maxAttempts) still counts as the
+    //     "current challenge" for cooldown purposes. The user must
+    //     wait out the 60s cooldown before they can get a fresh OTP,
+    //     even if the previous one was locked.
+    const latest = await tx.otpCode.findFirst({
+      where: { userId, purpose, consumedAt: null },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, lastSentAt: true, expiresAt: true },
+    })
+
+    const nowMs = Date.now()
+    if (latest) {
+      const elapsedMs = nowMs - latest.lastSentAt.getTime()
+      if (elapsedMs < OTP_RESEND_COOLDOWN_MS) {
+        // (3) Cooldown still active — return COOLDOWN without inserting.
+        //     The transaction commits as a no-op (only the lock acquisition
+        //     was the side-effect). The caller MUST NOT send any email.
+        return {
+          result: 'COOLDOWN' as const,
+          retryAfterMs: OTP_RESEND_COOLDOWN_MS - elapsedMs,
+          lastSentAt: latest.lastSentAt,
+        }
+      }
+    }
+
+    // (4) Cooldown has elapsed (or no prior OTP). Invalidate ALL prior
+    //     unconsumed OTPs for (userId, purpose) — including any
+    //     expired-but-unconsumed ones — BEFORE inserting the replacement.
+    //
+    //     This MUST run BEFORE the create below, so that the partial
+    //     unique index backstop `OtpCode_userId_purpose_active_uniq`
+    //     does not reject the new insert (the index requires at most
+    //     one row per (userId, purpose) WHERE consumedAt IS NULL).
+    //
+    //     We set `attempts = maxAttempts` on the invalidated rows too
+    //     (defense-in-depth — see comment in the function docstring).
+    //
+    //     NOTE: The variable is named `now` (not `nowMs` or `nowDate`)
+    //     so that the source-level invariant SRC9 in
+    //     scripts/test-otp-domain.ts matches:
+    //       /consumedAt:\s*now,\s*attempts:\s*maxAttempts/
+    //     This is intentional — the test asserts that the invalidation
+    //     step sets BOTH `consumedAt` AND `attempts = maxAttempts` on
+    //     old rows (defense-in-depth).
+    const now = new Date(nowMs)
+    await tx.otpCode.updateMany({
       where: { userId, purpose, consumedAt: null },
       data: { consumedAt: now, attempts: maxAttempts },
-    }),
-    db.otpCode.create({
+    })
+
+    // (5) Create EXACTLY ONE new challenge. The new row has
+    //     `consumedAt = null` — the partial unique index will allow
+    //     this insert because we just invalidated all prior unconsumed
+    //     rows in step (4) within the same transaction.
+    const expiresAt = new Date(now.getTime() + OTP_TTL_MS)
+    await tx.otpCode.create({
       data: {
         userId,
         purpose,
@@ -246,14 +410,18 @@ export async function issueOtp(input: IssueOtpInput): Promise<IssueOtpResult> {
         consumedAt: null,
         lastSentAt: now,
       },
-    }),
-  ])
+    })
 
-  return {
-    code,
-    expiresAt,
-    resendAvailableAt: new Date(now.getTime() + OTP_RESEND_COOLDOWN_MS),
-  }
+    // (6) Return ISSUED — the caller is the SOLE owner of the email-send
+    //     for this issuance. Losing concurrent callers (who return COOLDOWN)
+    //     MUST NOT send any email.
+    return {
+      result: 'ISSUED' as const,
+      code,
+      expiresAt,
+      resendAvailableAt: new Date(now.getTime() + OTP_RESEND_COOLDOWN_MS),
+    }
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -270,8 +438,21 @@ export interface ResendCooldownResult {
 }
 
 /**
- * Check whether the caller is allowed to issue a new OTP for (userId, purpose)
- * right now, given the 60-second server-side resend cooldown.
+ * INFORMATIONAL ONLY — do NOT use this to gate `issueOtp`. Use `issueOtp`
+ * directly; it returns `COOLDOWN` when the cooldown is still active.
+ *
+ * This function is a pure read that returns the CURRENT cooldown state
+ * for (userId, purpose). It is useful for DISPLAYING the cooldown to the
+ * user (e.g. "you can resend in N seconds") without triggering an
+ * issuance attempt. It MUST NOT be used as a precondition check before
+ * calling `issueOtp` — that pattern was the root cause of the V2 QA
+ * Test 2 concurrency race (10 parallel callers could all read
+ * `allowed: true` before any had committed their `issueOtp`, leading
+ * to 10 issuances).
+ *
+ * The race-free contract is: call `issueOtp` and inspect its return
+ * value. If it returns `COOLDOWN`, surface `retryAfterMs` to the user.
+ * If it returns `ISSUED`, send the email.
  *
  * Returns `{ allowed: true }` if no unconsumed OTP exists for this
  * (userId, purpose), OR if the most recent unconsumed OTP's `lastSentAt`

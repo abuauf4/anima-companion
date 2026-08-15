@@ -231,6 +231,32 @@ model OtpCode {
 
   @@index([userId, purpose])
   @@index([expiresAt])
+
+  // ---------------------------------------------------------------------
+  // DB-LEVEL BACKSTOP INDEX (applied via raw SQL — see
+  // prisma/sql/20260815-otp-active-uniq-backstop.sql):
+  //
+  //   CREATE UNIQUE INDEX "OtpCode_userId_purpose_active_uniq"
+  //     ON "OtpCode"("userId", "purpose")
+  //     WHERE "consumedAt" IS NULL;
+  //
+  // Prisma's schema language does NOT support partial unique indexes
+  // with a WHERE clause, so this index is NOT expressed in the schema.
+  // It is applied via raw SQL after `prisma db push`. Prisma's `db push`
+  // preserves it across re-pushes (verified empirically on the QA DB).
+  //
+  // This index enforces the invariant "at most ONE unconsumed OTP per
+  // (userId, purpose)" at the DB level, as defense-in-depth behind the
+  // PRIMARY serialization mechanism (`pg_advisory_xact_lock` acquired
+  // inside `issueOtp`'s interactive transaction — see src/lib/otp.ts).
+  //
+  // The predicate is `consumedAt IS NULL` ONLY — it does NOT include
+  // `expiresAt > NOW()` because PostgreSQL partial-index predicates
+  // must be immutable (cannot depend on volatile functions like NOW()).
+  // Expired-but-unconsumed rows are handled by `issueOtp`'s invalidation
+  // step (sets consumedAt = now on all prior unconsumed rows for the
+  // same (userId, purpose) before inserting the replacement).
+  // ---------------------------------------------------------------------
 }
 
 // ==================== PASSWORD RESET GRANTS (V2) ====================

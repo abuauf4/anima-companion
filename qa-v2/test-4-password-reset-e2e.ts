@@ -61,6 +61,12 @@ async function main() {
   // ---- Step 1: Issue a known PASSWORD_RESET OTP ----
   console.log('\n--- Step 1: Issue PASSWORD_RESET OTP ---')
   const otpIssued = await issueOtp({ userId: user.id, purpose: PURPOSE })
+  if (otpIssued.result !== 'ISSUED') {
+    throw new Error(
+      `Expected ISSUED from issueOtp, got ${otpIssued.result}. ` +
+        'Is the QA DB clean? Run seed-qa first.'
+    )
+  }
   console.log(`  ✓ OTP issued. expiresAt=${otpIssued.expiresAt.toISOString()}`)
 
   // ---- Step 2: Verify the OTP → receive a reset grant ----

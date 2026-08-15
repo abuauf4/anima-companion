@@ -83,14 +83,28 @@ export async function POST(req: NextRequest) {
       user.role !== 'ADMIN'
     ) {
       requiresVerification = true
-      // Issue a fresh OTP (invalidates any previous unconsumed OTP for
-      // this user). Best-effort send — if the adapter fails, the user
-      // is logged in and will be redirected to /verify-email where they
-      // can click "Kirim ulang".
+      // Issue a fresh OTP via the race-free `issueOtp` (which acquires a
+      // `pg_advisory_xact_lock` keyed on (userId, purpose) and enforces
+      // the 60-second resend cooldown atomically inside the lock).
+      //
+      // If the user logs in twice within 60s, the second login's
+      // `issueOtp` returns `COOLDOWN` — we set `otpSent = false` but
+      // still redirect to /verify-email. The user can use the OTP from
+      // the first login (it's still valid for 10 minutes), or wait out
+      // the cooldown and resend from /verify-email.
+      //
+      // Best-effort send — if the adapter fails, the user is logged in
+      // and will be redirected to /verify-email where they can click
+      // "Kirim ulang".
       try {
-        const { code } = await issueOtp({ userId: user.id, purpose: 'EMAIL_VERIFICATION' })
-        await sendOtpEmail(user.email, code, user.name)
-        otpSent = true
+        const outcome = await issueOtp({ userId: user.id, purpose: 'EMAIL_VERIFICATION' })
+        if (outcome.result === 'ISSUED') {
+          await sendOtpEmail(user.email, outcome.code, user.name)
+          otpSent = true
+        }
+        // If outcome.result === 'COOLDOWN', otpSent stays false. The
+        // user already has an unconsumed OTP from the prior issuance
+        // (within the last 60s) — they can use that one.
       } catch (emailErr) {
         // Don't fail login — log a stable event label only. The user is
         // logged in and will be redirected to /verify-email.

@@ -233,6 +233,45 @@ export function getEmailAdapter(): EmailAdapter {
   return cachedAdapter
 }
 
+// ----------------------------------------------------------------------------
+// Test seam — `__setEmailAdapterForTesting(adapter)`.
+//
+// Allows QA test scripts to install a counting / mocking email adapter
+// WITHOUT going through the env-var-driven factory. This is the test
+// seam used by QA Test D (email-send ownership) to assert that
+// `sendOtpEmail` is called EXACTLY ONCE when 10 concurrent `issueOtp`
+// calls fire against the same (userId, purpose) under the advisory lock.
+//
+// SECURITY:
+//   - This function throws immediately if `NODE_ENV === 'production'`.
+//     It is a TEST-ONLY seam and must NEVER be reachable from a
+//     production deployment. The check is hardcoded at the top.
+//   - The function is prefixed with `__` and suffixed with `ForTesting`
+//     to make it visually obvious in code review that it is a test seam.
+//   - Passing `null` resets the adapter to the factory default (the next
+//     `getEmailAdapter()` call will re-invoke the factory).
+//
+// USAGE (QA scripts only):
+//   import { __setEmailAdapterForTesting } from '@/lib/email'
+//   const countingAdapter = new CountingEmailAdapter()
+//   __setEmailAdapterForTesting(countingAdapter)
+//   // ... run parallel issueOtp + sendOtpEmail ...
+//   assert(countingAdapter.sendCount === 1)
+//   __setEmailAdapterForTesting(null) // reset
+// ----------------------------------------------------------------------------
+export function __setEmailAdapterForTesting(adapter: EmailAdapter | null): void {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      '__setEmailAdapterForTesting MUST NOT be called in production. ' +
+        'This function is a TEST-ONLY seam for installing a counting / ' +
+        'mocking email adapter during QA. If you are seeing this error ' +
+        'in production, a test script has accidentally been loaded into ' +
+        'the production runtime — investigate immediately.'
+    )
+  }
+  cachedAdapter = adapter
+}
+
 /**
  * Send a verification email. Builds the email body with the verification
  * link, then hands it off to the configured adapter.

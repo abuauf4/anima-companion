@@ -1,0 +1,139 @@
+-- ============================================================================
+-- Account Recovery & Verification V2 — OTP active-challenge uniqueness backstop.
+--
+-- *** THIS IS NOT A PRISMA MIGRATION. ***
+--
+-- This file documents + provides the DDL for a PARTIAL UNIQUE INDEX that
+-- acts as a database-level backstop for the OTP issuance concurrency
+-- invariant:
+--
+--     For each (userId, purpose), there must NEVER be more than ONE
+--     unconsumed active/current OTP challenge after issuance completes.
+--
+-- WHY THIS INDEX EXISTS
+-- ---------------------
+-- The PRIMARY serialization mechanism is the application-level
+-- `pg_advisory_xact_lock(hashtext(userId || ':' || purpose))` acquired
+-- inside `issueOtp`'s interactive transaction (see `src/lib/otp.ts`).
+-- That lock serializes concurrent `issueOtp` calls for the same
+-- (userId, purpose) pair, so the cooldown check + invalidate-old +
+-- create-new sequence is atomic.
+--
+-- However, defense-in-depth demands a DB-level invariant that holds
+-- EVEN IF the application logic has a bug (e.g. a future code change
+-- breaks the lock acquisition, or a rogue script inserts an OTP row
+-- without going through `issueOtp`). This partial unique index is
+-- that invariant: PostgreSQL itself will REJECT any INSERT that would
+-- leave two rows with the same (userId, purpose) AND `consumedAt IS NULL`.
+--
+-- WHY A PARTIAL INDEX (WHERE consumedAt IS NULL)
+-- ----------------------------------------------
+-- The OtpCode table is append-only for CONSUMED rows — every OTP ever
+-- issued stays in the table for audit/cleanup purposes (the cleanup
+-- query `DELETE WHERE expiresAt < now()` runs periodically). A
+-- NON-partial unique constraint on (userId, purpose) would prevent
+-- the user from EVER being issued a second OTP for the same purpose,
+-- even after the first one was consumed — clearly wrong.
+--
+-- The partial index `WHERE consumedAt IS NULL` restricts the uniqueness
+-- constraint to ONLY the currently-active rows. Once an OTP is
+-- consumed (consumedAt set), it's excluded from the index, and a new
+-- OTP can be issued for the same (userId, purpose).
+--
+-- WHY THE PREDICATE DOES NOT INCLUDE expiresAt > NOW()
+-- ----------------------------------------------------
+-- PostgreSQL partial-index predicates MUST be IMMUTABLE — they cannot
+-- depend on volatile functions like `NOW()`. A predicate like
+-- `WHERE consumedAt IS NULL AND expiresAt > NOW()` would be rejected
+-- by PostgreSQL at CREATE INDEX time. Even if it were allowed, it
+-- would be SEMANTICALLY WRONG: PostgreSQL evaluates the predicate at
+-- INSERT time, not at query time, so an OTP inserted with `expiresAt`
+-- 10 minutes in the future would be included in the index immediately,
+-- and then 10 minutes later it would still be in the index even though
+-- it's now "expired" by wall-clock time — the predicate doesn't
+-- "re-evaluate" as time passes.
+--
+-- The correct approach is the simpler predicate `WHERE consumedAt IS NULL`,
+-- which is immutable and correctly captures "this row is no longer
+-- active once consumed". Expired-but-unconsumed rows are handled by
+-- `issueOtp`'s invalidation step: before inserting a new OTP, the
+-- transaction sets `consumedAt = now` on ALL prior unconsumed rows
+-- (including expired ones), so the partial index sees ZERO unconsumed
+-- rows for (userId, purpose) at the moment of INSERT.
+--
+-- PRE-APPLICATION CHECKLIST (must run BEFORE applying this index)
+-- ---------------------------------------------------------------
+-- 1. Audit existing rows for violations:
+--
+--      SELECT "userId", purpose, COUNT(*) AS active_count
+--      FROM "OtpCode"
+--      WHERE "consumedAt" IS NULL
+--      GROUP BY "userId", purpose
+--      HAVING COUNT(*) > 1;
+--
+--    If this query returns ANY rows, the invariant has ALREADY been
+--    violated (e.g. by the V2 QA Test 2 race that this index is
+--    designed to prevent). The operator MUST manually reconcile those
+--    rows BEFORE applying the index — otherwise CREATE UNIQUE INDEX
+--    will fail with a duplicate-key error.
+--
+--    Reconciliation: for each (userId, purpose) with >1 active row,
+--    keep the NEWEST (by createdAt) and mark the rest as consumed:
+--
+--      UPDATE "OtpCode" oc
+--      SET "consumedAt" = NOW(),
+--          "attempts" = (
+--            SELECT "maxAttempts" FROM "OtpCode" oc2
+--            WHERE oc2.id = oc.id
+--          )
+--      WHERE "consumedAt" IS NULL
+--        AND id NOT IN (
+--          SELECT DISTINCT ON ("userId", purpose) id
+--          FROM "OtpCode"
+--          WHERE "consumedAt" IS NULL
+--          ORDER BY "userId", purpose, "createdAt" DESC
+--        );
+--
+-- 2. Re-run the audit query from step 1 — it MUST return zero rows.
+--
+-- 3. Only then apply this index.
+--
+-- APPLICATION
+-- -----------
+-- Apply via psql against the target DATABASE_URL:
+--
+--   psql "$DATABASE_URL" -f prisma/sql/20260815-otp-active-uniq-backstop.sql
+--
+-- Or copy-paste the DDL below into your SQL client.
+--
+-- PRISMA `db push` COMPATIBILITY
+-- ------------------------------
+-- Prisma's schema language does NOT support partial unique indexes
+-- with a WHERE clause. This index is therefore NOT expressed in
+-- `prisma/schema.prisma`. Prisma's `db push` will INTROSPECT the
+-- existing database state and PRESERVE this index (it does not drop
+-- indexes it doesn't manage, as long as they don't conflict with the
+-- schema). The QA database was verified to retain this index across
+-- a `prisma db push` run — see the QA report for details.
+--
+-- If a future Prisma version changes this behavior (drops unknown
+-- indexes), the operator must re-apply this SQL file after every
+-- `db push`. The QA suite includes a check that asserts the index
+-- exists; if it's ever missing, the QA suite fails loudly.
+--
+-- ADDITIVE / NON-DESTRUCTIVE
+-- --------------------------
+-- This change is purely ADDITIVE — it creates a new index without
+-- dropping or modifying any existing object. It does NOT rewrite the
+-- OtpCode table. It does NOT modify any existing index. It does NOT
+-- touch any existing row (the pre-application checklist above is a
+-- manual reconciliation step, NOT something this SQL file does).
+-- ============================================================================
+
+-- ---------------------------------------------------------------------------
+-- Partial unique index: at most ONE unconsumed OTP per (userId, purpose).
+-- ---------------------------------------------------------------------------
+
+CREATE UNIQUE INDEX IF NOT EXISTS "OtpCode_userId_purpose_active_uniq"
+  ON "OtpCode"("userId", "purpose")
+  WHERE "consumedAt" IS NULL;

@@ -53,10 +53,16 @@ async function main() {
   await prisma.otpCode.deleteMany({ where: { userId: user.id } })
 
   // Issue ONE fresh OTP. The raw code is used by all concurrent verify calls.
-  const { code } = await issueOtp({
+  const issueOutcome = await issueOtp({
     userId: user.id,
     purpose: PURPOSE,
   })
+  if (issueOutcome.result !== 'ISSUED') {
+    throw new Error(
+      `Setup issueOtp returned ${issueOutcome.result} — expected ISSUED for fresh user.`
+    )
+  }
+  const { code } = issueOutcome
   console.log(`[setup] Issued OTP for ${user.id}; will fire ${5} concurrent verifies with the SAME code.`)
 
   // Fire 5 concurrent valid-OTP verify calls.
