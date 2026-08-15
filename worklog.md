@@ -3699,3 +3699,65 @@ Stage Summary:
 - Production DB NOT mutated. QA DB index verified present.
 - Resend real-inbox E2E remains PENDING — operator must configure RESEND_API_KEY + EMAIL_FROM in production env.
 - Commit + normal-push to main. No force push.
+
+---
+Task ID: drop-post-verification-success-email
+Agent: main (Super Z)
+Task: Audit flow setelah OTP email berhasil diverifikasi. Kalau ada email kedua "Selamat, email Anda sudah terverifikasi" / welcome / verification success email, hapus pengiriman email tersebut. Target: Register → kirim OTP (1 email) → user input OTP → emailVerifiedAt di-set → success state / Sonner toast → redirect → JANGAN kirim email kedua. Pertahankan: OTP verifikasi, resend OTP, forgot/reset password. Jangan ubah OTP logic, verification transaction, Brevo adapter, atau member registry. Kalau source sudah tidak pernah mengirim email sukses setelah verification, jangan ubah apa pun; cukup laporkan flow sudah 1 email. Setelah perubahan: tsc + lint + build + auth/OTP tests + commit kecil + push normal.
+
+Work Log:
+- Sandbox was reset between sessions. Re-cloned https://github.com/abuauf4/anima-companion.git to /home/z/my-project/anima-companion. HEAD = 8821f66 (Brevo adapter commit from prior session).
+- Configured git author: abuauf4 <mochamadbagussuhada@gmail.com> (repo-local config).
+- bun install — 833 packages installed.
+
+- Audited all email-sending call sites in src/:
+  * src/lib/email.ts — defines 3 high-level helpers: sendVerificationEmail (V1 link), sendVerifiedConfirmation (V1 post-verify success), sendOtpEmail (V2 OTP).
+  * src/app/api/auth/register/route.ts:102 — calls sendOtpEmail (V2 OTP issuance). KEEP.
+  * src/app/api/auth/verify-email/send-otp/route.ts:121 — calls sendOtpEmail (V2 resend). KEEP.
+  * src/app/api/auth/login/route.ts:102 — calls sendOtpEmail (login OTP for unverified users). KEEP.
+  * src/app/api/auth/forgot-password/route.ts:192 — calls sendOtpEmail (reset-password OTP). KEEP.
+  * src/app/api/auth/verify-email/request/route.ts:61 — calls sendVerificationEmail (V1 link issuance). KEEP (legacy V1 flow).
+  * src/app/api/auth/verify-email/confirm/route.ts:102 — calls sendVerifiedConfirmation (V1 post-verify success). REMOVE.
+  * src/app/api/auth/verify-email/verify-otp/route.ts — V2 OTP verify. NO email send. ALREADY CORRECT.
+
+- Audit finding:
+  * V2 OTP flow (the production register path): register → sendOtpEmail (1 email) → user types code → verify-otp/route.ts → consumeOtp + emailVerifiedAt set → JSON response. ZERO post-verification emails. ALREADY CORRECT — no change needed.
+  * V1 link-token flow (still reachable via /verify-email?token=... URL and ProfileView's "Resend Verification" button → /verify-email/request → user clicks link → /verify-email/confirm): was sending sendVerifiedConfirmation AFTER successful verification = a 2nd "Email terverifikasi" success email. THIS IS THE LEAK.
+
+- Fix: removed sendVerifiedConfirmation call from verify-email/confirm/route.ts.
+  * Removed: sendVerifiedConfirmation call (line 102), surrounding try/catch, db.user.findUnique lookup (was only used to fetch recipient for the confirmation email — no longer needed), logAuthError('Verify-email confirmation email send failed', ...) catch.
+  * Removed imports: sendVerifiedConfirmation from '@/lib/email'; db from '@/lib/db'.
+  * Replaced the if-block with a NOTE comment explaining why no confirmation email is sent + cross-reference to V2 OTP flow.
+  * Left untouched: consumeVerificationToken transaction, emailVerifiedAt assignment from result.emailVerifiedAt, response shape { code, emailVerifiedAt }.
+  * Left sendVerifiedConfirmation helper in src/lib/email.ts as dead code — removing it would touch the Brevo adapter file, which the task spec explicitly forbids ("Jangan ubah logic OTP, verification transaction, Brevo adapter, atau member registry"). No test asserts its existence.
+  * No changes to: V2 OTP verify-otp route, OTP logic in src/lib/otp.ts, identity.ts verification transaction, BrevoEmailAdapter, ResendEmailAdapter, DevConsoleEmailAdapter, member registry, forgot/reset-password routes.
+
+- Verification (all run in this sandbox):
+  * bunx tsc --noEmit           → exit 0 (0 errors)
+  * bun run lint                → exit 0 (0 errors)
+  * bun run build               → exit 0 (58 routes)
+  * scripts/test-otp-domain     → 295/295 PASS
+  * scripts/test-verified-identity → 2101/2101 PASS
+  * scripts/test-auth-integrity → 96/96 PASS
+  * scripts/test-member-registry → 79/79 PASS
+  * scripts/test-toast          → 44/44 PASS
+  * scripts/test-email-brevo    → 37/37 PASS (Brevo adapter unchanged)
+  * Total: 2652 static assertions pass. 0 regressions.
+
+- Committed locally as 973182c on top of 8821f66.
+
+- PUSH FAILED: `git push origin main` → "fatal: could not read Username for 'https://github.com': No such device or address".
+  * Sandbox was reset; GH_TOKEN env var from prior session is no longer set.
+  * Per user instruction ("Jangan meminta saya mengirim PAT/API key lewat chat"), did NOT ask for credentials.
+  * Local commit 973182c is ready. User must push themselves.
+
+Stage Summary:
+- 1 file changed: src/app/api/auth/verify-email/confirm/route.ts (8 insertions, 21 deletions = net -13 lines).
+- 0 OTP / verification-transaction / Brevo-adapter / member-registry logic touched.
+- 0 force push, 0 history rewrite, 0 amend.
+- Commit hash: 973182c4df447aef20600235904548515bb47ad5 (local only — push pending user-side).
+- Final email flow:
+  * Register → 1 email (OTP issuance). Verify-otp → 0 emails. Total: 1 email. ✓
+  * V1 link-token flow → 1 email (verification link). Confirm → 0 emails. Total: 1 email. ✓ (was 2 emails before fix)
+  * Resend OTP → 1 email. ✓ KEEP.
+  * Forgot/reset password → 1 email per OTP. ✓ KEEP.
