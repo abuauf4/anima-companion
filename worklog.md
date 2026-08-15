@@ -4086,3 +4086,31 @@ Stage Summary:
   * Permission-aware sidebar: DEVELOPER sees all + Setting User Admin. ADMIN sees only permitted items. Both see Ganti Password + Keluar.
   * sessionVersion revocation on password change/reset. mustChangePassword forced change gate. Cross-realm cookie separation (realm:'admin' marker). Anti-enumeration login. bcrypt cost 10.
 - OUT OF SCOPE (per task spec): feature toggle, payment, loyalty, Apple Login, Doorprize, new finance, new business features. User.role column NOT dropped (deprecation only — V1 stops here).
+
+---
+Task ID: cutover-1
+Agent: main
+Task: Production cutover preparation for Admin Realm V1 — additive SQL audit, verification query, seed.ts destructiveness audit, and dedicated developer bootstrap script.
+
+Work Log:
+- Audited prisma/sql/20260816-admin-realm-v1.sql — confirmed ADDITIVE ONLY (CREATE TABLE AdminUser, CREATE TABLE AdminPermission, PK + unique + index + FK constraints). No DROP, no ALTER COLUMN TYPE, no DELETE, no seed rows. Matches prisma/schema.prisma AdminUser/AdminPermission models exactly.
+- Audited prisma/seed.ts — confirmed it is DESTRUCTIVE in production: lines 127-147 unconditionally run deleteMany() on every business table (petProfile, fAQ, testimonial, banner, orderItem, order, cartItem, cart, wishlist, review, productPetType, productProblem, productImage, product, seller, category, petType, problem, voucher, AND user — the customer registry). Demo users are gated (SKIP_DEMO_USERS_IN_PRODUCTION), but the deleteMany() block runs regardless of NODE_ENV. Conclusion: NEVER run `bun run seed` in production — it would wipe all customers, orders, products.
+- Created scripts/bootstrap-developer.ts — dedicated one-purpose bootstrap tool:
+  * Reads DEVELOPER_USERNAME, DEVELOPER_PASSWORD, DEVELOPER_DISPLAY_NAME env vars.
+  * bcrypt cost 10 (matches seed.ts convention).
+  * Idempotent: if AdminUser with username exists, exits 0 without modifying any field.
+  * Refuses to silently promote an existing ADMIN → DEVELOPER (exit 2).
+  * Validates password >= 8 chars (exit 1 if too short).
+  * NEVER touches User/Order/Product/Cart/Review/Voucher/AdminPermission/any other table.
+  * NEVER logs the password (not even length/hash).
+  * Disconnects Prisma client on all exit paths.
+- Verified scripts/bootstrap-developer.ts passes `bunx tsc --noEmit -p tsconfig.json` (exit 0, no errors).
+- Did NOT commit/push the new script yet — pending user confirmation per task spec ("Commit/push that bootstrap script only if necessary").
+
+Stage Summary:
+- DELIVERABLES READY (not yet committed):
+  1. Additive SQL: prisma/sql/20260816-admin-realm-v1.sql (already in repo, additive-only, safe to run in Neon SQL Editor).
+  2. Verification SQL: single read-only query that checks both tables exist, both have correct columns, both have correct PK/unique/index/FK constraints — see message to user.
+  3. Safe developer bootstrap: scripts/bootstrap-developer.ts (new file, typechecked clean).
+- CRITICAL FINDING: `bun run seed` is NOT safe in production — it wipes all business data. Use scripts/bootstrap-developer.ts instead.
+- NOT COMMITTED: scripts/bootstrap-developer.ts is on the working tree only. User explicitly said "Commit/push that bootstrap script only if necessary" — awaiting user decision before pushing.
