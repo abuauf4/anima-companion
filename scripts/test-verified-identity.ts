@@ -183,9 +183,30 @@ async function testOAuthStateToken() {
   }
 
   console.log('\n[OST3] verifyOAuthState rejects a tampered state token')
-  // Flip the last character of the state token (alter the signature or
-  // payload). verify must return null.
-  const tamperedState = issued.state.slice(0, -1) + (issued.state.slice(-1) === 'a' ? 'b' : 'a')
+  // Tamper with the FIRST character of the state token's BODY (the part
+  // before the '.'). The body is base64url(JSON payload) — changing ANY
+  // character in it changes the JSON bytes, which changes the HMAC input,
+  // which makes the signature no longer match → verify must return null.
+  //
+  // WHY NOT FLIP THE LAST CHAR (previous version of this test):
+  // The state token format is `body.signature` where signature is
+  // base64url(HMAC-SHA-256), 43 chars for 32 bytes. The LAST char of
+  // the signature encodes only 4 significant bits + 2 unused padding
+  // bits (base64url's last-char padding for non-multiple-of-3 byte
+  // counts). Flipping the last char sometimes changes ONLY the padding
+  // bits, leaving the decoded signature bytes identical — in which
+  // case `crypto.subtle.verify` STILL returns true and the test FAILS.
+  // This was observed ~6% of runs (e.g. flipping 'Y' (0b011000) ↔ 'a'
+  // (0b011010) differs only in bit 1, which is padding).
+  //
+  // Tampering with the FIRST char of the body avoids this entirely:
+  // every char in the body is significant (the body length is always a
+  // multiple of 4 in base64url, so there are no padding bits), and any
+  // change to the body changes the HMAC input, which always invalidates
+  // the signature.
+  const firstChar = issued.state[0]
+  const replacement = firstChar === 'A' ? 'B' : 'A'
+  const tamperedState = replacement + issued.state.slice(1)
   const tamperedVerified = await verifyOAuthState(tamperedState)
   assert(tamperedVerified === null, 'verifyOAuthState returns null for tampered state')
 
@@ -1012,14 +1033,30 @@ async function testDbTokenLifecycle() {
     'both concurrent requests return the same userId'
   )
   // The OK result must carry emailVerifiedAt; the ALREADY_CONSUMED result
-  // must NOT have bumped it (i.e. its emailVerifiedAt field should be the
-  // SAME timestamp as the OK result, not a separate `now` from the loser).
+  // must NOT have written emailVerifiedAt. The V2 contract
+  // (src/lib/identity.ts ConsumeTokenResponse) explicitly returns
+  // `emailVerifiedAt` ONLY on the OK / ALREADY_VERIFIED paths — the
+  // ALREADY_CONSUMED path returns `{ result, userId }` with NO
+  // emailVerifiedAt field. This is the V2 invariant the test is named
+  // after ("loser does NOT bump emailVerifiedAt"): the loser's request
+  // never reaches the `tx.user.updateMany` step (it short-circuits at
+  // the `claim.count !== 1` gate), so it neither writes nor surfaces
+  // an emailVerifiedAt timestamp.
+  //
+  // The previous version of this assertion expected the loser to
+  // return the SAME emailVerifiedAt as the winner. That expectation
+  // was incorrect under the V2 contract — it would have required the
+  // loser to perform an extra `tx.user.findUnique` to read back a
+  // value it never wrote, which is exactly the kind of post-claim
+  // work the V2 gate is designed to prevent. The authoritative
+  // proof that the loser did not bump emailVerifiedAt is the DB
+  // state check below (user.emailVerifiedAt === winner's timestamp).
   const okResult = r1.result === 'OK' ? r1 : r2
   const lostResult = r1.result === 'ALREADY_CONSUMED' ? r1 : r2
   assert(!!okResult.emailVerifiedAt, 'OK result carries emailVerifiedAt')
   assert(
-    !!lostResult.emailVerifiedAt && lostResult.emailVerifiedAt.getTime() === okResult.emailVerifiedAt!.getTime(),
-    'ALREADY_CONSUMED (loser) result carries the SAME emailVerifiedAt as the winner — loser did NOT bump it'
+    lostResult.emailVerifiedAt === undefined || lostResult.emailVerifiedAt === null,
+    'ALREADY_CONSUMED (loser) result does NOT carry emailVerifiedAt — V2 gate prevented the loser from writing or surfacing it'
   )
   // DB state: token consumed exactly once (single row with consumedAt set).
   const tokenRow = await db.emailVerificationToken.findUnique({

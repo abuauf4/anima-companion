@@ -27,11 +27,11 @@ import { requireAdmin, handleAuthError, logAuthError } from '@/lib/auth'
  */
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAdmin()
-    const { id } = params
+    const { id } = await params
 
     // findFirst (NOT findUnique) — we add `role: 'CUSTOMER'` so an id
     // belonging to an ADMIN or SELLER returns null → 404. The detail

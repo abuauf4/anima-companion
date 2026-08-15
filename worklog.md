@@ -3598,3 +3598,104 @@ V2 COMPLETE — Summary across all 9 stages:
   2. Set EMAIL_PROVIDER=resend + RESEND_API_KEY + EMAIL_FROM in production env vars (Coolify / Vercel).
   3. Verify the OTP email delivers to a real inbox (the dev adapter prints to stdout; the Resend adapter sends via Resend).
   4. (Optional) Add a per-IP global rate limit on /api/auth/forgot-password as defense-in-depth against OTP-spamming (the per-user 60s cooldown is the primary defense — see stage 5 docstring for the tradeoff rationale).
+
+---
+Task ID: release-green-main
+Agent: main (Super Z)
+Task: Close final release blockers after 397fa18 concurrency fix approval. (1) Production OTP index — audit + apply + verify partial unique index on OtpCode(userId, purpose) WHERE consumedAt IS NULL. (2) Restore fully green main — fix tsc, lint, build, and 6 test suites. (3) Keep Resend real-inbox E2E PENDING. No new features. Small commits + normal push to main. No force push.
+
+Work Log:
+- Baseline: commit 397fa18 (concurrency fix approved). Working tree clean.
+
+- Production OTP index (blocker #1):
+  * Audited QA database (proxy for production procedure verification):
+    - SELECT "userId", purpose, COUNT(*) FROM "OtpCode" WHERE "consumedAt" IS NULL GROUP BY 1,2 HAVING COUNT(*) > 1
+    - Result: 0 conflict rows. Active unconsumed total: 0 (3 consumed rows leftover from prior QA runs).
+  * Confirmed partial unique index already applied on QA database (from commit 397fa18):
+    \d "OtpCode" → "OtpCode_userId_purpose_active_uniq" UNIQUE, btree ("userId", purpose) WHERE "consumedAt" IS NULL
+  * Created prisma/sql/20260815-otp-active-uniq-prod-procedure.sql — single-file operator procedure:
+    - STEP 1: AUDIT (read-only query for violations; if any rows returned, STOP and reconcile manually using the SQL in 20260815-otp-active-uniq-backstop.sql).
+    - STEP 2: APPLY (CREATE UNIQUE INDEX IF NOT EXISTS — additive, idempotent, non-destructive).
+    - STEP 3: VERIFY (catalog query against pg_index to confirm index exists with indisunique=true).
+  * Ran the procedure end-to-end on QA database:
+    - STEP 1 audit returned 0 rows ✅
+    - STEP 2 apply: "NOTICE: relation already exists, skipping" — idempotent ✅
+    - STEP 3 verify: 1 row returned, uniqueness=UNIQUE ✅
+  * Production DB NOT mutated. Operator must run the procedure against production DATABASE_URL via psql.
+  * No destructive SQL, no --accept-data-loss, no blind prisma db push.
+
+- Restore fully green main (blocker #2):
+
+  * bunx tsc --noEmit — FAIL → PASS:
+    - Root cause: src/app/api/admin/customers/[id]/route.ts GET handler used the OLD Next.js 14 sync params signature `{ params: { id: string } }` while all 8 sibling [id] routes had already been migrated to the Next.js 16 async signature `{ params: Promise<{ id: string }> }`. This file was missed in the prior migration.
+    - Fix: changed to `{ params: Promise<{ id: string }> }` and added `await params` to destructure id. 1-line semantic change, 4 lines including context. Matches the exact pattern of the 8 sibling routes.
+    - After fix: tsc --noEmit exits 0.
+
+  * bun run lint — PASS (was already passing; no changes needed).
+
+  * bun run build — PASS (no /_global-error failure reproducible):
+    - The prior commit 397fa18 message claimed "build fails on /_global-error prerender (React useContext null) — unrelated". Investigated thoroughly:
+      * Build exits 0 with .env loaded (DATABASE_URL/DIRECT_URL/AUTH_SECRET set).
+      * Build exits 0 with env vars unset (only non-fatal sitemap warnings — sitemap.ts has try/catch).
+      * .next/server/app/_global-error/ directory IS generated successfully (page, page.js, page.js.map all present).
+      * .next/server/app/_global-error.html renders the default Next.js 500 page correctly.
+      * No "useContext null" or "global-error" error string anywhere in the build log.
+    - Conclusion: the prior commit's claim was either stale or environment-specific (could not reproduce on this machine). Build is currently green. No code change needed for /_global-error.
+
+  * test-otp-domain — 294/295 → 295/295 PASS:
+    - Stale test: OTP8 hardcoded `devSecret = 'anima-companion-dev-secret-change-in-prod'` and used it to compute the expected HMAC. But the production `getOtpSecret()` (src/lib/otp.ts:99-110) prefers `process.env.AUTH_SECRET` over the dev fallback. The QA env legitimately sets AUTH_SECRET to a non-default value, so the actual HMAC used a different secret than the test expected.
+    - Fix: mirror getOtpSecret() resolution in the test — `const expectedSecret: string = process.env.AUTH_SECRET ?? DEV_FALLBACK_SECRET`. Documented why the production-only throw branch is not replicated (test should not crash when AUTH_SECRET is missing; that hard-fail is independently covered by SRC116-SRC117).
+    - After fix: 295/295 PASS.
+
+  * test-verified-identity — 2124/2125 → 2125/2125 PASS (2 fixes):
+    - Fix 1 (VCONF5 stale assertion): the test expected `lostResult.emailVerifiedAt` to equal the winner's timestamp. But the V2 contract (src/lib/identity.ts ConsumeTokenResponse type definition lines 173-175) explicitly returns `emailVerifiedAt` ONLY on the OK / ALREADY_VERIFIED paths — the ALREADY_CONSUMED path returns `{ result, userId }` with NO emailVerifiedAt field. This is the V2 invariant the test is named after ("loser does NOT bump emailVerifiedAt"): the loser short-circuits at the `claim.count !== 1` gate and never reaches the `tx.user.updateMany` step. The previous test expectation required the loser to perform an extra `tx.user.findUnique` to read back a value it never wrote — exactly the kind of post-claim work the V2 gate is designed to prevent.
+    - Fix: changed assertion to `lostResult.emailVerifiedAt === undefined || lostResult.emailVerifiedAt === null` (loser does NOT carry emailVerifiedAt). The DB state check at lines 1035-1039 (user.emailVerifiedAt === winner's timestamp) already authoritatively proves the loser did not bump it.
+    - Fix 2 (OST3 flaky tamper test): the test flipped the LAST character of the state token (last char of the base64url-encoded HMAC-SHA-256 signature). For a 32-byte signature encoded as 43 base64url chars, the LAST char has only 4 significant bits + 2 unused padding bits. If the flip changes ONLY the padding bits (e.g. 'Y' (0b011000) ↔ 'a' (0b011010) differ only in bit 1, which is padding), the decoded signature bytes are identical and `crypto.subtle.verify` STILL returns true → test flakes ~6% of runs (305/5000 in stress test).
+    - Fix: tamper with the FIRST character of the state token BODY instead. The body is base64url(JSON payload) — every char is significant (body length is always a multiple of 4 in base64url, no padding bits), and any change to the body changes the HMAC input, which always invalidates the signature. Verified with 5000-iteration stress: 0 failures.
+    - After fixes: 2125/2125 PASS across 3 consecutive chain runs.
+
+  * test-order-integrity — CRASH → 113/113 PASS:
+    - Stale test: scenarios V1/V3/V4/V5/V6/V8/V9 created vouchers directly via `db.voucher.create({ data: { code: \`${QA_PREFIX}VXPCT\` } })` where QA_PREFIX is lowercase (`qa-ordtest-${Date.now()}-`). But the production admin route (src/app/api/admin/vouchers/route.ts:31) uppercases the code on creation: `code: code.toUpperCase().trim()`. The lookup in src/lib/orders.ts resolveVoucher (line 366) ALSO uppercases the code before findUnique. So the stored code MUST be uppercase for the lookup to find it.
+    - The test bypassed the admin route and created lowercase voucher codes, violating the production contract. resolveVoucher uppercased the lookup key but couldn't find the lowercase-stored code → VOUCHER_NOT_FOUND crash.
+    - Fix: added `normalizeVoucherCode(raw: string): string` helper that mirrors the admin route's `code.toUpperCase().trim()` contract, and applied it to all 7 voucher creations (V1/V3/V4/V5/V6/V8/V9). Documented the production contract in the helper's docstring.
+    - After fix: 113/113 PASS.
+
+  * test-auth-integrity — 96/96 PASS (no changes needed).
+  * test-member-registry — 79/79 PASS (no changes needed).
+  * test-toast — 44/44 PASS (no changes needed).
+
+- QA concurrency suite (blocker #2 continued):
+  * test-1-otp-invalid-attempts: PASS (5 WRONG_CODE, 15 NOT_FOUND_OR_EXPIRED, attempts==maxAttempts, consumedAt IS NULL).
+  * test-2-otp-resend (50-iteration stress of A+B): PASS — 0 failures, max unconsumed=1 across all 50 runs of A and B. Partial unique index backstop confirmed PRESENT.
+  * test-2d-email-send-ownership: PASS — sendOtpEmail called EXACTLY ONCE per 10-concurrent burst (D1 single + D2 single + D3 5-iter stress all max sendCount=1).
+  * test-3-otp-verify-concurrent: PASS (1 OK, 4 losers split ALREADY_CONSUMED/NOT_FOUND_OR_EXPIRED, emailVerifiedAt set once).
+  * test-4-password-reset-e2e: PASS (all 7 steps + bonus).
+  * test-5-legacy-session: PASS (all 6 steps).
+
+- Resend real-inbox E2E (blocker #3):
+  * NOT TOUCHED. Credentials not configured. Status remains PENDING.
+
+- Final release-green state (all verified):
+  * bunx tsc --noEmit          → 0 errors (exit 0)
+  * bun run lint               → 0 errors (exit 0)
+  * bun run build              → 58/58 static pages, exit 0
+  * test-auth-integrity        → 96/96 PASS
+  * test-verified-identity     → 2125/2125 PASS
+  * test-member-registry       → 79/79 PASS
+  * test-toast                 → 44/44 PASS
+  * test-otp-domain            → 295/295 PASS
+  * test-order-integrity       → 113/113 PASS (where DB/runtime available)
+  * QA concurrency suite       → A/B/C/D all PASS (50+ iterations)
+
+Stage Summary:
+- 5 files changed (4 modified, 1 added):
+  * src/app/api/admin/customers/[id]/route.ts — Next.js 16 async params (real code fix; tsc blocker)
+  * scripts/test-otp-domain.ts — OTP8 secret resolution mirror (stale test fix)
+  * scripts/test-verified-identity.ts — VCONF5 loser contract + OST3 tamper flake (stale test fixes)
+  * scripts/test-order-integrity.ts — voucher code normalization helper (stale test fix)
+  * prisma/sql/20260815-otp-active-uniq-prod-procedure.sql — new operator procedure (audit + apply + verify)
+- 0 new features. 0 stable features reverted. 0 admin/order/voucher/stock/catalog logic touched.
+- 0 destructive SQL. 0 --accept-data-loss. 0 blind prisma db push.
+- Production DB NOT mutated. QA DB index verified present.
+- Resend real-inbox E2E remains PENDING — operator must configure RESEND_API_KEY + EMAIL_FROM in production env.
+- Commit + normal-push to main. No force push.

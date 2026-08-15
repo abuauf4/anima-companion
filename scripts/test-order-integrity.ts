@@ -76,6 +76,23 @@ import {
 // ----- Test isolation: all QA records get a unique prefix per run -----
 const QA_PREFIX = `qa-ordtest-${Date.now()}-`
 
+/**
+ * Voucher code normalization — mirrors the PRODUCTION admin route contract
+ * (src/app/api/admin/vouchers/route.ts POST handler):
+ *   `code: code.toUpperCase().trim()`
+ *
+ * The lookup in src/lib/orders.ts resolveVoucher ALSO uppercases the code
+ * before findUnique. So the stored code MUST be uppercase for the lookup
+ * to find it. The previous version of these tests created voucher codes
+ * directly via db.voucher.create() with the lowercase QA_PREFIX, which
+ * violated the production contract and caused VOUCHER_NOT_FOUND failures
+ * in scenarios V1/V3/V4/V5/V6/V8/V9. This helper fixes all of them by
+ * uppercasing the code at creation time, exactly as the admin route does.
+ */
+function normalizeVoucherCode(raw: string): string {
+  return raw.toUpperCase().trim()
+}
+
 let pass = 0
 let fail = 0
 const failures: string[] = []
@@ -1068,7 +1085,7 @@ async function main() {
     // Voucher: 20% off, min spend 50000 → discount = 40000, total = 160000.
     const voucher = await db.voucher.create({
       data: {
-        code: `${QA_PREFIX}V1PCT`,
+        code: normalizeVoucherCode(`${QA_PREFIX}V1PCT`),
         type: 'PERCENTAGE',
         value: 20,
         minSpend: 50000,
@@ -1160,7 +1177,7 @@ async function main() {
     })
     const voucher = await db.voucher.create({
       data: {
-        code: `${QA_PREFIX}V3INACTIVE`,
+        code: normalizeVoucherCode(`${QA_PREFIX}V3INACTIVE`),
         type: 'PERCENTAGE',
         value: 10,
         minSpend: 0,
@@ -1213,7 +1230,7 @@ async function main() {
     })
     const voucher = await db.voucher.create({
       data: {
-        code: `${QA_PREFIX}V4EXPIRED`,
+        code: normalizeVoucherCode(`${QA_PREFIX}V4EXPIRED`),
         type: 'FIXED',
         value: 10000,
         minSpend: 0,
@@ -1269,7 +1286,7 @@ async function main() {
     // Voucher: minSpend 100000 → 50000 < 100000 → reject.
     const voucher = await db.voucher.create({
       data: {
-        code: `${QA_PREFIX}V5MIN`,
+        code: normalizeVoucherCode(`${QA_PREFIX}V5MIN`),
         type: 'FIXED',
         value: 15000,
         minSpend: 100000,
@@ -1324,7 +1341,7 @@ async function main() {
     // Voucher: FIXED Rp 15000 off, minSpend 100000 → discount = 15000, total = 135000.
     const voucher = await db.voucher.create({
       data: {
-        code: `${QA_PREFIX}V6FIXED`,
+        code: normalizeVoucherCode(`${QA_PREFIX}V6FIXED`),
         type: 'FIXED',
         value: 15000,
         minSpend: 100000,
@@ -1434,7 +1451,7 @@ async function main() {
     // Voucher with minSpend higher than subtotal — will fail Rule 5.
     const voucher = await db.voucher.create({
       data: {
-        code: `${QA_PREFIX}V8ROLLBACK`,
+        code: normalizeVoucherCode(`${QA_PREFIX}V8ROLLBACK`),
         type: 'FIXED',
         value: 5000,
         minSpend: 999999, // impossibly high
@@ -1493,7 +1510,7 @@ async function main() {
     })
     const voucher = await db.voucher.create({
       data: {
-        code: `${QA_PREFIX}V9SNAPSHOT`,
+        code: normalizeVoucherCode(`${QA_PREFIX}V9SNAPSHOT`),
         type: 'PERCENTAGE',
         value: 10,
         minSpend: 0,

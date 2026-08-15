@@ -450,10 +450,37 @@ console.log('\n── OTP HMAC hashing ──')
 
   // Cross-check: compute the expected HMAC manually and verify it matches.
   // This proves the implementation is HMAC-SHA-256, not some other construction.
-  const devSecret = 'anima-companion-dev-secret-change-in-prod'
+  //
+  // SECRET RESOLUTION (must mirror src/lib/otp.ts getOtpSecret()):
+  //   1. process.env.AUTH_SECRET if set (production / QA / any env that
+  //      configures the secret explicitly).
+  //   2. DEV_FALLBACK_SECRET ('anima-companion-dev-secret-change-in-prod')
+  //      only when AUTH_SECRET is unset AND NODE_ENV !== 'production'.
+  //
+  // The previous version of this assertion hardcoded the dev fallback secret,
+  // which made the test fail whenever AUTH_SECRET was set in the test
+  // environment (e.g. the QA env legitimately sets AUTH_SECRET to a
+  // non-default value). This is a stale-test fix, NOT a code regression —
+  // the production code's getOtpSecret() has always preferred
+  // process.env.AUTH_SECRET over the dev fallback.
+  //
+  // Note: the production-only throw branch from getOtpSecret() is NOT
+  // replicated here — this is a test, and if AUTH_SECRET is missing we
+  // want to fall through to the dev secret rather than crash. The
+  // production hard-fail behavior is independently covered by the
+  // ResendEmailAdapter constructor test (SRC116-SRC117) and the
+  // getOtpSecret() source-level audit.
+  const DEV_FALLBACK_SECRET = 'anima-companion-dev-secret-change-in-prod'
+  const expectedSecret: string = process.env.AUTH_SECRET ?? DEV_FALLBACK_SECRET
   const expectedMessage = `${purpose1}\0${user1}\0${code1}`
-  const expectedHmac = createHmac('sha256', devSecret).update(expectedMessage, 'utf8').digest('hex')
-  assertEqual(h1, expectedHmac, 'OTP8: hashOtpCode matches manually-computed HMAC-SHA-256 (dev secret)')
+  const expectedHmac = createHmac('sha256', expectedSecret)
+    .update(expectedMessage, 'utf8')
+    .digest('hex')
+  assertEqual(
+    h1,
+    expectedHmac,
+    'OTP8: hashOtpCode matches manually-computed HMAC-SHA-256 (mirrors getOtpSecret resolution: AUTH_SECRET env var, then dev fallback)'
+  )
 }
 
 console.log('\n── Constant-time comparison ──')
