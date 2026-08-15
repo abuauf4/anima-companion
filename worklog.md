@@ -3122,3 +3122,75 @@ Stage Summary:
 - 0 stable features reverted. 0 admin / order / voucher / stock / catalog logic touched.
 - Next stage (4): login route — redirect UNVERIFIED users to /verify-email (currently login lets them in to their target page even though email is unverified).
 - Git safety: small commit, push to main, no force push.
+
+---
+Task ID: account-recovery-v2-stage4-login-unverified-redirect
+Agent: main (Super Z)
+Task: Account Recovery & Verification V2 — Stage 4: login UNVERIFIED → redirect to /verify-email. Modify login route to return requiresVerification flag (PASSWORD user + emailVerifiedAt=null + role !== ADMIN). Issue a fresh OTP on UNVERIFIED login so the user can verify immediately. Modify LoginView to redirect to /verify-email?next=... when requiresVerification is true (BEFORE honoring nextPath or role-based default). ADMIN bypass preserved. Stage 3 baseline is commit 5105142.
+
+Work Log:
+- Stage 3 baseline (commit 5105142) is on origin/main: verify-otp route + emailVerifiedAt atomic tx + VerifyEmailView V2 OTP UI.
+
+- Stage 4 implementation:
+  * `src/app/api/auth/login/route.ts` (modified):
+    - Added imports: `issueOtp` from `@/lib/otp`, `sendOtpEmail` from `@/lib/email`.
+    - After `createSession(safeUser)`, added a conditional check:
+      - IF `user.provider === 'PASSWORD' && !user.emailVerifiedAt && user.role !== 'ADMIN'`:
+        - Set `requiresVerification = true` in the response body.
+        - Issue a fresh OTP via `issueOtp({ userId, purpose: 'EMAIL_VERIFICATION' })` (invalidates any previous unconsumed OTP for this user — the user might have closed the browser mid-verification, the old OTP is now stale).
+        - Best-effort send via `sendOtpEmail`. If the adapter fails, log a stable event label via `logAuthError` and set `otpSent = false`. The user is logged in and will be redirected to /verify-email where they can click "Kirim ulang".
+      - ELSE: `requiresVerification = false` (ADMIN bypass, GOOGLE users always verified, already-verified PASSWORD users).
+    - Response body now includes `{ user, requiresVerification, otpSent }`.
+    - All other login behavior preserved: input validation, error message "Email atau password salah" (no email enumeration), bcrypt compare, session cookie, AuthError sanitization on catch.
+    - ADMIN BYPASS RATIONALE: Admins have other auth pathways (seed script sets emailVerifiedAt, or they verified via V1 link-token flow in the past). If an admin somehow has emailVerifiedAt === null (e.g. a fresh admin seed without verification), they can still log in to the admin panel — the redirect is for CUSTOMER users only. This avoids locking out admins from the admin UI.
+  * `src/views/auth/LoginView.tsx` (modified):
+    - After `await refresh()`, added a `data.requiresVerification` check BEFORE the existing nextPath / role-based default logic.
+    - If `requiresVerification === true`:
+      - Toast branches on `data.otpSent`: success message says "Kode verifikasi telah dikirim ke {email}" if OTP was sent, or "Anda harus verifikasi email. Klik 'Kirim ulang' untuk menerima kode." if the email adapter failed.
+      - Navigate to `/verify-email?next=...` (preserving the original nextPath as ?next= on the verify-email URL so the verify-email page can redirect there after successful verification).
+      - Early return so the nextPath / role-based default logic is NOT executed.
+    - Else: existing behavior preserved — toast "Selamat datang", navigate to nextPath or role-based default (/admin for ADMIN, / for customer).
+  * `scripts/test-otp-domain.ts` (extended with SRC48-SRC55 — 14 new assertions):
+    - SRC48: login imports issueOtp + sendOtpEmail, calls issueOtp with purpose: 'EMAIL_VERIFICATION' inside the requiresVerification branch.
+    - SRC49: returns requiresVerification flag, checks provider === 'PASSWORD' AND !user.emailVerifiedAt.
+    - SRC50: returns otpSent flag.
+    - SRC51: bypasses requiresVerification for ADMIN users (role !== 'ADMIN').
+    - SRC52: GOOGLE users excluded via provider === 'PASSWORD' check.
+    - SRC53: already-verified PASSWORD users excluded via !user.emailVerifiedAt check.
+    - SRC54: LoginView checks data.requiresVerification, navigates to /verify-email, checks requiresVerification BEFORE honoring nextPath (source-order assertion).
+    - SRC55: LoginView preserves nextPath as ?next= on /verify-email URL.
+
+- Did NOT touch (preserved stable features):
+  * `src/lib/auth.ts` (Auth V1 — session cookies, bcrypt, AuthError, getCurrentUser, OAuth state token)
+  * `src/lib/identity.ts` (Identity V1 — V1 link-based verification still works for already-issued tokens)
+  * `src/lib/oauth-state.ts`, `src/lib/redirect.ts`, `src/lib/google.ts`
+  * `src/lib/otp.ts` + `src/lib/password-reset.ts` (stage 1 foundation)
+  * `src/lib/email.ts` (sendOtpEmail from stage 2 — unchanged)
+  * `src/app/api/auth/google/callback/route.ts` (Google OAuth callback)
+  * `src/app/api/auth/verify-email/request/route.ts` + `confirm/route.ts` (V1 routes preserved)
+  * `src/app/api/auth/register/route.ts` + `send-otp/route.ts` + `verify-otp/route.ts` (stages 2-3 — unchanged)
+  * `src/views/auth/VerifyEmailView.tsx` (stage 3 — unchanged, receives the redirect from LoginView)
+  * `src/views/auth/RegisterView.tsx` (stage 2 — unchanged)
+  * All admin customer routes + CustomersView (member registry V1)
+  * All toast call sites + sonner.tsx + layout.tsx (Sonner standardization)
+  * All order / voucher / stock / catalog / SEO / Cloudinary logic
+
+Verification:
+- `bunx tsc --noEmit`: clean (0 errors, after clearing stale .next cache).
+- `bun run lint`: clean (0 errors, 0 warnings).
+- `bun run build`: exit 0 (Compiled successfully in 18.6s).
+- `bun run scripts/test-otp-domain.ts`: 162 passed, 0 failed (was 148 at stage 3, +14 new for stage 4).
+- `bun run scripts/test-auth-integrity.ts`: 96 passed, 0 failed (no Auth V1 regression).
+- `bun run scripts/test-verified-identity.ts`: 2101 passed, 0 failed (no Identity V1 regression).
+- `bun run scripts/test-member-registry.ts`: 79 passed, 0 failed (no Member Registry V1 regression).
+- `bun run scripts/test-toast.ts`: 44 passed, 0 failed (no Sonner regression).
+
+Stage Summary:
+- 2 files modified in stage 4:
+  * Modified: src/app/api/auth/login/route.ts (added requiresVerification flag + issueOtp on UNVERIFIED login, ADMIN bypass preserved).
+  * Modified: src/views/auth/LoginView.tsx (redirect to /verify-email?next=... when requiresVerification is true, BEFORE honoring nextPath or role-based default).
+  * Modified: scripts/test-otp-domain.ts (+SRC48-SRC55, 14 new assertions).
+- V2 spec compliance for stage 4: login akun unverified → diarahkan ke verify-email ✅, fresh OTP issued on UNVERIFIED login (so user can verify immediately) ✅, nextPath preserved through the redirect ✅, ADMIN bypass (no lockout) ✅, GOOGLE users always verified (branch unreachable) ✅.
+- 0 stable features reverted. 0 admin / order / voucher / stock / catalog logic touched.
+- Next stages (5-7): forgot-password page + anti-enumeration response, forgot-password OTP → short-lived single-use reset grant, reset password + bcrypt + sessionVersion bump.
+- Git safety: small commit, push to main, no force push.

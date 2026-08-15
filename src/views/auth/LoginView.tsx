@@ -55,8 +55,30 @@ export function LoginView() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      toast.success(`Selamat datang, ${data.user.name}!`)
       await refresh()
+      // Account Recovery & Verification V2:
+      // If the server says the user must verify their email, redirect them
+      // to /verify-email BEFORE honoring ?next= or the role-based default.
+      // The user is logged in (session cookie is set) but their email is
+      // unverified — they must enter the OTP we just emailed before they
+      // can proceed.
+      //
+      // We preserve the original ?next= as ?next= on the /verify-email URL
+      // so the verify-email page can redirect there after successful
+      // verification.
+      if (data.requiresVerification) {
+        if (data.otpSent) {
+          toast.success(`Kode verifikasi telah dikirim ke ${data.user.email}.`)
+        } else {
+          toast.success(`Anda harus verifikasi email. Klik "Kirim ulang" untuk menerima kode.`)
+        }
+        const verifyUrl = nextPath
+          ? `/verify-email?next=${encodeURIComponent(nextPath)}`
+          : '/verify-email'
+        navigate(verifyUrl)
+        return
+      }
+      toast.success(`Selamat datang, ${data.user.name}!`)
       // If a safe internal ?next= target was set (e.g. /checkout), go there.
       // Otherwise admins go to /admin and customers go to /.
       // safeInternalPath already rejected anything external or malformed.

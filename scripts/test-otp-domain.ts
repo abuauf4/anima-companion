@@ -143,6 +143,23 @@
  *   SRC46. V2OtpView clears the code input on WRONG_CODE (so user can re-type).
  *   SRC47. V2OtpView shows remainingAttempts on WRONG_CODE state.
  *
+ * Stage 4 — login UNVERIFIED → /verify-email redirect invariants:
+ *   SRC48. login route imports issueOtp + sendOtpEmail (issues V2 OTP on
+ *          UNVERIFIED login, NOT just registering).
+ *   SRC49. login route returns requiresVerification flag in response body
+ *          when user is PASSWORD + emailVerifiedAt=null + role !== ADMIN.
+ *   SRC50. login route returns otpSent flag in response body.
+ *   SRC51. login route does NOT set requiresVerification for ADMIN users
+ *          (admin bypass — they have other auth pathways).
+ *   SRC52. login route does NOT set requiresVerification for GOOGLE users
+ *          (Google verified email at account-creation — branch unreachable).
+ *   SRC53. login route does NOT set requiresVerification for already-verified
+ *          PASSWORD users.
+ *   SRC54. LoginView checks data.requiresVerification BEFORE honoring nextPath
+ *          or role-based default. Redirects to /verify-email?next=... when
+ *          requiresVerification is true.
+ *   SRC55. LoginView preserves nextPath as ?next= on /verify-email URL.
+ *
  * HTTP integration (placeholder — implemented in stage 2+):
  *   (none yet — OTP API routes are implemented in stage 2+)
  */
@@ -694,15 +711,76 @@ assert(/setCode\(['"]['"]\)/.test(verifyEmailViewSrc), 'SRC46: V2OtpView clears 
 assert(/remainingAttempts/.test(verifyEmailViewSrc), 'SRC47: V2OtpView shows remainingAttempts on WRONG_CODE state')
 
 // ---------------------------------------------------------------------------
+// Stage 4 — login UNVERIFIED → /verify-email redirect source invariants (SRC48-SRC55)
+// ---------------------------------------------------------------------------
+
+console.log('\n── Stage 4: login route source invariants (SRC48-SRC53) ──')
+
+const loginRoutePath = SRC('app/api/auth/login/route.ts')
+const loginRouteSrc = readFileSync(loginRoutePath, 'utf8')
+
+// SRC48. login route imports issueOtp + sendOtpEmail.
+assert(/from\s+['"]@\/lib\/otp['"]/.test(loginRouteSrc) && /issueOtp/.test(loginRouteSrc), 'SRC48: login route imports issueOtp from @/lib/otp')
+assert(/from\s+['"]@\/lib\/email['"]/.test(loginRouteSrc) && /sendOtpEmail/.test(loginRouteSrc), 'SRC48: login route imports sendOtpEmail from @/lib/email')
+
+// SRC49. Returns requiresVerification flag — the conditional must check
+// provider === 'PASSWORD' && !emailVerifiedAt && role !== 'ADMIN'.
+assert(/requiresVerification/.test(loginRouteSrc), 'SRC49: login route returns requiresVerification flag')
+assert(/provider\s*===\s*['"]PASSWORD['"]/.test(loginRouteSrc), 'SRC49: login route checks provider === "PASSWORD"')
+assert(/!user\.emailVerifiedAt/.test(loginRouteSrc), 'SRC49: login route checks !user.emailVerifiedAt (UNVERIFIED)')
+
+// SRC51. ADMIN bypass — the conditional must exclude role === 'ADMIN'.
+assert(/role\s*!==\s*['"]ADMIN['"]/.test(loginRouteSrc), 'SRC51: login route bypasses requiresVerification for ADMIN users (role !== "ADMIN")')
+
+// SRC52. GOOGLE users — the provider === 'PASSWORD' check excludes GOOGLE
+// users from the requiresVerification branch (Google always has emailVerifiedAt
+// set at account-creation, so the branch is unreachable for them, but the
+// provider check is the explicit gate).
+// (Already covered by SRC49's provider === 'PASSWORD' check — no separate
+// assertion needed, but we add one for documentation.)
+assert(/provider\s*===\s*['"]PASSWORD['"]/.test(loginRouteSrc), 'SRC52: login route GOOGLE users excluded via provider === "PASSWORD" check (Google always has emailVerifiedAt set)')
+
+// SRC53. Already-verified PASSWORD users — the !user.emailVerifiedAt check
+// excludes them.
+// (Already covered by SRC49's !user.emailVerifiedAt check — documented here.)
+assert(/!user\.emailVerifiedAt/.test(loginRouteSrc), 'SRC53: login route already-verified PASSWORD users excluded via !user.emailVerifiedAt check')
+
+// SRC50. Returns otpSent flag.
+assert(/otpSent/.test(loginRouteSrc), 'SRC50: login route returns otpSent flag in response body')
+
+// The login route should call issueOtp with purpose: 'EMAIL_VERIFICATION'
+// inside the requiresVerification branch.
+assert(/issueOtp\(\{[^}]*purpose:\s*['"]EMAIL_VERIFICATION['"]/.test(loginRouteSrc), 'SRC48: login route calls issueOtp with purpose: "EMAIL_VERIFICATION" inside requiresVerification branch')
+
+console.log('\n── Stage 4: LoginView UI invariants (SRC54-SRC55) ──')
+
+const loginViewPath = SRC('views/auth/LoginView.tsx')
+const loginViewSrc = readFileSync(loginViewPath, 'utf8')
+
+// SRC54. LoginView checks data.requiresVerification BEFORE honoring nextPath
+// or role-based default.
+assert(/data\.requiresVerification/.test(loginViewSrc), 'SRC54: LoginView checks data.requiresVerification')
+assert(/verify-email/.test(loginViewSrc), 'SRC54: LoginView navigates to /verify-email when requiresVerification is true')
+// The requiresVerification check must come BEFORE the nextPath / role-based
+// default. We check that data.requiresVerification appears BEFORE the
+// nextPath check in the source.
+const rvIdx = loginViewSrc.indexOf('data.requiresVerification')
+const npIdx = loginViewSrc.indexOf('if (nextPath)')
+assert(rvIdx > 0 && npIdx > 0 && rvIdx < npIdx, 'SRC54: LoginView checks requiresVerification BEFORE honoring nextPath')
+
+// SRC55. LoginView preserves nextPath as ?next= on /verify-email URL.
+assert(/verify-email\?next=/.test(loginViewSrc), 'SRC55: LoginView preserves nextPath as ?next= on /verify-email URL')
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 
 console.log('\n────────────────────────────────────────')
-console.log(`OTP domain + Stage 2 + Stage 3 (register/send-otp/verify-otp): ${pass} passed, ${fail} failed`)
+console.log(`OTP domain + Stages 2-4 (register/send-otp/verify-otp/login-redirect): ${pass} passed, ${fail} failed`)
 if (fail > 0) {
   console.log('\nFailures:')
   failures.forEach((f) => console.log(`  - ${f}`))
   process.exit(1)
 }
-console.log('All Stage 1 + Stage 2 + Stage 3 static assertions passed.')
+console.log('All Stage 1 + Stage 2 + Stage 3 + Stage 4 static assertions passed.')
 process.exit(0)
