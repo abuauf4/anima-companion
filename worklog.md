@@ -3761,3 +3761,81 @@ Stage Summary:
   * V1 link-token flow → 1 email (verification link). Confirm → 0 emails. Total: 1 email. ✓ (was 2 emails before fix)
   * Resend OTP → 1 email. ✓ KEEP.
   * Forgot/reset password → 1 email per OTP. ✓ KEEP.
+
+---
+Task ID: finish-google-signin-production
+Agent: main (Super Z)
+Task: Finish Google Sign-In production. Audit actual current Google OAuth implementation from latest origin/main. Goal: "Lanjutkan dengan Google" from both Register and Login, with new/existing/takeover flows, security requirements (ID token verification of iss/aud/exp/sub/email/email_verified, OAuth state browser-binding, safeInternalPath), UI on both pages, production env reporting, focused tests. Do NOT redesign auth. Only fix missing pieces. Small stable commit, normal push to main, no force.
+
+Work Log:
+- Fetched latest origin/main. HEAD = 715c1a4 (worklog doc commit). Already in sync.
+- Audited actual current Google OAuth implementation by reading source:
+  * src/app/api/auth/google/route.ts — entry route. safeInternalPath on ?next=, createOAuthState, setOAuthStateCookie(nonce), buildGoogleAuthUrl, 302 to Google consent. 503 when not configured. ✓ correct.
+  * src/app/api/auth/google/callback/route.ts — callback. verifyOAuthState, verifyOAuthStateCookie, safeInternalPath(statePayload.next), exchangeGoogleCodeForTokens, verifyGoogleIdToken, email_verified check (defense-in-depth), findUnique by providerSubject (returning user → sign in, no mutation), findUnique by email with safe-linking policy (PASSWORD + emailVerifiedAt → link atomically via updateMany WHERE providerSubject IS NULL), takeover defense (PASSWORD + !emailVerifiedAt → redirect unverified_password_account), email conflict defense (GOOGLE + different sub → redirect email_conflict), new user create with role=CUSTOMER / provider=GOOGLE / providerSubject=sub / emailVerifiedAt=now(), createSession, consumeOAuthStateCookie AFTER session, redirect to safeNext or role default. ✓ correct.
+  * src/lib/google.ts — verifyGoogleIdToken (jose jwtVerify with issuer=[accounts.google.com, https://accounts.google.com], audience=clientId; explicit checks for exp/sub/email/email_verified===true inside the function), exchangeGoogleCodeForTokens (POSTs to https://oauth2.googleapis.com/token), buildGoogleAuthUrl (response_type=code, scope=openid email profile, prompt=select_account), getGoogleOAuthConfig (null when env missing, redirectUri derived from NEXT_PUBLIC_SITE_URL).
+  * src/lib/oauth-state.ts — generateOAuthNonce (32 bytes hex), setOAuthStateCookie (HttpOnly+SameSite=Lax+Secure-in-prod+10min TTL), verifyOAuthStateCookie (constant-time nonce comparison via timingSafeEqual), consumeOAuthStateCookie (clears cookie). ✓ correct.
+  * src/lib/auth.ts — createOAuthState/verifyOAuthState (HMAC-SHA-256 signed state token carrying {next, nonce, exp}, 10min TTL). ✓ correct.
+  * src/lib/redirect.ts — safeInternalPath (rejects external/scheme-relative/backslash/javascript:/data:/encoded-bypass/control-chars; preserves safe internal paths including query strings). ✓ correct.
+  * src/components/auth/GoogleSignInButton.tsx — fetches /api/auth/google-config, hides when disabled (returns null), uses safeInternalPath on ?next=, links to /api/auth/google?next=..., full-width (mobile-first). ✓ correct.
+  * src/views/auth/LoginView.tsx — renders <GoogleSignInButton label="Masuk dengan Google"> with "atau" divider, email/password form below. ✓ correct.
+  * src/views/auth/RegisterView.tsx — renders <GoogleSignInButton label="Daftar dengan Google"> with "atau" divider. ✓ correct.
+  * prisma/schema.prisma — User.provider (default PASSWORD), User.providerSubject (unique nullable), User.emailVerifiedAt (nullable), User.sessionVersion (default 0). ✓ correct.
+  * .env.example — documents GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, NEXT_PUBLIC_SITE_URL, and the production redirect URI https://animacompanion.id/api/auth/google/callback. ✓ correct.
+  * Existing test-verified-identity.ts already covers SRC7 (safeInternalPath on state.next), SRC8 (no auto-link unverified password), SRC10 (OAuth state cookie binding), SRC11 (ID token claim checks), SRC13 (consume cookie after session). ✓ good coverage but all static.
+
+- CRITICAL BUG FOUND: src/lib/google.ts line 48 had:
+    const GOOGLE_DISCOVERY_URL = 'https://accounts.google.com/.well-known/openid-configuration'
+  and line 57:
+    cachedJwks = createRemoteJWKSet(new URL(GOOGLE_DISCOVERY_URL))
+  jose's createRemoteJWKSet expects a URL whose response body is a JWKS object `{ keys: [...] }`. The OpenID Connect discovery URL returns metadata `{ issuer, authorization_endpoint, jwks_uri, ... }` — NO `keys` array. Verified empirically: curl discovery URL → JSON without `keys`; curl https://www.googleapis.com/oauth2/v3/certs → `{ keys: [...] }`. Effect: every Google OAuth callback would fail at jwtVerify with "No applicable key found" → catch block redirects to /login?google_error=server_error. Production Google login was completely broken.
+
+- FIX 1 (critical): src/lib/google.ts — renamed GOOGLE_DISCOVERY_URL → GOOGLE_JWKS_URL, changed value to 'https://www.googleapis.com/oauth2/v3/certs' (the actual JWKS endpoint Google's own discovery document advertises under jwks_uri). Added a detailed comment explaining why this is the JWKS URL and not the discovery URL, so future maintainers don't regress the bug. Also fixed the stale header comment that referenced a non-existent GOOGLE_OAUTH_ENABLED env flag.
+
+- FIX 2 (testability, no behavior change): src/lib/google.ts — added optional `jwksOverride?: GoogleJwksKeyStore` parameter to verifyGoogleIdToken. Production callers omit it (uses real Google JWKS). Unit tests pass a createLocalJWKSet to verify forged JWTs signed by a test RSA keypair without hitting Google's network. Exported GoogleJwksKeyStore type alias.
+
+- FIX 3 (testability, no behavior change): src/lib/oauth-state.ts — extracted the pure comparison logic from verifyOAuthStateCookie into a new exported verifyOAuthStateNonce(stateNonce, cookieValue) function. verifyOAuthStateCookie now reads the cookie from the store and delegates to verifyOAuthStateNonce. This lets unit tests exercise the constant-time comparison logic WITHOUT a Next.js request context (cookies() requires one).
+
+- NEW TEST SUITE: scripts/test-google-oauth.ts — 114 assertions covering all required cases from the task spec:
+  * JWKS URL is the actual JWKS endpoint (not discovery) — source check
+  * verifyGoogleIdToken dynamic tests with forged JWTs (test RSA keypair + injected local JWKS): valid token returns correct payload; bad issuer rejected; bad audience rejected; expired token rejected; email_verified=false rejected; missing sub rejected; missing email rejected; missing exp rejected; wrong-key signature rejected
+  * OAuth state round-trip (createOAuthState → verifyOAuthState preserves next); invalid state rejected; empty state rejected; tampered signature rejected; tampered payload rejected; nonce is 64-char hex; two nonces differ
+  * OAuth state cookie nonce comparison (verifyOAuthStateNonce): match accepted; mismatch rejected; missing cookie rejected; empty cookie rejected; empty nonce rejected; length mismatch rejected; both empty rejected
+  * safeInternalPath: external/scheme-relative/javascript:/data:/backslash/encoded-bypass/control-char rejected; safe internal paths preserved (root, nested, query-bearing, product path); safe next preserved end-to-end through createOAuthState→verifyOAuthState; external next dropped to null before signing
+  * Callback source invariants: role hardcoded CUSTOMER (no escalation via Google); provider hardcoded GOOGLE; providerSubject from googleUser.sub; emailVerifiedAt=new Date() auto-set; no import from @/lib/email or @/lib/otp; no sendOtpEmail call; no googleUser.role read; no role from request body/query; existing-by-sub branch doesn't mutate; safe-linking policy present; takeover defense redirects unverified_password_account; email conflict defense redirects email_conflict; email_verified defense-in-depth check; createSession before consumeOAuthStateCookie; sessionVersion propagated; safeInternalPath on statePayload.next
+  * Entry route source invariants: safeInternalPath on ?next=; setOAuthStateCookie(nonce); createOAuthState; 503 GOOGLE_OAUTH_NOT_CONFIGURED when unconfigured; buildGoogleAuthUrl called
+  * google.ts lib invariants: getGoogleOAuthConfig returns null when env missing; redirectUri derived from NEXT_PUBLIC_SITE_URL + /api/auth/google/callback; trailing slash stripped; buildGoogleAuthUrl targets Google consent endpoint with correct params (client_id, redirect_uri, response_type=code, scope=openid+email+profile, prompt=select_account, state); exchangeGoogleCodeForTokens posts to https://oauth2.googleapis.com/token with grant_type=authorization_code; verifyGoogleIdToken source checks for issuer/audience/exp/sub/email/email_verified enforcement
+  * UI invariants: LoginView + RegisterView both render GoogleSignInButton; both have "atau" divider; GoogleSignInButton fetches /api/auth/google-config; returns null when disabled; uses safeInternalPath on ?next=; links to /api/auth/google; full-width (mobile-first)
+  * .env.example documents GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, NEXT_PUBLIC_SITE_URL, and the production redirect URI
+
+- Verification (all run in this sandbox):
+  * bunx tsc --noEmit          → exit 0 (0 errors)
+  * bun run lint               → exit 0 (0 errors)
+  * bun run build              → exit 0 (58 routes)
+  * scripts/test-auth-integrity    → 96/96 PASS
+  * scripts/test-verified-identity → 2101/2101 PASS
+  * scripts/test-otp-domain        → 295/295 PASS
+  * scripts/test-member-registry   → 79/79 PASS
+  * scripts/test-toast             → 44/44 PASS
+  * scripts/test-google-oauth      → 114/114 PASS (NEW)
+  * scripts/test-email-brevo       → 37/37 PASS
+  * Total: 2766 static assertions pass. 0 regressions.
+
+- Committing + pushing to main (no force). Author: abuauf4 <mochamadbagussuhada@gmail.com>.
+
+Stage Summary:
+- 3 files changed:
+  * src/lib/google.ts — CRITICAL fix: JWKS URL changed from OpenID discovery URL to actual JWKS endpoint (https://www.googleapis.com/oauth2/v3/certs). This unblocks production Google login. Plus optional jwksOverride parameter for testability. +51 -7 lines.
+  * src/lib/oauth-state.ts — extracted verifyOAuthStateNonce pure function for testability (no behavior change). +44 -13 lines.
+  * scripts/test-google-oauth.ts — NEW test suite, 114 assertions covering all required cases.
+- 0 OTP / verification-transaction / Brevo-adapter / member-registry / session-cookie / existing-callback-logic touched.
+- 0 force push, 0 history rewrite, 0 amend.
+- Final Google OAuth flow:
+  * New Google user → click "Lanjutkan dengan Google" → Google consent → callback verifies ID token (iss/aud/exp/sub/email/email_verified===true via jose + explicit checks) → no existing user by sub → no existing user by email → CREATE user (role=CUSTOMER, provider=GOOGLE, providerSubject=sub, emailVerifiedAt=now()) → createSession → consumeOAuthStateCookie → redirect to safeNext or role default. NO Brevo OTP. ✓
+  * Returning Google user → callback → findUnique by providerSubject → sign in (no mutation) → createSession → redirect. ✓
+  * Existing PASSWORD account with same email + emailVerifiedAt set → safe linking (atomic updateMany WHERE providerSubject IS NULL) → sign in. ✓
+  * Existing PASSWORD account with same email + emailVerifiedAt null → takeover defense → redirect /login?google_error=unverified_password_account. ✓
+  * Google OAuth not configured → button hidden via /api/auth/google-config → 503 if entry route hit directly. No broken redirect. ✓
+- Production env names (exact, from source): GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, NEXT_PUBLIC_SITE_URL (must be https://animacompanion.id).
+- Production Google Cloud Console configuration:
+  * Authorized redirect URI: https://animacompanion.id/api/auth/google/callback
+  * Authorized JavaScript origin: NOT REQUIRED (this app uses server-side Authorization Code flow via plain <a href> link, no Google Identity Services JavaScript client). If Google Cloud Console requires the field, enter https://animacompanion.id.

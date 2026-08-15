@@ -32,10 +32,12 @@
  *   - On success, the callback issues the SAME `anima_session` HMAC cookie
  *     used by the password flow. No session-layer change.
  *
- * ENV REQUIREMENTS (only when GOOGLE_OAUTH_ENABLED=1):
+ * ENV REQUIREMENTS (Google Sign-In is enabled when BOTH are present):
  *   GOOGLE_OAUTH_CLIENT_ID      — OAuth 2.0 Client ID from Google Cloud Console
  *   GOOGLE_OAUTH_CLIENT_SECRET  — OAuth 2.0 Client Secret (server-only)
- *   NEXT_PUBLIC_SITE_URL        — canonical app origin (already used for SEO)
+ *   NEXT_PUBLIC_SITE_URL        — canonical app origin (already used for SEO);
+ *                                 the OAuth redirect URI is derived from this
+ *                                 as `${NEXT_PUBLIC_SITE_URL}/api/auth/google/callback`.
  *
  * If these env vars are NOT set, the Google sign-in button on the login
  * page is hidden and `/api/auth/google` returns 503 with a clear config
@@ -45,7 +47,25 @@
 
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 
-const GOOGLE_DISCOVERY_URL = 'https://accounts.google.com/.well-known/openid-configuration'
+/**
+ * Google's published JWKS endpoint. This is the URL that returns the actual
+ * `{ keys: [...] }` JSON Web Key Set used to verify the signature of Google
+ * ID tokens.
+ *
+ * IMPORTANT — do NOT confuse this with the OpenID Connect discovery URL
+ * (`https://accounts.google.com/.well-known/openid-configuration`). The
+ * discovery URL returns metadata (`issuer`, `authorization_endpoint`,
+ * `jwks_uri`, ...) — it does NOT return a JWKS. jose's `createRemoteJWKSet`
+ * expects a URL whose response body is a JWKS object (`{ keys: [...] }`).
+ * Pointing it at the discovery URL causes every `jwtVerify` call to fail
+ * with "No applicable key found" because the response has no `keys` array.
+ *
+ * The JWKS URL is also published at
+ * `https://www.googleapis.com/oauth2/v3/certs` (same endpoint, v2 path is
+ * aliased). We use the v3 path because it's the one Google's own discovery
+ * document advertises under `jwks_uri`.
+ */
+const GOOGLE_JWKS_URL = 'https://www.googleapis.com/oauth2/v3/certs'
 
 // Cache Google's JWKS — jose's createRemoteJWKSet fetches and refreshes
 // automatically under the hood (with caching + re-fetch on rotation).
@@ -54,10 +74,20 @@ const GOOGLE_DISCOVERY_URL = 'https://accounts.google.com/.well-known/openid-con
 let cachedJwks: ReturnType<typeof createRemoteJWKSet> | null = null
 function getGoogleJwks() {
   if (!cachedJwks) {
-    cachedJwks = createRemoteJWKSet(new URL(GOOGLE_DISCOVERY_URL))
+    cachedJwks = createRemoteJWKSet(new URL(GOOGLE_JWKS_URL))
   }
   return cachedJwks
 }
+
+/**
+ * Type alias for any object that `jose.jwtVerify` accepts as a key store.
+ * This includes the return of `createRemoteJWKSet` (production — fetches
+ * Google's JWKS over the network) and `createLocalJWKSet` (testing — uses
+ * an in-memory JWKS we control). The injectable parameter on
+ * `verifyGoogleIdToken` uses this type so unit tests can forge ID tokens
+ * signed by a test RSA keypair and verify them without touching the network.
+ */
+export type GoogleJwksKeyStore = ReturnType<typeof createRemoteJWKSet>
 
 export interface GoogleIdTokenPayload {
   sub: string // stable Google user ID
@@ -96,9 +126,18 @@ export interface GoogleIdTokenPayload {
  */
 export async function verifyGoogleIdToken(
   idToken: string,
-  clientId: string
+  clientId: string,
+  /**
+   * Optional JWKS override — used ONLY by unit tests to inject a local
+   * JWKS (signed by a test RSA keypair) so forged ID tokens can be
+   * verified without hitting Google's real JWKS endpoint. Production
+   * callers MUST omit this parameter (or pass `undefined`) so the real
+   * Google JWKS is used.
+   */
+  jwksOverride?: GoogleJwksKeyStore
 ): Promise<GoogleIdTokenPayload> {
-  const { payload } = await jwtVerify(idToken, getGoogleJwks(), {
+  const jwks = jwksOverride ?? getGoogleJwks()
+  const { payload } = await jwtVerify(idToken, jwks, {
     issuer: ['accounts.google.com', 'https://accounts.google.com'],
     audience: clientId,
   })

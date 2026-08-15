@@ -92,6 +92,48 @@ export async function setOAuthStateCookie(nonce: string): Promise<void> {
 }
 
 /**
+ * Pure comparison between the nonce embedded in the signed OAuth state
+ * token and the nonce read from the sibling browser cookie. This is the
+ * core of the browser-binding check, extracted so unit tests can exercise
+ * the constant-time comparison logic WITHOUT a Next.js request context
+ * (the `cookies()` call in `verifyOAuthStateCookie` requires a request
+ * context, which standalone test scripts don't have).
+ *
+ * Returns `true` if:
+ *   - `stateNonce` is a non-empty string, AND
+ *   - `cookieValue` is a non-empty string, AND
+ *   - the two values are equal in a constant-time comparison.
+ * Returns `false` otherwise (empty nonce, missing cookie, mismatched
+ * nonce, length mismatch, etc.).
+ *
+ * The length check BEFORE `timingSafeEqual` is intentional —
+ * `timingSafeEqual` throws on length mismatch, and we don't want a
+ * thrown exception to be observably different from a clean `false`
+ * (timing channel). The comparison itself is constant-time so that an
+ * attacker can't learn the nonce prefix by measuring response time.
+ */
+export function verifyOAuthStateNonce(
+  stateNonce: string,
+  cookieValue: string | undefined
+): boolean {
+  if (!stateNonce) return false
+  if (!cookieValue) return false
+  // Exact-match constant-time comparison. We use `timingSafeEqual` to
+  // avoid leaking the nonce length / prefix via timing differences. Both
+  // values are 64-char hex strings of equal length when valid, so the
+  // length-mismatch branch is only reached on a malformed input.
+  if (cookieValue.length !== stateNonce.length) return false
+  try {
+    const a = Buffer.from(cookieValue, 'utf8')
+    const b = Buffer.from(stateNonce, 'utf8')
+    if (a.length !== b.length) return false
+    return cryptoEqual(a, b)
+  } catch {
+    return false
+  }
+}
+
+/**
  * Verify the OAuth state cookie against the nonce in the signed state
  * token. Called by `/api/auth/google/callback`.
  *
@@ -113,20 +155,7 @@ export async function verifyOAuthStateCookie(stateNonce: string): Promise<boolea
   if (!stateNonce) return false
   const cookieStore = await cookies()
   const cookieValue = cookieStore.get(OAUTH_STATE_COOKIE)?.value
-  if (!cookieValue) return false
-  // Exact-match constant-time comparison. We use `timingSafeEqual` to
-  // avoid leaking the nonce length / prefix via timing differences. Both
-  // values are 64-char hex strings of equal length when valid, so the
-  // length-mismatch branch is only reached on a malformed input.
-  if (cookieValue.length !== stateNonce.length) return false
-  try {
-    const a = Buffer.from(cookieValue, 'utf8')
-    const b = Buffer.from(stateNonce, 'utf8')
-    if (a.length !== b.length) return false
-    return cryptoEqual(a, b)
-  } catch {
-    return false
-  }
+  return verifyOAuthStateNonce(stateNonce, cookieValue)
 }
 
 /**
