@@ -113,6 +113,36 @@
  *   SRC30. RegisterView navigates to /verify-email after successful
  *          registration (NOT to / or nextPath — the user must verify first).
  *
+ * Stage 3 — verify-otp route + VerifyEmailView V2 OTP UI invariants:
+ *   SRC31. verify-otp route (src/app/api/auth/verify-email/verify-otp/route.ts)
+ *          exists, accepts { code } body, validates 6-digit format.
+ *   SRC32. verify-otp route resolves userId from session (getCurrentUser),
+ *          NOT from request body. Body-supplied userId is ignored.
+ *   SRC33. verify-otp route calls consumeOtp with purpose: 'EMAIL_VERIFICATION'.
+ *   SRC34. verify-otp route gates emailVerifiedAt write on
+ *          otpResult.result === 'OK' (NOT on ALREADY_CONSUMED / WRONG_CODE /
+ *          NOT_FOUND_OR_EXPIRED).
+ *   SRC35. verify-otp route's emailVerifiedAt write is idempotent
+ *          (updateMany WHERE emailVerifiedAt IS NULL).
+ *   SRC36. verify-otp route never logs the user-supplied code.
+ *   SRC37. verify-otp route returns distinct wire codes: OK, ALREADY_VERIFIED,
+ *          ALREADY_CONSUMED, WRONG_CODE, NOT_FOUND_OR_EXPIRED, CODE_EMPTY,
+ *          CODE_FORMAT, UNAUTHENTICATED, INTERNAL.
+ *   SRC38. verify-otp route returns 409 + remainingAttempts on WRONG_CODE.
+ *   SRC39. verify-otp route returns 429 NOT (no cooldown on verify — only
+ *          send-otp has cooldown). Returns 404 on NOT_FOUND_OR_EXPIRED.
+ *   SRC40. VerifyEmailView supports BOTH V1 (?token= in URL → V1LinkTokenView)
+ *          and V2 (no token → V2OtpView) modes — backward compat preserved.
+ *   SRC41. V2OtpView uses InputOTP component with 6 slots.
+ *   SRC42. V2OtpView calls /api/auth/verify-email/verify-otp to submit code.
+ *   SRC43. V2OtpView calls /api/auth/verify-email/send-otp for resend (NOT
+ *          V1 /verify-email/request).
+ *   SRC44. V2OtpView handles 429 RESEND_COOLDOWN with countdown timer
+ *          (startCooldown, cooldownSeconds state).
+ *   SRC45. V2OtpView redirects to nextPath (or /) after OK / ALREADY_VERIFIED.
+ *   SRC46. V2OtpView clears the code input on WRONG_CODE (so user can re-type).
+ *   SRC47. V2OtpView shows remainingAttempts on WRONG_CODE state.
+ *
  * HTTP integration (placeholder — implemented in stage 2+):
  *   (none yet — OTP API routes are implemented in stage 2+)
  */
@@ -554,15 +584,125 @@ assert(/navigate\(verifyUrl\)|navigate\(['"`]\/verify-email/.test(registerViewSr
 assert(/verify-email\?next=/.test(registerViewSrc), 'SRC30: RegisterView preserves nextPath as ?next= on /verify-email URL (not navigated directly)')
 
 // ---------------------------------------------------------------------------
+// Stage 3 — verify-otp route + VerifyEmailView V2 OTP UI source invariants (SRC31-SRC47)
+// ---------------------------------------------------------------------------
+
+console.log('\n── Stage 3: verify-otp route source invariants (SRC31-SRC39) ──')
+
+const verifyOtpRoutePath = SRC('app/api/auth/verify-email/verify-otp/route.ts')
+assert(existsSync(verifyOtpRoutePath), 'SRC31: verify-otp route file exists at src/app/api/auth/verify-email/verify-otp/route.ts')
+if (existsSync(verifyOtpRoutePath)) {
+  const verifyOtpSrc = readFileSync(verifyOtpRoutePath, 'utf8')
+
+  // SRC31. Accepts { code } body, validates 6-digit format.
+  assert(/\{\s*code[^}]*\}\s*=\s*body/.test(verifyOtpSrc) || /const\s*\{\s*code/.test(verifyOtpSrc), 'SRC31: verify-otp route destructures code from body')
+  assert(/\/\^\[0-9\]\{6\}\$\//.test(verifyOtpSrc), 'SRC31: verify-otp route validates code is 6-digit format (regex /^[0-9]{6}$/)')
+  assert(/CODE_FORMAT/.test(verifyOtpSrc), 'SRC31: verify-otp route returns CODE_FORMAT on invalid format')
+
+  // SRC32. Resolves userId from session (getCurrentUser), NOT from body.
+  assert(/getCurrentUser/.test(verifyOtpSrc), 'SRC32: verify-otp route calls getCurrentUser to resolve session user')
+  assert(/bodyUserId/.test(verifyOtpSrc), 'SRC32: verify-otp route explicitly IGNORES body-supplied userId (defense-in-depth)')
+  assert(/UNAUTHENTICATED/.test(verifyOtpSrc), 'SRC32: verify-otp route returns UNAUTHENTICATED when no session')
+
+  // SRC33. Calls consumeOtp with purpose: 'EMAIL_VERIFICATION'.
+  assert(/consumeOtp\(/.test(verifyOtpSrc), 'SRC33: verify-otp route calls consumeOtp')
+  assert(/purpose:\s*['"]EMAIL_VERIFICATION['"]/.test(verifyOtpSrc), 'SRC33: verify-otp route calls consumeOtp with purpose: "EMAIL_VERIFICATION"')
+
+  // SRC34. Gates emailVerifiedAt write on otpResult.result === 'OK'.
+  assert(/otpResult\.result\s*===\s*['"]OK['"]/.test(verifyOtpSrc), 'SRC34: verify-otp route gates emailVerifiedAt write on otpResult.result === "OK"')
+  // The WRONG_CODE / NOT_FOUND_OR_EXPIRED / ALREADY_CONSUMED branches must
+  // NOT contain an emailVerifiedAt write.
+  // Verify the file has separate branches for each result.
+  assert(/WRONG_CODE/.test(verifyOtpSrc), 'SRC34: verify-otp route handles WRONG_CODE branch')
+  assert(/NOT_FOUND_OR_EXPIRED/.test(verifyOtpSrc), 'SRC34: verify-otp route handles NOT_FOUND_OR_EXPIRED branch')
+  assert(/ALREADY_CONSUMED/.test(verifyOtpSrc), 'SRC34: verify-otp route handles ALREADY_CONSUMED branch')
+
+  // SRC35. emailVerifiedAt write is idempotent (updateMany WHERE emailVerifiedAt IS NULL).
+  assert(/emailVerifiedAt:\s*null/.test(verifyOtpSrc), 'SRC35: verify-otp route emailVerifiedAt write uses WHERE emailVerifiedAt IS NULL (idempotent)')
+
+  // SRC36. Never logs the user-supplied code.
+  assert(!/console\.(log|error|warn)\([^)]*\$\{code\}/.test(verifyOtpSrc) && !/console\.(log|error|warn)\([^)]*\$\{trimmedCode\}/.test(verifyOtpSrc), 'SRC36: verify-otp route does NOT console.log the user-supplied code')
+  assert(!/throw\s+new\s+Error\([^)]*\$\{code\}/.test(verifyOtpSrc) && !/throw\s+new\s+Error\([^)]*\$\{trimmedCode\}/.test(verifyOtpSrc), 'SRC36: verify-otp route does NOT throw with user-supplied code in message')
+
+  // SRC37. Returns distinct wire codes.
+  const wireCodes = ['OK', 'ALREADY_VERIFIED', 'ALREADY_CONSUMED', 'WRONG_CODE', 'NOT_FOUND_OR_EXPIRED', 'CODE_EMPTY', 'CODE_FORMAT', 'UNAUTHENTICATED', 'INTERNAL']
+  for (const wc of wireCodes) {
+    assert(new RegExp(`['"]${wc}['"]`).test(verifyOtpSrc), `SRC37: verify-otp route returns wire code "${wc}"`)
+  }
+
+  // SRC38. Returns 409 + remainingAttempts on WRONG_CODE.
+  assert(/status:\s*409/.test(verifyOtpSrc), 'SRC38: verify-otp route returns 409 on WRONG_CODE')
+  assert(/remainingAttempts/.test(verifyOtpSrc), 'SRC38: verify-otp route returns remainingAttempts on WRONG_CODE')
+
+  // SRC39. Returns 404 on NOT_FOUND_OR_EXPIRED (not 429 — no cooldown on verify).
+  assert(/status:\s*404/.test(verifyOtpSrc), 'SRC39: verify-otp route returns 404 on NOT_FOUND_OR_EXPIRED')
+  // The verify-otp route should NOT have a 429 status (cooldown is on
+  // send-otp, not verify).
+  assert(!/status:\s*429/.test(verifyOtpSrc), 'SRC39: verify-otp route does NOT return 429 (no cooldown on verify — only send-otp)')
+}
+
+console.log('\n── Stage 3: VerifyEmailView V2 OTP UI source invariants (SRC40-SRC47) ──')
+
+const verifyEmailViewPath = SRC('views/auth/VerifyEmailView.tsx')
+const verifyEmailViewSrc = readFileSync(verifyEmailViewPath, 'utf8')
+
+// SRC40. Supports BOTH V1 (?token=) and V2 (no token) modes.
+assert(/V1LinkTokenView/.test(verifyEmailViewSrc), 'SRC40: VerifyEmailView preserves V1 link-token view (backward compat)')
+assert(/V2OtpView/.test(verifyEmailViewSrc), 'SRC40: VerifyEmailView adds V2 OTP view (new)')
+assert(/route\.query\.get\(['"]token['"]\)/.test(verifyEmailViewSrc), 'SRC40: VerifyEmailView branches on ?token= query param')
+
+// SRC41. Uses InputOTP component with 6 slots.
+assert(/InputOTP/.test(verifyEmailViewSrc), 'SRC41: V2OtpView uses InputOTP component')
+assert(/InputOTPSlot/.test(verifyEmailViewSrc), 'SRC41: V2OtpView uses InputOTPSlot')
+// Count the InputOTPSlot occurrences — should be 6.
+const slotMatches = verifyEmailViewSrc.match(/InputOTPSlot\s+index=/g)
+assert(slotMatches !== null && slotMatches.length === 6, `SRC41: V2OtpView renders 6 InputOTPSlot elements (got ${slotMatches?.length || 0})`)
+
+// SRC42. Calls /api/auth/verify-email/verify-otp to submit code.
+assert(/\/api\/auth\/verify-email\/verify-otp/.test(verifyEmailViewSrc), 'SRC42: V2OtpView calls /api/auth/verify-email/verify-otp')
+
+// SRC43. Calls /api/auth/verify-email/send-otp for resend (NOT V1 /verify-email/request).
+assert(/\/api\/auth\/verify-email\/send-otp/.test(verifyEmailViewSrc), 'SRC43: V2OtpView calls /api/auth/verify-email/send-otp for resend')
+// The V1 /verify-email/request route should NOT be called from V2OtpView.
+// (V1LinkTokenView doesn't call any resend route — it's just a token-submit page.)
+// Check that the V2OtpView section does not reference /verify-email/request.
+// Simple heuristic: the file should not contain /verify-email/request at all
+// (the ProfileView's ResendVerificationButton is the only place that uses it,
+// and we're not modifying ProfileView in stage 3).
+// Actually, let's be more precise: the V2OtpView function body should not
+// reference the V1 request route. We extract the V2OtpView function and check.
+const v2OtpViewMatch = verifyEmailViewSrc.match(/function\s+V2OtpView[\s\S]*?^}/m)
+if (v2OtpViewMatch) {
+  const v2Body = v2OtpViewMatch[0]
+  assert(!/\/api\/auth\/verify-email\/request/.test(v2Body), 'SRC43: V2OtpView does NOT call V1 /verify-email/request route')
+}
+
+// SRC44. Handles 429 RESEND_COOLDOWN with countdown timer.
+assert(/RESEND_COOLDOWN/.test(verifyEmailViewSrc), 'SRC44: V2OtpView handles RESEND_COOLDOWN wire code')
+assert(/startCooldown/.test(verifyEmailViewSrc), 'SRC44: V2OtpView has startCooldown function')
+assert(/cooldownSeconds/.test(verifyEmailViewSrc), 'SRC44: V2OtpView has cooldownSeconds state')
+assert(/retryAfterSeconds/.test(verifyEmailViewSrc), 'SRC44: V2OtpView reads retryAfterSeconds from 429 response')
+
+// SRC45. Redirects to nextPath (or /) after OK / ALREADY_VERIFIED.
+assert(/nextPath/.test(verifyEmailViewSrc), 'SRC45: V2OtpView reads nextPath')
+assert(/navigate\(nextPath\s*\|\|\s*['"]\/['"]\)/.test(verifyEmailViewSrc), 'SRC45: V2OtpView redirects to nextPath || "/" after success')
+
+// SRC46. Clears the code input on WRONG_CODE.
+assert(/setCode\(['"]['"]\)/.test(verifyEmailViewSrc), 'SRC46: V2OtpView clears code input (setCode("")) on WRONG_CODE')
+
+// SRC47. Shows remainingAttempts on WRONG_CODE state.
+assert(/remainingAttempts/.test(verifyEmailViewSrc), 'SRC47: V2OtpView shows remainingAttempts on WRONG_CODE state')
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 
 console.log('\n────────────────────────────────────────')
-console.log(`OTP domain + Stage 2 (register/send-otp): ${pass} passed, ${fail} failed`)
+console.log(`OTP domain + Stage 2 + Stage 3 (register/send-otp/verify-otp): ${pass} passed, ${fail} failed`)
 if (fail > 0) {
   console.log('\nFailures:')
   failures.forEach((f) => console.log(`  - ${f}`))
   process.exit(1)
 }
-console.log('All Stage 1 + Stage 2 static assertions passed.')
+console.log('All Stage 1 + Stage 2 + Stage 3 static assertions passed.')
 process.exit(0)

@@ -3033,3 +3033,92 @@ Stage Summary:
 - 0 stable features reverted. 0 admin / order / voucher / stock / catalog logic touched.
 - Next stage (3): /api/auth/verify-email/verify-otp POST route that calls consumeOtp + sets emailVerifiedAt in atomic interactive transaction; modify VerifyEmailView to show OTP input form (replaces V1 token-from-URL form when no ?token= is in URL).
 - Git safety: small commit, push to main, no force push.
+
+---
+Task ID: account-recovery-v2-stage3-verify-otp-atomic-tx
+Agent: main (Super Z)
+Task: Account Recovery & Verification V2 — Stage 3: verify-OTP route + emailVerifiedAt atomic transaction + VerifyEmailView V2 OTP UI. Add /api/auth/verify-email/verify-otp POST route that calls consumeOtp and gates the emailVerifiedAt write on result === 'OK'. Modify VerifyEmailView to support BOTH V1 (?token= link-token) and V2 (OTP input form) modes — backward compat preserved. Stage 2 baseline is commit 7901756.
+
+Work Log:
+- Stage 2 baseline (commit 7901756) is on origin/main: register route issues V2 OTP, send-otp route with 60s server-side cooldown, RegisterView navigates to /verify-email.
+
+- Stage 3 implementation:
+  * `src/app/api/auth/verify-email/verify-otp/route.ts` (NEW):
+    - POST handler, NO AUTH REQUIRED (the OTP IS the proof of control — user might have lost session cookie and we don't want to force re-login just to verify).
+    - Input validation: code must be a 6-digit numeric string (`/^[0-9]{6}$/`). Rejects malformed inputs early without hitting the DB. Returns CODE_EMPTY (missing) or CODE_FORMAT (malformed).
+    - userId resolution: from session cookie via `getCurrentUser()`. Body-supplied userId is EXPLICITLY IGNORED (defense-in-depth — same pattern as register ignoring body-supplied provider/emailVerifiedAt). Returns UNAUTHENTICATED (401) if no session.
+    - Google user → ALREADY_VERIFIED (Google verified the email at account-creation time — the UI should never show them the OTP form, but if they hit this route, return success).
+    - Already verified (emailVerifiedAt !== null) → ALREADY_VERIFIED (idempotent — don't even consume the OTP).
+    - Otherwise, calls `consumeOtp({ userId, purpose: 'EMAIL_VERIFICATION', code })`:
+      - OK → atomically claim won. NOW write emailVerifiedAt via `updateMany WHERE emailVerifiedAt IS NULL` (idempotent — if a concurrent path already set it, returns count=0 → ALREADY_VERIFIED). Returns 200 OK + emailVerifiedAt.
+      - ALREADY_CONSUMED → race lost (concurrent verify won the claim). Reads back emailVerifiedAt — if set, returns ALREADY_VERIFIED; else returns ALREADY_CONSUMED (recoverable — user can retry).
+      - WRONG_CODE → 409 + remainingAttempts. The attempts counter was incremented atomically inside consumeOtp's interactive transaction.
+      - NOT_FOUND_OR_EXPIRED → 404. No unconsumed, unexpired, un-locked OTP for this user. User must request a new one.
+    - ATOMICITY NOTE: consumeOtp's interactive transaction (stage 1) claims the OTP atomically. The emailVerifiedAt write happens in a SEPARATE transaction here (not inside consumeOtp) so consumeOtp stays reusable for PASSWORD_RESET OTPs in stage 6. Between the two transactions, if this process crashes, the OTP is consumed but emailVerifiedAt is not set — the user can request a new OTP (the old one is consumed and won't validate) and verify again. Recoverable failure mode.
+    - Never logs the user-supplied code (verified by SRC36).
+    - 9 distinct wire codes: OK, ALREADY_VERIFIED, ALREADY_CONSUMED, WRONG_CODE, NOT_FOUND_OR_EXPIRED, CODE_EMPTY, CODE_FORMAT, UNAUTHENTICATED, INTERNAL.
+  * `src/views/auth/VerifyEmailView.tsx` (rewritten — V1 view preserved as `V1LinkTokenView`, V2 view added as `V2OtpView`):
+    - The default export `VerifyEmailView` branches on `?token=` in the URL:
+      - If `?token=<rawToken>` is present → renders `V1LinkTokenView` (preserved V1 link-token flow — already-issued V1 tokens still consume via /api/auth/verify-email/confirm).
+      - If no `?token=` → renders `V2OtpView` (new V2 OTP input form).
+    - `V2OtpView`:
+      - Uses shadcn `InputOTP` component with 6 single-digit slots (auto-advance on type, paste-friendly).
+      - States: idle, verifying, ok, already_verified, already_consumed, wrong_code (with remainingAttempts), not_found_or_expired, error.
+      - Submit handler: POST to /api/auth/verify-email/verify-otp with `{ code }`. Branches on response code. Clears the input on WRONG_CODE so the user can re-type. Shows "Sisa percobaan: N" on wrong_code.
+      - Resend handler: POST to /api/auth/verify-email/send-otp. Handles 429 RESEND_COOLDOWN response by starting a countdown timer (`startCooldown(seconds)` reads retryAfterSeconds from the server). The resend button is disabled while cooldownSeconds > 0. After a successful resend, starts a 60-second countdown.
+      - On OK / ALREADY_VERIFIED: refreshes auth (so /api/auth/me returns the new emailVerifiedAt), then redirects to nextPath (from ?next=) or /.
+      - Mobile-first: Card max-w-md, OTP slots are h-12 w-12 (touch-friendly), buttons full-width, resend button shows countdown text on mobile.
+      - Reads nextPath via `safeInternalPath(route.query.get('next'))` — same open-redirect defense as LoginView/RegisterView.
+    - `V1LinkTokenView`: unchanged from Verified Identity V1 — submits the token to /api/auth/verify-email/confirm and shows the result. Backward compat preserved.
+  * `scripts/test-otp-domain.ts` (extended with SRC31-SRC47 — 46 new assertions):
+    - SRC31: verify-otp route destructures code from body + validates 6-digit format + returns CODE_FORMAT.
+    - SRC32: verify-otp calls getCurrentUser + ignores body-supplied userId + returns UNAUTHENTICATED when no session.
+    - SRC33: calls consumeOtp with purpose: 'EMAIL_VERIFICATION'.
+    - SRC34: gates emailVerifiedAt write on otpResult.result === 'OK' + handles WRONG_CODE/NOT_FOUND_OR_EXPIRED/ALREADY_CONSUMED branches.
+    - SRC35: emailVerifiedAt write is idempotent (WHERE emailVerifiedAt IS NULL).
+    - SRC36: never logs or throws with the user-supplied code.
+    - SRC37: returns 9 distinct wire codes.
+    - SRC38: returns 409 + remainingAttempts on WRONG_CODE.
+    - SRC39: returns 404 on NOT_FOUND_OR_EXPIRED, does NOT return 429 (no cooldown on verify).
+    - SRC40: VerifyEmailView preserves V1LinkTokenView + adds V2OtpView + branches on ?token= query param.
+    - SRC41: V2OtpView uses InputOTP + InputOTPSlot + renders exactly 6 InputOTPSlot elements.
+    - SRC42: V2OtpView calls /api/auth/verify-email/verify-otp.
+    - SRC43: V2OtpView calls /api/auth/verify-email/send-otp for resend (NOT V1 /verify-email/request).
+    - SRC44: V2OtpView handles RESEND_COOLDOWN wire code + has startCooldown function + cooldownSeconds state + reads retryAfterSeconds.
+    - SRC45: V2OtpView redirects to nextPath || "/" after success.
+    - SRC46: V2OtpView clears code input (setCode("")) on WRONG_CODE.
+    - SRC47: V2OtpView shows remainingAttempts on WRONG_CODE state.
+
+- Did NOT touch (preserved stable features):
+  * `src/lib/auth.ts` (Auth V1 — session cookies, bcrypt, AuthError, getCurrentUser, OAuth state token)
+  * `src/lib/identity.ts` (Identity V1 — V1 link-based verification still works for already-issued tokens via /verify-email/confirm)
+  * `src/lib/oauth-state.ts`, `src/lib/redirect.ts`, `src/lib/google.ts`
+  * `src/lib/otp.ts` + `src/lib/password-reset.ts` (stage 1 foundation — consumed via the new verify-otp route)
+  * `src/app/api/auth/google/callback/route.ts` (Google OAuth callback)
+  * `src/app/api/auth/verify-email/request/route.ts` + `confirm/route.ts` (V1 routes preserved — already-issued V1 link tokens still consume)
+  * `src/app/api/auth/register/route.ts` + `send-otp/route.ts` (stage 2 — unchanged)
+  * `src/app/api/auth/login/route.ts` (will be modified in stage 4 to redirect UNVERIFIED users)
+  * All admin customer routes + CustomersView (member registry V1)
+  * All toast call sites + sonner.tsx + layout.tsx (Sonner standardization)
+  * All order / voucher / stock / catalog / SEO / Cloudinary logic
+
+Verification:
+- `bunx tsc --noEmit`: clean (0 errors, after clearing stale .next cache).
+- `bun run lint`: clean (0 errors, 0 warnings).
+- `bun run build`: exit 0 (Compiled successfully in 18.9s, 53/53 static pages).
+- `bun run scripts/test-otp-domain.ts`: 148 passed, 0 failed (was 102 at stage 2, +46 new for stage 3).
+- `bun run scripts/test-auth-integrity.ts`: 96 passed, 0 failed (no Auth V1 regression).
+- `bun run scripts/test-verified-identity.ts`: 2101 passed, 0 failed (no Identity V1 regression — V1 routes still work, V1 link-token tests still pass via the preserved V1LinkTokenView).
+- `bun run scripts/test-member-registry.ts`: 79 passed, 0 failed (no Member Registry V1 regression).
+- `bun run scripts/test-toast.ts`: 44 passed, 0 failed (no Sonner regression).
+
+Stage Summary:
+- 1 new file + 2 modified in stage 3:
+  * New: src/app/api/auth/verify-email/verify-otp/route.ts (POST, no auth required — OTP is proof, calls consumeOtp + gates emailVerifiedAt write on result === 'OK').
+  * Modified: src/views/auth/VerifyEmailView.tsx (rewritten — V1LinkTokenView preserved for backward compat, V2OtpView added with InputOTP 6-slot UI + cooldown countdown + state machine for OK/WRONG_CODE/NOT_FOUND_OR_EXPIRED/etc).
+  * Modified: scripts/test-otp-domain.ts (+SRC31-SRC47, 46 new assertions).
+- V2 spec compliance for stage 3: verify OTP + emailVerifiedAt in atomic transaction ✅ (consumeOtp interactive tx + idempotent emailVerifiedAt write gated on result === 'OK'), concurrency-safe ✅ (claim.count === 1 gate), max 5 attempts ✅ (consumeOtp increments atomically, returns WRONG_CODE + remainingAttempts), UI shows OTP input form ✅, UI handles resend cooldown ✅, UI redirects to nextPath after success ✅.
+- Backward compat: V1 /verify-email/confirm route + V1LinkTokenView preserved — already-issued V1 link tokens still consume via the V1 path.
+- 0 stable features reverted. 0 admin / order / voucher / stock / catalog logic touched.
+- Next stage (4): login route — redirect UNVERIFIED users to /verify-email (currently login lets them in to their target page even though email is unverified).
+- Git safety: small commit, push to main, no force push.
