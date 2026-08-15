@@ -3839,3 +3839,79 @@ Stage Summary:
 - Production Google Cloud Console configuration:
   * Authorized redirect URI: https://animacompanion.id/api/auth/google/callback
   * Authorized JavaScript origin: NOT REQUIRED (this app uses server-side Authorization Code flow via plain <a href> link, no Google Identity Services JavaScript client). If Google Cloud Console requires the field, enter https://animacompanion.id.
+
+---
+Task ID: admin-realm-stage-1
+Agent: main (Super Z)
+Task: Admin Realm Separation + Developer RBAC V1 — Stage 1: Schema + admin session foundation. Per task spec: "Stage 1 schema + admin session foundation → test → commit → PUSH MAIN. NO FORCE PUSH. Kalau push credential tidak tersedia, STOP setelah commit stable dan laporkan SHA. Jangan lanjut menumpuk beberapa stage lokal."
+
+Work Log:
+- Fetched latest origin/main. HEAD was 6833faa (Google OAuth fix from prior session). Local main in sync with origin/main.
+- AUDITED current admin implementation (Phase 0):
+  * Customer auth (STABLE — untouched): User table with role/provider/providerSubject/emailVerifiedAt/sessionVersion; anima_session HMAC cookie (7d, sessionVersion-encoded); /api/auth/{login,register,logout,me,forgot-password,reset-password,verify-email/*,google,google/callback,google-config}; Brevo OTP; Google OAuth; member registry.
+  * Current admin auth (TO BE REPLACED): requireAdmin() from src/lib/auth.ts — checks User.role === 'ADMIN' on the customer anima_session cookie. 59 usages across 20 /api/admin/** routes. /admin/[[...slug]]/page.tsx Server Component calls getCurrentUser(), checks role === 'ADMIN'. AdminGate client component checks useAuth user.role === 'ADMIN'. AdminLayout.NAV_ITEMS = dashboard, products, categories, orders, customers, banners, testimonials, faqs, vouchers, settings (10 items, NO permission-awareness).
+  * Bootstrap: prisma/seed.ts uses SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD env vars (production) or demo admin@anima.id/admin123 (dev-only, HARD-DISABLED in production).
+  * Permission model: NONE — only User.role === 'ADMIN' boolean check.
+  * Conventions: AUTH_SECRET required in prod (dev fallback); logAuthError prod-safe; safeInternalPath open-redirect defense; schema-push workflow (prisma db push, no migrations dir); SQL reference files in prisma/sql/<YYYYMMDD>-<slug>.sql; tests scripts/test-*.ts pure-static + optional HTTP via BASE_URL.
+
+- STAGE 1 IMPLEMENTATION (additive only — no User/Order/Product columns touched):
+  * prisma/schema.prisma — added AdminUser model (id, username UNIQUE lower-cased, passwordHash, displayName, systemRole DEVELOPER|ADMIN default ADMIN, isActive default true, mustChangePassword default true, sessionVersion default 0, createdByAdminId nullable self-FK, lastLoginAt nullable, createdAt, updatedAt) + AdminPermission model (id, adminUserId FK cascade, permissionKey, UNIQUE(adminUserId, permissionKey)). Self-referential AdminUser.createdBy/createdAdmins relations via "AdminCreatedBy" label.
+  * prisma/sql/20260816-admin-realm-v1.sql — additive DDL reference (CREATE TABLE AdminUser + AdminPermission + indexes + FKs). NO DROP statements. Documents additive-only intent for operators.
+  * src/lib/admin-permissions.ts — PERMISSION_KEYS constant (19 keys derived from real AdminLayout.NAV_ITEMS: dashboard.view; products.{view,manage}; categories.{view,manage}; orders.{view,manage}; customers.{view,export}; banners.{view,manage}; testimonials.{view,manage}; faqs.{view,manage}; vouchers.{view,manage}; settings.{view,manage}). NO invented features (no payment/loyalty/doorprize/apple/finance/wallet). isValidPermissionKey runtime check. SYSTEM_ROLE_DEVELOPER / SYSTEM_ROLE_ADMIN constants. isDeveloper / isValidSystemRole helpers.
+  * src/lib/admin-auth.ts — COMPLETELY SEPARATE admin auth realm:
+    - anima_admin_session cookie (NOT anima_session). 8h TTL (shorter than customer 7d — admin actions higher-privilege). HttpOnly + Secure-in-prod + SameSite=lax + maxAge + path=/.
+    - HMAC-SHA-256 signing with SAME AUTH_SECRET but with realm:'admin' marker in payload. verify() rejects any payload whose realm !== 'admin' → cross-realm replay defense (customer cookie cannot be replayed as admin cookie even if cookie names ever collide).
+    - getCurrentAdminUser re-fetches AdminUser from DB on EVERY request (selects systemRole/isActive/mustChangePassword/sessionVersion/permissions from DB — NEVER from cookie).
+    - sessionVersion check — payload.sessionVersion !== admin.sessionVersion → return null (invalidates all prior sessions on password reset).
+    - isActive check — deactivated admin's existing session is rejected.
+    - Exports: requireAdminSession, requireAdminSessionActive (mustChangePassword gate — throws FORBIDDEN if true), requireDeveloper (systemRole === DEVELOPER), requirePermission(key) (DEVELOPER bypasses; ADMIN must have key in permissions[]), hasPermission (non-throwing for sidebar rendering), getCurrentAdminUser, createAdminSession, destroyAdminSession, hashAdminPassword (bcrypt cost 10, matches customer), compareAdminPassword.
+    - requirePermission validates key at runtime (typo defense — throws plain Error for unknown key, NOT AuthError, so it surfaces as 500 not 403).
+  * prisma/seed.ts — added bootstrapDeveloperAdmin() function (idempotent): reads DEVELOPER_USERNAME / DEVELOPER_PASSWORD / DEVELOPER_DISPLAY_NAME env vars. If AdminUser with username already exists → returns early (NO field overwrite — preserves operator's later password changes via /admin/change-password). In dev (NODE_ENV !== 'production'), if env vars unset → creates demo devonly/devonly123 (HARD-DISABLED in production — same pattern as customer demo accounts). Bootstrap developer created with systemRole=DEVELOPER, mustChangePassword=false (operator chose password), isActive=true, sessionVersion=0, createdByAdminId=null.
+  * .env.example — documented DEVELOPER_USERNAME / DEVELOPER_PASSWORD / DEVELOPER_DISPLAY_NAME with: server-only (never NEXT_PUBLIC_), idempotent bootstrap contract, first-run-only behavior, hard-disabled demo in production, mustChangePassword semantics, "choose a strong, unique password" warning (developer has full bypass).
+  * scripts/test-admin-realm.ts — NEW test suite, 148 static invariants across 7 phases: (A) Prisma schema source checks for AdminUser + AdminPermission required fields/unique constraints/indexes/cascade; (B) admin-permissions.ts PERMISSION_KEYS coverage of all real admin menu items + isValidPermissionKey + isDeveloper + isValidSystemRole; (C) admin-auth.ts source invariants (cookie name, TTL, HttpOnly/Secure/SameSite/maxAge/path, realm:'admin' marker, DB re-fetch, sessionVersion check, isActive check, all exported helpers, requirePermission DEVELOPER bypass + ADMIN deny, bcrypt cost 10, AUTH_SECRET required in prod); (D) .env.example DEVELOPER_* documentation; (E) seed.ts bootstrap idempotency (findUnique→early return, no update by username, systemRole=DEVELOPER, mustChangePassword=false, demo gated by !IS_PROD, username lower-cased); (F) SQL reference file additive-only with no DROP; (G) Prisma client generated models exposed (db.adminUser, db.adminPermission).
+
+- Verification (all run in this sandbox):
+  * bunx tsc --noEmit           → exit 0 (0 errors)
+  * bun run lint                → exit 0 (0 errors)
+  * bun run build               → exit 0 (58 routes, build succeeds; Prisma errors during sitemap generation are pre-existing env limitation — no DATABASE_URL in sandbox)
+  * scripts/test-admin-realm    → 148/148 PASS (NEW)
+  * scripts/test-auth-integrity → 96/96 PASS
+  * scripts/test-verified-identity → 2101/2101 PASS
+  * scripts/test-otp-domain     → 295/295 PASS
+  * scripts/test-member-registry → 79/79 PASS
+  * scripts/test-toast          → 44/44 PASS
+  * scripts/test-google-oauth   → 114/114 PASS
+  * scripts/test-email-brevo    → 37/37 PASS
+  * scripts/test-order-integrity → requires DATABASE_URL (HTTP+DB integration test) — skipped, env limitation
+  * Total: 2914 static assertions pass. 0 customer-auth regressions.
+
+- Committed locally as 4e9ab1c on top of 6833faa.
+
+- PUSH FAILED: `git push origin main` → "fatal: could not read Username for 'https://github.com': No such device or address".
+  * No credential helper configured. No GH_TOKEN env var. Remote URL is plain HTTPS (no embedded PAT).
+  * Per task spec: "Kalau push credential tidak tersedia, STOP setelah commit stable dan laporkan SHA. Jangan lanjut menumpuk beberapa stage lokal." → STOPPING. Local commit 4e9ab1c is ready. Stages 2-4 NOT started (per spec — do not stack multiple local stages).
+  * User must push themselves OR provide a PAT in chat for me to push via inline URL (as in prior session).
+
+Stage Summary:
+- 7 files changed (3 modified, 4 new): 1124 insertions, 0 deletions.
+  * prisma/schema.prisma — added AdminUser + AdminPermission models (additive).
+  * prisma/seed.ts — added bootstrapDeveloperAdmin() (idempotent).
+  * .env.example — documented DEVELOPER_USERNAME/PASSWORD/DISPLAY_NAME.
+  * prisma/sql/20260816-admin-realm-v1.sql — NEW additive DDL reference.
+  * src/lib/admin-permissions.ts — NEW PERMISSION_KEYS + system role helpers.
+  * src/lib/admin-auth.ts — NEW admin auth realm (anima_admin_session, HMAC + realm marker, DB re-fetch, sessionVersion check, requireDeveloper/requirePermission).
+  * scripts/test-admin-realm.ts — NEW 148-assertion static test suite.
+- 0 customer-auth changes (anima_session, requireAdmin legacy, /api/auth/*, /api/admin/*, OTP, Google, Brevo, member registry all untouched).
+- 0 force push, 0 history rewrite, 0 amend.
+- Commit hash: 4e9ab1c (local only — push pending user-side).
+- Final admin realm foundation (Stage 1):
+  * AdminUser + AdminPermission tables added (additive, no User columns dropped).
+  * anima_admin_session cookie (8h, HttpOnly+Secure+SameSite=lax, realm:'admin' marker).
+  * getCurrentAdminUser re-fetches DB on every request (isActive/systemRole/mustChangePassword/sessionVersion/permissions NEVER trusted from cookie).
+  * requireAdminSession / requireAdminSessionActive / requireDeveloper / requirePermission / hasPermission.
+  * Bootstrap developer via DEVELOPER_USERNAME/PASSWORD env vars (idempotent — never overwrites existing).
+  * 19 permission keys derived from real admin menu (no invented features).
+- Next stages (BLOCKED on Stage 1 push):
+  * Stage 2: /admin/login + /admin/change-password pages + /api/admin/auth/{login,logout,me,change-password} routes.
+  * Stage 3: Developer-only "Setting User Admin" UI + /api/admin/users/** routes + AdminLayout permission-aware sidebar.
+  * Stage 4: Migrate /api/admin/** from requireAdmin (legacy) to requirePermission / requireDeveloper. Deprecate (don't drop) User.role=ADMIN path.
