@@ -242,6 +242,30 @@
  *   SRC107. Google OAuth callback passes user.sessionVersion to createSession
  *          + selects sessionVersion in all 3 user-lookup queries.
  *
+ * Stage 8 — Google OAuth audit (V1 already enforces email_verified=true):
+ *   SRC108. verifyGoogleIdToken THROWS when email_verified !== true (V1
+ *          invariant — centralized check inside the verifier).
+ *   SRC109. Google OAuth callback redirects to /login?google_error=
+ *          email_not_verified when googleUser.emailVerified is false
+ *          (defense-in-depth — backstop even though verifyGoogleIdToken
+ *          already throws).
+ *   SRC110. New GOOGLE user is created with emailVerifiedAt = new Date()
+ *          (Google verified the email — no OTP needed).
+ *   SRC111. Login route requiresVerification check is gated on
+ *          provider === 'PASSWORD' — GOOGLE users never trigger the OTP
+ *          flow on login (Google verified their email at account-creation).
+ *   SRC112. send-otp route returns GOOGLE_USER_NO_VERIFICATION_NEEDED
+ *          (400) for GOOGLE users.
+ *   SRC113. verify-otp route returns ALREADY_VERIFIED for GOOGLE users
+ *          (the UI should never show them the OTP form, but if they hit
+ *          the route, return success).
+ *   SRC114. forgot-password route silently returns { sent: true } for
+ *          GOOGLE-only accounts (anti-enumeration — doesn't leak that
+ *          this is a Google account).
+ *   SRC115. reset-password verify-otp route returns NOT_FOUND_OR_EXPIRED
+ *          for GOOGLE-only accounts (anti-enumeration — same as
+ *          non-existent email).
+ *
  * HTTP integration (placeholder — implemented in stage 2+):
  *   (none yet — OTP API routes are implemented in stage 2+)
  */
@@ -1133,15 +1157,66 @@ assert(sessionVersionSelectMatches.length >= 3, `SRC107: Google OAuth callback s
 assert(/sessionVersion:\s*existingByEmail\.sessionVersion/.test(googleCallbackSrc), 'SRC107: Google OAuth callback existingByEmail branch propagates sessionVersion to user object')
 
 // ---------------------------------------------------------------------------
+// Stage 8 — Google OAuth audit (V1 already enforces email_verified=true)
+// ---------------------------------------------------------------------------
+
+console.log('\n── Stage 8: Google OAuth email_verified invariants (SRC108-SRC115) ──')
+
+// SRC108. verifyGoogleIdToken throws when email_verified !== true.
+const googleLibPath = SRC('lib/google.ts')
+const googleLibSrc = readFileSync(googleLibPath, 'utf8')
+assert(/email_verified\s*!==\s*true/.test(googleLibSrc), 'SRC108: verifyGoogleIdToken throws when payload.email_verified !== true (V1 centralized check)')
+
+// SRC109. Callback redirects on !googleUser.emailVerified (defense-in-depth).
+assert(/google_error=email_not_verified/.test(googleCallbackSrc), 'SRC109: Google OAuth callback redirects to /login?google_error=email_not_verified when !googleUser.emailVerified')
+
+// SRC110. New GOOGLE user created with emailVerifiedAt = new Date().
+assert(/emailVerifiedAt:\s*new Date\(\)/.test(googleCallbackSrc), 'SRC110: New GOOGLE user created with emailVerifiedAt = new Date() (Google verified email — no OTP needed)')
+
+// SRC111. Login route requiresVerification check is gated on provider === 'PASSWORD'.
+// (Already covered by SRC49's provider === 'PASSWORD' check — re-assert here for
+// documentation as part of the Google OAuth audit.)
+assert(/provider\s*===\s*['"]PASSWORD['"]/.test(loginRouteSrc), 'SRC111: login route requiresVerification gated on provider === "PASSWORD" — GOOGLE users never trigger OTP flow on login')
+
+// SRC112. send-otp route returns GOOGLE_USER_NO_VERIFICATION_NEEDED for GOOGLE users.
+const sendOtpRouteSrc2 = readFileSync(sendOtpRoutePath, 'utf8')
+assert(/GOOGLE_USER_NO_VERIFICATION_NEEDED/.test(sendOtpRouteSrc2), 'SRC112: send-otp route returns GOOGLE_USER_NO_VERIFICATION_NEEDED (400) for GOOGLE users')
+
+// SRC113. verify-otp route returns ALREADY_VERIFIED for GOOGLE users.
+const verifyOtpRouteSrc2 = readFileSync(verifyOtpRoutePath, 'utf8')
+// The verify-otp route checks sessionUser.provider === 'GOOGLE' and returns ALREADY_VERIFIED.
+// We can't easily extract the if-block (regex can't balance braces), so we
+// check that the file contains BOTH the GOOGLE provider check AND
+// ALREADY_VERIFIED. The GOOGLE branch is the only branch that returns
+// ALREADY_VERIFIED for a GOOGLE user (other ALREADY_VERIFIED returns are
+// for already-verified PASSWORD users — distinct code path).
+assert(/sessionUser\.provider\s*===\s*['"]GOOGLE['"]/.test(verifyOtpRouteSrc2), 'SRC113: verify-otp route has a GOOGLE provider check')
+assert(/ALREADY_VERIFIED/.test(verifyOtpRouteSrc2), 'SRC113: verify-otp route returns ALREADY_VERIFIED (GOOGLE users get this — Google verified email, no OTP needed)')
+
+// SRC114. forgot-password route silently returns { sent: true } for GOOGLE-only accounts.
+// (Already covered by SRC62 — re-assert here for the Stage 8 audit.)
+const forgotPwRouteSrc = readFileSync(forgotPwRoutePath, 'utf8')
+const googleForgotBranch = forgotPwRouteSrc.match(/if\s*\(\s*user\.provider\s*===\s*['"]GOOGLE['"]\s*\)\s*\{[\s\S]*?\}/)
+assert(!!googleForgotBranch, 'SRC114: forgot-password route has a GOOGLE provider check branch')
+if (googleForgotBranch) {
+  assert(/sent:\s*true/.test(googleForgotBranch[0]), 'SRC114: forgot-password route returns { sent: true } for GOOGLE-only accounts (anti-enumeration)')
+}
+
+// SRC115. reset-password verify-otp route returns NOT_FOUND_OR_EXPIRED for GOOGLE accounts.
+// The route checks `!user || user.provider === 'GOOGLE'` together and returns NOT_FOUND_OR_EXPIRED.
+const resetVerifyOtpRouteSrc = readFileSync(resetVerifyOtpRoutePath, 'utf8')
+assert(/!user\s*\|\|\s*user\.provider\s*===\s*['"]GOOGLE['"]/.test(resetVerifyOtpRouteSrc), 'SRC115: reset-password verify-otp route combines !user OR provider === "GOOGLE" into the same NOT_FOUND_OR_EXPIRED branch (anti-enumeration)')
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 
 console.log('\n────────────────────────────────────────')
-console.log(`OTP domain + Stages 2-7 (full V2 flow): ${pass} passed, ${fail} failed`)
+console.log(`OTP domain + Stages 2-8 (full V2 flow + Google OAuth audit): ${pass} passed, ${fail} failed`)
 if (fail > 0) {
   console.log('\nFailures:')
   failures.forEach((f) => console.log(`  - ${f}`))
   process.exit(1)
 }
-console.log('All Stage 1 through Stage 7 static assertions passed.')
+console.log('All Stage 1 through Stage 8 static assertions passed.')
 process.exit(0)

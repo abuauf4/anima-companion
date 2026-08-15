@@ -3459,3 +3459,59 @@ Stage Summary:
 - 0 stable features reverted. 0 admin / order / voucher / stock / catalog logic touched.
 - Next stages (8-9): Google OAuth audit (V1 already enforces email_verified=true — verify no regression), Resend email production audit, Sonner feedback polish, final mobile-first UI audit.
 - Git safety: small commit, push to main, no force push.
+
+---
+Task ID: account-recovery-v2-stage8-google-oauth-audit
+Agent: main (Super Z)
+Task: Account Recovery & Verification V2 — Stage 8: Google OAuth audit. Verify that "Google user dengan email_verified=true tidak perlu OTP" holds in V2. V1 already enforces this — confirm no regression from V2 changes. Add SRC108-SRC115 test assertions to lock the invariant. Stage 7 baseline is commit 9a89620.
+
+Work Log:
+- Stage 7 baseline (commit 9a89620) is on origin/main: reset-password route + sessionVersion wiring.
+- Audited the Google OAuth implementation:
+  * `src/lib/google.ts` `verifyGoogleIdToken` (V1): line 134 `if (payload.email_verified !== true) throw` — CENTRALIZED check inside the verifier. Any caller gets the email_verified enforcement for free.
+  * `src/app/api/auth/google/callback/route.ts` (V1 + V2 sessionVersion additions):
+    - Line 141 `if (!googleUser.emailVerified)` → redirect to `/login?google_error=email_not_verified` (defense-in-depth backstop, even though verifyGoogleIdToken already throws).
+    - Line 256 `emailVerifiedAt: new Date()` for new GOOGLE users (Google verified the email — no OTP needed).
+    - Line 179 `if (existingByEmail.provider === 'PASSWORD' && existingByEmail.emailVerifiedAt)` — linking a GOOGLE identity to an existing PASSWORD account requires the PASSWORD account to be already verified (via V2 OTP or V1 link token).
+    - V2 additions: selects sessionVersion in all 3 user-lookup queries + passes user.sessionVersion to createSession + existingByEmail branch propagates sessionVersion.
+  * V2 OTP flows (stages 2-7) all gate on `provider === 'PASSWORD'`:
+    - Login route's requiresVerification check (stage 4): `user.provider === 'PASSWORD' && !user.emailVerifiedAt && user.role !== 'ADMIN'` — GOOGLE users never trigger the OTP flow on login.
+    - send-otp route (stage 2): returns 400 GOOGLE_USER_NO_VERIFICATION_NEEDED for GOOGLE users.
+    - verify-otp route (stage 3): returns ALREADY_VERIFIED for GOOGLE users (the UI should never show them the OTP form, but if they hit the route, return success).
+    - forgot-password route (stage 5): silently returns { sent: true } for GOOGLE-only accounts (anti-enumeration — doesn't leak that this is a Google account).
+    - reset-password verify-otp route (stage 6): returns NOT_FOUND_OR_EXPIRED for GOOGLE-only accounts (anti-enumeration — same as non-existent email).
+- NO CODE CHANGES NEEDED — V1 already enforces the invariant, V2 changes preserved it.
+- Added 10 new test assertions (SRC108-SRC115) to lock the invariant:
+  - SRC108: verifyGoogleIdToken throws when payload.email_verified !== true (V1 centralized check).
+  - SRC109: callback redirects to /login?google_error=email_not_verified when !googleUser.emailVerified.
+  - SRC110: new GOOGLE user created with emailVerifiedAt = new Date() (Google verified email — no OTP).
+  - SRC111: login route requiresVerification gated on provider === 'PASSWORD' — GOOGLE users never trigger OTP on login.
+  - SRC112: send-otp route returns GOOGLE_USER_NO_VERIFICATION_NEEDED (400) for GOOGLE users.
+  - SRC113: verify-otp route returns ALREADY_VERIFIED for GOOGLE users.
+  - SRC114: forgot-password route returns { sent: true } for GOOGLE-only accounts (anti-enumeration).
+  - SRC115: reset-password verify-otp route combines !user OR provider === 'GOOGLE' into NOT_FOUND_OR_EXPIRED branch (anti-enumeration).
+
+- Did NOT touch (preserved stable features):
+  * `src/lib/google.ts` (V1 Google OAuth verifier — unchanged)
+  * `src/app/api/auth/google/callback/route.ts` (V1 + V2 sessionVersion additions from stage 7 — unchanged)
+  * `src/app/api/auth/google/route.ts` (V1 entry point — unchanged)
+  * `src/components/auth/GoogleSignInButton.tsx` (V1 UI — unchanged)
+  * All V2 OTP routes (stages 2-7 — unchanged)
+  * All other stable features (Auth V1, Identity V1, member registry, Sonner, etc.)
+
+Verification:
+- `bunx tsc --noEmit`: clean (0 errors).
+- `bun run lint`: clean (0 errors, 0 warnings).
+- `bun run scripts/test-otp-domain.ts`: 262 passed, 0 failed (was 252 at stage 7, +10 new for stage 8).
+- `bun run scripts/test-auth-integrity.ts`: 96 passed, 0 failed (no Auth V1 regression).
+- `bun run scripts/test-verified-identity.ts`: 2101 passed, 0 failed (no Identity V1 regression — Google OAuth still works).
+- `bun run scripts/test-member-registry.ts`: 79 passed, 0 failed.
+- `bun run scripts/test-toast.ts`: 44 passed, 0 failed.
+
+Stage Summary:
+- 0 code changes (audit-only stage).
+- 1 file modified: scripts/test-otp-domain.ts (+SRC108-SRC115, 10 new assertions).
+- V2 spec compliance for stage 8: Google user dengan email_verified=true tidak perlu OTP ✅ (V1 already enforces — V2 preserves via provider === 'PASSWORD' gating on all OTP flows).
+- 0 stable features reverted. 0 admin / order / voucher / stock / catalog logic touched.
+- Next stage (9): final audit — Resend email production audit, Sonner feedback polish, final mobile-first UI audit. No new functional changes expected — just verification + documentation.
+- Git safety: small commit, push to main, no force push.
