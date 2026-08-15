@@ -3367,3 +3367,95 @@ Stage Summary:
 - 0 stable features reverted. 0 admin / order / voucher / stock / catalog logic touched.
 - Next stage (7): /api/auth/reset-password POST route that consumes the grant + sets new bcrypt password + bumps sessionVersion in atomic interactive transaction. Old password becomes invalid. All prior sessions invalidated (sessionVersion mismatch on next /api/auth/me call).
 - Git safety: small commit, push to main, no force push.
+
+---
+Task ID: account-recovery-v2-stage7-reset-password-atomic-tx
+Agent: main (Super Z)
+Task: Account Recovery & Verification V2 — Stage 7: reset password route (bcrypt + sessionVersion bump + grant consumption in atomic interactive transaction). Add /api/auth/reset-password POST route that atomically (in a single db.$transaction) claims the grant + bcrypt-hashes new password + bumps User.sessionVersion + invalidates all unconsumed OTPs for the user. Wire sessionVersion check into getCurrentUser so old sessions are invalidated after reset. Update register/login/Google-callback to pass sessionVersion to createSession. Stage 6 baseline is commit 9a3979f.
+
+Work Log:
+- Stage 6 baseline (commit 9a3979f) is on origin/main: reset-password verify-otp route + reset grant issuance + /reset-password UI.
+
+- Stage 7 implementation:
+  * `src/app/api/auth/reset-password/route.ts` (NEW):
+    - POST handler, NO AUTH REQUIRED (the grant IS the proof of authority — it was issued only after the user successfully verified their PASSWORD_RESET OTP).
+    - Accepts `{ grant, newPassword }` body. Validates: grant non-empty (GRANT_EMPTY), newPassword non-empty (PASSWORD_EMPTY), newPassword.length >= 6 (PASSWORD_TOO_SHORT).
+    - Hashes the raw grant via `hashResetGrant(grant)` (SHA-256) to look up the matching row.
+    - Uses interactive `db.$transaction(async (tx) => { ... })`:
+      (1) findUnique by grantHash. If not found → 404 GRANT_NOT_FOUND.
+      (2) If consumedAt is set → 409 GRANT_CONSUMED.
+      (3) If expiresAt <= now → 410 GRANT_EXPIRED.
+      (4) Atomically claim the grant via `updateMany WHERE id = row.id AND consumedAt IS NULL AND expiresAt > now`. Only one of two concurrent requests can win.
+      (5) GATE on `claim.count === 1`. If the claim lost the race, NO further mutation happens — return 409 GRANT_CONSUMED.
+      (6) bcrypt-hash the new password via `hashPassword(newPassword)` (10 rounds, same as register).
+      (7) Update User: set `password = hashedNewPassword` AND `sessionVersion = sessionVersion + 1` (atomic increment).
+      (8) Invalidate ALL unconsumed OTPs for this user (any purpose) via `otpCode.updateMany WHERE userId = row.userId AND consumedAt IS NULL`. Prevents a partially-attacked PASSWORD_RESET OTP from being reused after the password is changed.
+    - All mutations commit in the SAME transaction. If anything throws, the entire transaction rolls back — the grant is NOT consumed and the password is NOT changed. The user can retry.
+    - Returns distinct wire codes: OK, GRANT_NOT_FOUND, GRANT_CONSUMED, GRANT_EXPIRED, GRANT_EMPTY, PASSWORD_EMPTY, PASSWORD_TOO_SHORT, INTERNAL.
+    - Never logs the raw grant.
+    - Uses logAuthError for the catch (stable event label only).
+  * `src/lib/auth.ts` (modified):
+    - `createSession` now accepts an optional `sessionVersion?: number` field on the user parameter. Encoded into the HMAC session payload. Defaults to 0 for backwards compat with callers that don't pass it.
+    - `getCurrentUser` now selects `sessionVersion: true` from the DB AND reads `payload.sessionVersion` from the cookie. If they don't match, returns null — the caller treats the user as unauthenticated (session is stale, must re-authenticate).
+    - Backwards compat: if the cookie doesn't have a sessionVersion claim (sessions issued before V2), it's treated as version 0. The DB column defaults to 0, so existing sessions continue to work until a password reset bumps the DB version.
+  * `src/app/api/auth/register/route.ts` (modified):
+    - Passes `sessionVersion: 0` to createSession (new user — schema defaults to 0).
+  * `src/app/api/auth/login/route.ts` (modified):
+    - Passes `user.sessionVersion` (read from DB) to createSession via `{ ...safeUser, sessionVersion: user.sessionVersion }`.
+  * `src/app/api/auth/google/callback/route.ts` (modified):
+    - Added `sessionVersion: true` to all 3 user-lookup select clauses (findUnique by providerSubject, findUnique by email, create new GOOGLE user).
+    - The existingByEmail branch (when linking a Google identity to an existing PASSWORD account) now propagates `sessionVersion: existingByEmail.sessionVersion` to the user object.
+    - Step 8 (createSession) now passes `sessionVersion: user.sessionVersion`.
+  * `scripts/test-otp-domain.ts` (extended with SRC93-SRC107 — 33 new assertions):
+    - SRC93: reset-password route does NOT require auth.
+    - SRC94: accepts grant + newPassword, validates both (PASSWORD_TOO_SHORT).
+    - SRC95: uses interactive db.$transaction(async (tx) => ...).
+    - SRC96: atomically claims grant via updateMany WHERE consumedAt IS NULL AND expiresAt > now.
+    - SRC97: gates on claim.count === 1.
+    - SRC98: calls hashPassword (bcrypt).
+    - SRC99: bumps sessionVersion via increment: 1.
+    - SRC100: invalidates ALL unconsumed OTPs for user (any purpose) inside the SAME tx.
+    - SRC101: returns 8 distinct wire codes.
+    - SRC102: never logs the raw grant.
+    - SRC103: createSession accepts sessionVersion?: number + encodes into payload.
+    - SRC104: getCurrentUser selects sessionVersion + reads cookieSessionVersion + returns null on mismatch.
+    - SRC105: register passes sessionVersion: 0.
+    - SRC106: login passes user.sessionVersion (from DB).
+    - SRC107: Google OAuth callback passes user.sessionVersion + selects sessionVersion in all 3 user-lookup queries + existingByEmail branch propagates sessionVersion.
+
+- Did NOT touch (preserved stable features):
+  * `src/lib/identity.ts` (Identity V1 — V1 link-based verification still works for already-issued tokens)
+  * `src/lib/oauth-state.ts`, `src/lib/redirect.ts`, `src/lib/google.ts`
+  * `src/lib/otp.ts` + `src/lib/password-reset.ts` (stage 1 foundation — hashResetGrant + constantTimeEqualGrantHash are consumed by the new reset-password route)
+  * `src/lib/email.ts` (sendOtpEmail from stage 2 — unchanged)
+  * All V1 verify-email routes (preserved for backward compat)
+  * `src/app/api/auth/verify-email/send-otp/route.ts` + `verify-otp/route.ts` (stages 2-3 — unchanged)
+  * `src/app/api/auth/forgot-password/route.ts` + `reset-password/verify-otp/route.ts` (stages 5-6 — unchanged)
+  * `src/views/auth/*` (all V2 UI components — unchanged)
+  * All admin customer routes + CustomersView (member registry V1)
+  * All toast call sites + sonner.tsx + layout.tsx (Sonner standardization)
+  * All order / voucher / stock / catalog / SEO / Cloudinary logic
+
+Verification:
+- `bunx tsc --noEmit`: clean (0 errors, after fixing a /s regex flag incompatibility with ES2017 target — switched to [\s\S] pattern).
+- `bun run lint`: clean (0 errors, 0 warnings).
+- `bun run build`: exit 0 (Compiled successfully in 19.3s).
+- `bun run scripts/test-otp-domain.ts`: 252 passed, 0 failed (was 219 at stage 6, +33 new for stage 7).
+- `bun run scripts/test-auth-integrity.ts`: 96 passed, 0 failed (no Auth V1 regression — sessionVersion is backwards-compatible with existing sessions via the default-0 fallback).
+- `bun run scripts/test-verified-identity.ts`: 2101 passed, 0 failed (no Identity V1 regression — Google OAuth callback still works, sessionVersion is selected alongside the existing identity fields).
+- `bun run scripts/test-member-registry.ts`: 79 passed, 0 failed (no Member Registry V1 regression).
+- `bun run scripts/test-toast.ts`: 44 passed, 0 failed (no Sonner regression).
+
+Stage Summary:
+- 1 new file + 4 modified in stage 7:
+  * New: src/app/api/auth/reset-password/route.ts (POST, no auth, atomic interactive tx — claim grant + bcrypt password + bump sessionVersion + invalidate OTPs).
+  * Modified: src/lib/auth.ts (createSession accepts sessionVersion + getCurrentUser checks sessionVersion mismatch → null).
+  * Modified: src/app/api/auth/register/route.ts (passes sessionVersion: 0 to createSession).
+  * Modified: src/app/api/auth/login/route.ts (passes user.sessionVersion from DB to createSession).
+  * Modified: src/app/api/auth/google/callback/route.ts (selects sessionVersion in all 3 user-lookups + passes user.sessionVersion to createSession + existingByEmail branch propagates sessionVersion).
+  * Modified: scripts/test-otp-domain.ts (+SRC93-SRC107, 33 new assertions).
+  * Modified: worklog.md (this entry).
+- V2 spec compliance for stage 7: reset password → bcrypt ✅ (10 rounds, same as register), password lama mati ✅ (User.password is overwritten with new bcrypt hash — old password no longer matches), sessionVersion untuk invalidasi session lama setelah reset ✅ (incremented atomically in the SAME tx as the password update; getCurrentUser checks the cookie's sessionVersion against the DB's; on mismatch, returns null → 401 → user must re-authenticate with the new password), atomic transaction ✅ (interactive $transaction with claim.count === 1 gate; if anything throws, the entire tx rolls back), OTP invalidation ✅ (all unconsumed OTPs for the user are invalidated inside the SAME tx — prevents a partially-attacked PASSWORD_RESET OTP from being reused).
+- 0 stable features reverted. 0 admin / order / voucher / stock / catalog logic touched.
+- Next stages (8-9): Google OAuth audit (V1 already enforces email_verified=true — verify no regression), Resend email production audit, Sonner feedback polish, final mobile-first UI audit.
+- Git safety: small commit, push to main, no force push.

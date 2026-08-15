@@ -214,6 +214,34 @@
  *   SRC92. ForgotPasswordView has a link to /reset-password ("Saya sudah punya
  *          kode").
  *
+ * Stage 7 — reset password route + sessionVersion wiring invariants:
+ *   SRC93. /api/auth/reset-password route exists, NO AUTH REQUIRED (the grant
+ *          IS the proof of authority).
+ *   SRC94. reset-password route accepts { grant, newPassword } body, validates
+ *          both (grant non-empty, newPassword >= 6 chars).
+ *   SRC95. reset-password route uses interactive db.$transaction(async (tx) => ...)
+ *          (NOT array form — array form cannot gate on claim.count).
+ *   SRC96. reset-password route atomically claims the grant via updateMany
+ *          WHERE consumedAt IS NULL AND expiresAt > now.
+ *   SRC97. reset-password route gates the password update + sessionVersion bump
+ *          on claim.count === 1.
+ *   SRC98. reset-password route bcrypt-hashes the new password (hashPassword).
+ *   SRC99. reset-password route bumps sessionVersion (sessionVersion: { increment: 1 }).
+ *   SRC100. reset-password route invalidates all unconsumed OTPs for the user
+ *          (any purpose) inside the SAME transaction.
+ *   SRC101. reset-password route returns distinct wire codes: OK, GRANT_NOT_FOUND,
+ *          GRANT_CONSUMED, GRANT_EXPIRED, GRANT_EMPTY, PASSWORD_EMPTY,
+ *          PASSWORD_TOO_SHORT, INTERNAL.
+ *   SRC102. reset-password route never logs the raw grant.
+ *   SRC103. src/lib/auth.ts createSession accepts sessionVersion + encodes it
+ *          into the session payload.
+ *   SRC104. src/lib/auth.ts getCurrentUser selects sessionVersion from DB +
+ *          compares to payload.sessionVersion (returns null on mismatch).
+ *   SRC105. register route passes sessionVersion: 0 to createSession (new user).
+ *   SRC106. login route passes user.sessionVersion (from DB) to createSession.
+ *   SRC107. Google OAuth callback passes user.sessionVersion to createSession
+ *          + selects sessionVersion in all 3 user-lookup queries.
+ *
  * HTTP integration (placeholder — implemented in stage 2+):
  *   (none yet — OTP API routes are implemented in stage 2+)
  */
@@ -968,8 +996,8 @@ if (existsSync(resetVerifyOtpRoutePath)) {
   if (notFoundBranch) {
     assert(/NOT_FOUND_OR_EXPIRED/.test(notFoundBranch[0]), 'SRC80 + SRC81: reset-password verify-otp route returns NOT_FOUND_OR_EXPIRED for non-existent email OR GOOGLE account (anti-enumeration)')
   } else {
-    // Try alternate form
-    assert(/!user.*NOT_FOUND_OR_EXPIRED/s.test(rvoSrc) || /NOT_FOUND_OR_EXPIRED.*!user/s.test(rvoSrc), 'SRC80: reset-password verify-otp route returns NOT_FOUND_OR_EXPIRED for non-existent email')
+    // Try alternate form — use [\s\S] instead of /s flag for ES2017 compat.
+    assert(/!user[\s\S]*NOT_FOUND_OR_EXPIRED/.test(rvoSrc) || /NOT_FOUND_OR_EXPIRED[\s\S]*!user/.test(rvoSrc), 'SRC80: reset-password verify-otp route returns NOT_FOUND_OR_EXPIRED for non-existent email')
   }
 
   // SRC81. Returns NOT_FOUND_OR_EXPIRED for GOOGLE-only accounts.
@@ -1021,15 +1049,99 @@ assert(/\/reset-password/.test(fpvSrc2), 'SRC92: ForgotPasswordView has a link t
 assert(/Saya sudah punya kode/.test(fpvSrc2), 'SRC92: ForgotPasswordView has "Saya sudah punya kode" link text')
 
 // ---------------------------------------------------------------------------
+// Stage 7 — reset password route + sessionVersion wiring source invariants (SRC93-SRC107)
+// ---------------------------------------------------------------------------
+
+console.log('\n── Stage 7: reset-password route source invariants (SRC93-SRC102) ──')
+
+const resetPwRoutePath = SRC('app/api/auth/reset-password/route.ts')
+assert(existsSync(resetPwRoutePath), 'SRC93: /api/auth/reset-password route file exists')
+if (existsSync(resetPwRoutePath)) {
+  const rpSrc = readFileSync(resetPwRoutePath, 'utf8')
+
+  // SRC93. NO AUTH REQUIRED.
+  assert(!/requireAuth\(\)/.test(rpSrc), 'SRC93: reset-password route does NOT require auth (grant IS proof)')
+
+  // SRC94. Accepts { grant, newPassword } + validates both.
+  assert(/grant/.test(rpSrc) && /newPassword/.test(rpSrc), 'SRC94: reset-password route accepts grant + newPassword from body')
+  assert(/PASSWORD_TOO_SHORT/.test(rpSrc), 'SRC94: reset-password route validates newPassword length (PASSWORD_TOO_SHORT)')
+  assert(/newPassword\.length\s*<\s*6/.test(rpSrc), 'SRC94: reset-password route enforces newPassword.length >= 6')
+
+  // SRC95. Uses interactive $transaction.
+  assert(/db\.\$transaction\(async\s*\(tx\)\s*=>/.test(rpSrc), 'SRC95: reset-password route uses interactive db.$transaction(async (tx) => ...)')
+
+  // SRC96. Atomically claims the grant.
+  assert(/passwordResetGrant\.updateMany/.test(rpSrc), 'SRC96: reset-password route calls passwordResetGrant.updateMany to claim grant')
+  assert(/consumedAt:\s*null/.test(rpSrc), 'SRC96: reset-password route claims grant WHERE consumedAt IS NULL')
+  assert(/expiresAt:\s*\{\s*gt:\s*now\s*\}/.test(rpSrc), 'SRC96: reset-password route claims grant WHERE expiresAt > now')
+
+  // SRC97. Gates on claim.count === 1.
+  assert(/claim\.count\s*!==\s*1/.test(rpSrc), 'SRC97: reset-password route gates on claim.count === 1')
+
+  // SRC98. bcrypt-hashes the new password.
+  assert(/hashPassword/.test(rpSrc), 'SRC98: reset-password route calls hashPassword (bcrypt) on new password')
+
+  // SRC99. Bumps sessionVersion.
+  assert(/sessionVersion:\s*\{\s*increment:\s*1\s*\}/.test(rpSrc), 'SRC99: reset-password route bumps sessionVersion (increment: 1)')
+
+  // SRC100. Invalidates all unconsumed OTPs for the user inside the SAME tx.
+  assert(/otpCode\.updateMany/.test(rpSrc), 'SRC100: reset-password route calls otpCode.updateMany inside the transaction')
+  // The where clause should match all unconsumed OTPs (no purpose filter).
+  assert(/where:\s*\{\s*userId:\s*row\.userId,\s*consumedAt:\s*null\s*\}/.test(rpSrc), 'SRC100: reset-password route invalidates ALL unconsumed OTPs for user (any purpose)')
+
+  // SRC101. Distinct wire codes.
+  const rpWireCodes = ['OK', 'GRANT_NOT_FOUND', 'GRANT_CONSUMED', 'GRANT_EXPIRED', 'GRANT_EMPTY', 'PASSWORD_EMPTY', 'PASSWORD_TOO_SHORT', 'INTERNAL']
+  for (const wc of rpWireCodes) {
+    assert(new RegExp(`['"]${wc}['"]`).test(rpSrc), `SRC101: reset-password route returns wire code "${wc}"`)
+  }
+
+  // SRC102. Never logs the raw grant.
+  assert(!/console\.(log|error|warn)\([^)]*\$\{grant\}/.test(rpSrc), 'SRC102: reset-password route does NOT console.log the raw grant')
+}
+
+console.log('\n── Stage 7: auth.ts sessionVersion wiring source invariants (SRC103-SRC104) ──')
+
+const authLibPath = SRC('lib/auth.ts')
+const authLibSrc = readFileSync(authLibPath, 'utf8')
+
+// SRC103. createSession accepts sessionVersion + encodes into payload.
+assert(/sessionVersion\?:\s*number/.test(authLibSrc), 'SRC103: createSession accepts sessionVersion?: number')
+assert(/sessionVersion:\s*user\.sessionVersion\s*\?\?\s*0/.test(authLibSrc), 'SRC103: createSession encodes sessionVersion into payload (defaults to 0)')
+
+// SRC104. getCurrentUser selects sessionVersion + compares to payload.
+assert(/sessionVersion:\s*true/.test(authLibSrc), 'SRC104: getCurrentUser selects sessionVersion from DB')
+assert(/cookieSessionVersion/.test(authLibSrc), 'SRC104: getCurrentUser reads cookieSessionVersion from payload')
+assert(/cookieSessionVersion\s*!==\s*user\.sessionVersion/.test(authLibSrc), 'SRC104: getCurrentUser returns null on sessionVersion mismatch')
+
+console.log('\n── Stage 7: route callers pass sessionVersion to createSession (SRC105-SRC107) ──')
+
+// SRC105. register passes sessionVersion: 0.
+assert(/sessionVersion:\s*0/.test(registerSrc), 'SRC105: register route passes sessionVersion: 0 to createSession (new user)')
+
+// SRC106. login passes user.sessionVersion.
+assert(/sessionVersion:\s*user\.sessionVersion/.test(loginRouteSrc), 'SRC106: login route passes user.sessionVersion (from DB) to createSession')
+
+// SRC107. Google OAuth callback passes user.sessionVersion + selects it.
+const googleCallbackPath = SRC('app/api/auth/google/callback/route.ts')
+const googleCallbackSrc = readFileSync(googleCallbackPath, 'utf8')
+assert(/sessionVersion:\s*user\.sessionVersion/.test(googleCallbackSrc), 'SRC107: Google OAuth callback passes user.sessionVersion to createSession')
+// Count the select clauses that include sessionVersion — should be 3
+// (findUnique by providerSubject, findUnique by email, create new GOOGLE user).
+const sessionVersionSelectMatches = googleCallbackSrc.match(/sessionVersion:\s*true/g) || []
+assert(sessionVersionSelectMatches.length >= 3, `SRC107: Google OAuth callback selects sessionVersion in >= 3 user-lookup queries (got ${sessionVersionSelectMatches.length})`)
+// Also check that the existingByEmail branch propagates sessionVersion.
+assert(/sessionVersion:\s*existingByEmail\.sessionVersion/.test(googleCallbackSrc), 'SRC107: Google OAuth callback existingByEmail branch propagates sessionVersion to user object')
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 
 console.log('\n────────────────────────────────────────')
-console.log(`OTP domain + Stages 2-6 (register/send-otp/verify-otp/login/forgot-password/reset-grant): ${pass} passed, ${fail} failed`)
+console.log(`OTP domain + Stages 2-7 (full V2 flow): ${pass} passed, ${fail} failed`)
 if (fail > 0) {
   console.log('\nFailures:')
   failures.forEach((f) => console.log(`  - ${f}`))
   process.exit(1)
 }
-console.log('All Stage 1 + Stage 2 + Stage 3 + Stage 4 + Stage 5 + Stage 6 static assertions passed.')
+console.log('All Stage 1 through Stage 7 static assertions passed.')
 process.exit(0)

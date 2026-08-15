@@ -47,7 +47,14 @@ export async function POST(req: NextRequest) {
       emailVerifiedAt: user.emailVerifiedAt,
     }
 
-    await createSession(safeUser)
+    await createSession({
+      ...safeUser,
+      // V2: encode the user's current sessionVersion (from DB) into the
+      // session cookie. If the user later resets their password, the DB's
+      // sessionVersion will be incremented and this cookie will be
+      // invalidated by the sessionVersion check in getCurrentUser.
+      sessionVersion: user.sessionVersion,
+    })
 
     // Account Recovery & Verification V2 — if the user is a PASSWORD user
     // with emailVerifiedAt === null, the client MUST redirect them to

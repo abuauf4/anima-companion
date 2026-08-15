@@ -153,6 +153,8 @@ export async function GET(req: NextRequest) {
       select: {
         id: true, email: true, name: true, phone: true, role: true,
         provider: true, emailVerifiedAt: true,
+        // V2: select sessionVersion so we can encode it into the session cookie.
+        sessionVersion: true,
       },
     })
 
@@ -167,6 +169,9 @@ export async function GET(req: NextRequest) {
           id: true, email: true, name: true, phone: true, role: true,
           provider: true, providerSubject: true, emailVerifiedAt: true,
           password: true,
+          // V2: select sessionVersion so we can encode it into the session cookie
+          // when we sign in the linked user.
+          sessionVersion: true,
         },
       })
 
@@ -198,6 +203,9 @@ export async function GET(req: NextRequest) {
             role: existingByEmail.role,
             provider: 'GOOGLE',
             emailVerifiedAt: existingByEmail.emailVerifiedAt,
+            // V2: propagate sessionVersion so it gets encoded into the
+            // session cookie at Step 8.
+            sessionVersion: existingByEmail.sessionVersion,
           }
         } else if (existingByEmail.provider === 'PASSWORD' && !existingByEmail.emailVerifiedAt) {
           // TAKEOVER DEFENSE — refuse to link an unverified password
@@ -250,6 +258,8 @@ export async function GET(req: NextRequest) {
           select: {
             id: true, email: true, name: true, phone: true, role: true,
             provider: true, emailVerifiedAt: true,
+            // V2: select sessionVersion (will be 0 for a newly-created user).
+            sessionVersion: true,
           },
         })
 
@@ -270,10 +280,14 @@ export async function GET(req: NextRequest) {
     }
 
     // Step 8: Issue the SAME session cookie used by the password flow.
+    // V2: encode the user's sessionVersion into the session cookie so the
+    // sessionVersion check in getCurrentUser can detect stale sessions
+    // after a password reset.
     await createSession({
       id: user.id,
       email: user.email,
       role: user.role,
+      sessionVersion: user.sessionVersion,
     })
 
     // Step 8b (Verified Identity V1 cleanup): Consume (clear) the OAuth

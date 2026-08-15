@@ -160,11 +160,30 @@ export async function comparePassword(password: string, hash: string): Promise<b
   return bcrypt.compare(password, hash)
 }
 
-export async function createSession(user: { id: string; email: string; role: string }) {
+export async function createSession(user: {
+  id: string
+  email: string
+  role: string
+  // Account Recovery & Verification V2 — sessionVersion is encoded into
+  // the HMAC session cookie at sign time. The verify path reads it back
+  // and compares to the DB's User.sessionVersion. On password reset,
+  // the DB's sessionVersion is incremented — all cookies issued before
+  // the bump are immediately invalid (the comparison fails). This is
+  // the session-invalidation mechanism for V2.
+  //
+  // For backwards compat: if a caller doesn't pass sessionVersion
+  // (e.g. legacy code paths we haven't touched), it defaults to 0.
+  // The DB column also defaults to 0, so the comparison passes for
+  // existing rows. New sessions SHOULD pass the DB's current value.
+  sessionVersion?: number
+}) {
   const payload = {
     userId: user.id,
     email: user.email,
     role: user.role,
+    // Encode the sessionVersion into the cookie. Default to 0 for
+    // backwards compat with callers that don't pass it.
+    sessionVersion: user.sessionVersion ?? 0,
     exp: Date.now() + SESSION_MAX_AGE * 1000,
   }
   const token = await sign(payload)
@@ -193,6 +212,12 @@ export async function getCurrentUser() {
   // /api/auth/me exposes `provider` and `emailVerifiedAt` to the client.
   // The `password` field is intentionally NOT selected — same defense
   // as before Verified Identity V1.
+  //
+  // Account Recovery & Verification V2 — also select `sessionVersion`
+  // so we can compare it to the payload's sessionVersion. If they don't
+  // match, the session was issued before a password reset (which bumped
+  // the DB's sessionVersion) and is now INVALID. Return null so the
+  // caller treats the user as unauthenticated.
   const user = await db.user.findUnique({
     where: { id: payload.userId },
     select: {
@@ -204,8 +229,25 @@ export async function getCurrentUser() {
       provider: true,
       providerSubject: true,
       emailVerifiedAt: true,
+      sessionVersion: true,
     },
   })
+  if (!user) return null
+  // V2 session-version check. If the cookie's sessionVersion doesn't
+  // match the DB's, the session is stale (issued before a password
+  // reset). Treat as unauthenticated — the caller will redirect to
+  // /login or return 401.
+  //
+  // For backwards compat: if the cookie doesn't have a sessionVersion
+  // claim (e.g. sessions issued before V2), we treat the missing claim
+  // as version 0. The DB column defaults to 0, so existing sessions
+  // continue to work until a password reset bumps the DB version.
+  const cookieSessionVersion =
+    typeof payload.sessionVersion === 'number' ? payload.sessionVersion : 0
+  if (cookieSessionVersion !== user.sessionVersion) {
+    // Session is stale. The user must re-authenticate.
+    return null
+  }
   return user
 }
 

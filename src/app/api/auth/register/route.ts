@@ -103,6 +103,11 @@ export async function POST(req: NextRequest) {
       id: user.id,
       email: user.email,
       role: user.role,
+      // V2: encode the user's sessionVersion (0 for a newly-created user)
+      // into the session cookie. If the user later resets their password,
+      // the DB's sessionVersion will be incremented and this cookie will
+      // be invalidated by the sessionVersion check in getCurrentUser.
+      sessionVersion: 0,
     })
     // Tell the client that an OTP was sent (so the UI can show a "cek
     // email" message) — but never include the OTP itself in the response.
