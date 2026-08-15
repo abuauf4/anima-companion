@@ -60,3 +60,7 @@ db.txt
 **/db.txt
 phase3-*.log
 phase3-dump.json
+
+# QA V2 — output logs are run-specific, do not commit
+# (the test scripts themselves ARE committed so the operator can re-run them)
+qa-v2/output/
