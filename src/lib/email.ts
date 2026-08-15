@@ -23,12 +23,14 @@
  *     send and logs a CONFIG-MISSING error instead. This forces the
  *     operator to wire a real provider before the app goes live — silent
  *     failure would let unverified-password users believe they're verified.
- *   - When a real provider is wired (V2: Resend / SendGrid / SES / SMTP),
- *     the operator sets `EMAIL_PROVIDER=resend|sendgrid|ses|smtp` and
- *     the corresponding credentials. The adapter switch below picks the
- *     right implementation. For V1 only `DevConsoleEmailAdapter` is
- *     implemented — the rest are stubs that throw `EMAIL_PROVIDER_NOT_
- *     IMPLEMENTED` so it's obvious which dependency is missing.
+ *   - When a real provider is wired, the operator sets
+ *     `EMAIL_PROVIDER=brevo|resend|sendgrid|ses|smtp` and the
+ *     corresponding credentials. The adapter switch below picks the
+ *     right implementation. `brevo` is the recommended production
+ *     provider (Brevo Transactional API via native server-side fetch).
+ *     `resend` is kept for backwards compatibility. `sendgrid` / `ses`
+ *     / `smtp` are stubs that throw `EMAIL_PROVIDER_NOT_IMPLEMENTED`
+ *     so it's obvious which dependency is missing.
  *
  * SECURITY:
  *   - The verification link inside the email contains a one-time token.
@@ -52,10 +54,13 @@
  *     `console.log` call that references the message body / token /
  *     verificationUrl is reachable ONLY in a code path gated by a
  *     `NODE_ENV !== 'production'` check.
- *   - When V2 wires a real provider (Resend/SendGrid/SES/SMTP), the
- *     adapter implementation MUST also never log the raw token or URL.
- *     The test invariant `SRC9` should be extended to cover the new
- *     adapter's source at that time.
+ *   - The BrevoEmailAdapter (production) and ResendEmailAdapter
+ *     (compatibility) BOTH obey this invariant: their `send()`
+ *     methods never call `console.log/error/warn` with the message
+ *     body, token, or URL. The static test `SRC118` in
+ *     `scripts/test-otp-domain.ts` enforces this for ResendEmailAdapter;
+ *     `scripts/test-email-brevo.ts` enforces the same invariant for
+ *     BrevoEmailAdapter (no console.* calls in `send()`).
  */
 
 export interface EmailMessage {
@@ -106,9 +111,139 @@ class DevConsoleEmailAdapter implements EmailAdapter {
 }
 
 // ----------------------------------------------------------------------------
+// BrevoEmailAdapter — production email delivery via Brevo Transactional API.
+// Replaces Resend as the production provider (kept for compatibility).
+//
+// API contract: POST https://api.brevo.com/v3/smtp/email
+//   Headers:
+//     api-key: BREVO_API_KEY     (server-only, NEVER expose via NEXT_PUBLIC_*)
+//     Content-Type: application/json
+//   Body (JSON):
+//     {
+//       "sender":    { "name": EMAIL_FROM_NAME, "email": EMAIL_FROM },
+//       "to":        [{ "email": "<recipient>", "name": "<recipient name?>" }],
+//       "subject":   "...",
+//       "htmlContent": "...",  // optional, omitted if message.html absent
+//       "textContent":  "..."
+//     }
+//   Brevo returns 201 Created on success (any 2xx is treated as success).
+//   Non-2xx responses and network/parse failures are wrapped into a
+//   sanitized `Error('EMAIL_DELIVERY_FAILED')` — the raw Brevo error body
+//   is NEVER surfaced to the client.
+//
+// REQUIRED ENV VARS when EMAIL_PROVIDER=brevo:
+//   BREVO_API_KEY    — server-only, NEVER expose via NEXT_PUBLIC_*
+//   EMAIL_FROM       — sender email, e.g. "noreply@animacompanion.id"
+//                      (domain must be verified in Brevo dashboard).
+//   EMAIL_FROM_NAME  — sender display name, e.g. "Anima Companion".
+//
+// SECURITY:
+//   - Constructor throws if BREVO_API_KEY or EMAIL_FROM is missing/empty.
+//     The server will refuse to start rather than silently fake-send.
+//   - EMAIL_FROM_NAME defaults to "Anima Companion" if unset; we do NOT
+//     throw on its absence because Brevo accepts an empty name field —
+//     but a missing name hurts deliverability, so the operator should
+//     always set it.
+//   - The adapter NEVER logs the raw email body, the raw verification
+//     token, or the verification URL. Brevo API errors are caught and
+//     re-thrown as a sanitized `EMAIL_DELIVERY_FAILED` Error. The raw
+//     Brevo response body (which may contain PII / diagnostic info)
+//     is intentionally discarded — caller's `logAuthError` already
+//     sanitizes production logs to `{ event, status }` only.
+//   - Uses native server-side `fetch` (Node 18+/Next.js runtime). No
+//     Brevo SDK is installed — task spec explicitly forbids unnecessary
+//     SDK dependencies.
+//   - The `api-key` header value is read from `process.env` at
+//     construction time and held in a private field. It is never logged,
+//     never returned in any error message, and never serialized.
+// ----------------------------------------------------------------------------
+// Exported for focused unit tests (scripts/test-email-brevo.ts). Not part
+// of the public email API — application code should use `getEmailAdapter()`
+// or the high-level `send*` helpers below.
+export class BrevoEmailAdapter implements EmailAdapter {
+  private readonly apiKey: string
+  private readonly fromEmail: string
+  private readonly fromName: string
+  private readonly endpoint = 'https://api.brevo.com/v3/smtp/email'
+
+  constructor() {
+    const apiKey = process.env.BREVO_API_KEY
+    const fromEmail = process.env.EMAIL_FROM
+    const fromName = process.env.EMAIL_FROM_NAME
+    if (!apiKey || !apiKey.trim()) {
+      throw new Error(
+        'EMAIL_PROVIDER=brevo but BREVO_API_KEY is not set. ' +
+          'Set BREVO_API_KEY in the deployment environment (NEVER commit). ' +
+          'See src/lib/email.ts and .env.example.'
+      )
+    }
+    if (!fromEmail || !fromEmail.trim()) {
+      throw new Error(
+        'EMAIL_PROVIDER=brevo but EMAIL_FROM is not set. ' +
+          'Set EMAIL_FROM to a Brevo-verified sender address (e.g. ' +
+          'noreply@animacompanion.id). The sender domain must be ' +
+          'verified in the Brevo dashboard.'
+      )
+    }
+    // EMAIL_FROM_NAME is optional but recommended for deliverability.
+    // Brevo accepts an empty name; we default to a stable brand string
+    // rather than throw, so a forgotten env var does not block the
+    // server from starting in an emergency.
+    this.apiKey = apiKey
+    this.fromEmail = fromEmail
+    this.fromName = (fromName && fromName.trim()) || 'Anima Companion'
+  }
+
+  async send(message: EmailMessage): Promise<void> {
+    // SECURITY: never log message.text/html — they contain the OTP /
+    // verification token. We only surface a stable event label via the
+    // caller's logAuthError catch block if Brevo throws.
+    //
+    // Build the Brevo request body. `to` is a single-element array per
+    // the Brevo transactional API contract. `htmlContent` is omitted
+    // when message.html is absent — Brevo will deliver text-only.
+    const body: Record<string, unknown> = {
+      sender: { name: this.fromName, email: this.fromEmail },
+      to: [{ email: message.to }],
+      subject: message.subject,
+      textContent: message.text,
+    }
+    if (message.html) {
+      body.htmlContent = message.html
+    }
+
+    let response: Response
+    try {
+      response = await fetch(this.endpoint, {
+        method: 'POST',
+        headers: {
+          'api-key': this.apiKey,
+          'Content-Type': 'application/json',
+          accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+      })
+    } catch (networkErr) {
+      // Network failure / DNS / TLS / timeout. NEVER surface the raw
+      // error message — it can include host/port details that should
+      // not reach the client. The caller's logAuthError will log
+      // `{ event, status: 500 }` in production.
+      throw new Error('EMAIL_DELIVERY_FAILED')
+    }
+
+    if (!response.ok) {
+      // Brevo non-2xx. We deliberately do NOT read or log the response
+      // body — it may contain PII or diagnostic info that should not
+      // reach production logs readable by ops sidecars. The status code
+      // alone is enough for the operator to triage via the Brevo dashboard.
+      throw new Error('EMAIL_DELIVERY_FAILED')
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
 // ResendEmailAdapter — production email delivery via Resend (resend.com).
-// Single provider — task spec says "Jangan menambahkan beberapa provider
-// sekaligus". Resend is preferred for simplicity + reliability.
+// Kept for compatibility. New deployments should use EMAIL_PROVIDER=brevo.
 //
 // REQUIRED ENV VARS when EMAIL_PROVIDER=resend:
 //   RESEND_API_KEY   — server-only, NEVER expose via NEXT_PUBLIC_*
@@ -211,6 +346,9 @@ export function getEmailAdapter(): EmailAdapter {
     case 'dev':
     case '':
       cachedAdapter = new DevConsoleEmailAdapter()
+      break
+    case 'brevo':
+      cachedAdapter = new BrevoEmailAdapter()
       break
     case 'resend':
       cachedAdapter = new ResendEmailAdapter()
