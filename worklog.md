@@ -3280,3 +3280,90 @@ Stage Summary:
 - 0 stable features reverted. 0 admin / order / voucher / stock / catalog logic touched.
 - Next stages (6-7): forgot-password OTP → short-lived single-use reset grant (verify-otp + reset-grant routes + /reset-password UI), reset password + bcrypt + sessionVersion bump.
 - Git safety: small commit, push to main, no force push.
+
+---
+Task ID: account-recovery-v2-stage6-reset-grant
+Agent: main (Super Z)
+Task: Account Recovery & Verification V2 — Stage 6: forgot-password OTP → short-lived single-use reset grant. Add /api/auth/reset-password/verify-otp POST route that consumes a PASSWORD_RESET OTP and issues a reset grant (returned to the client). Add /reset-password page + ResetPasswordView (2-step flow: OTP verify, then new password — stage 7 will wire the actual reset-password route). Add link from ForgotPasswordView to /reset-password. Stage 5 baseline is commit d4cfa49.
+
+Work Log:
+- Stage 5 baseline (commit d4cfa49) is on origin/main: forgot-password route + page + anti-enumeration.
+
+- Stage 6 implementation:
+  * `src/app/api/auth/reset-password/verify-otp/route.ts` (NEW):
+    - POST handler, NO AUTH REQUIRED (user can't log in — that's why they're resetting).
+    - Accepts `{ email, code }` body. Validates email format + 6-digit code format.
+    - Looks up user by email. ANTI-ENUMERATION: if user doesn't exist OR is GOOGLE-only, returns 404 NOT_FOUND_OR_EXPIRED (same response as expired/wrong OTP — attacker can't distinguish).
+    - Calls `consumeOtp({ userId, purpose: 'PASSWORD_RESET', code })`:
+      - OK → calls `issueResetGrant(userId)`. Returns 200 `{ code: 'OK', grant, expiresAt }`. The raw grant is returned to the client so it can be submitted with the new password in stage 7. The grant is 32-byte CSPRNG, SHA-256 hashed in DB, single-use, 10-min TTL.
+      - ALREADY_CONSUMED → 200 `{ code: 'ALREADY_CONSUMED' }` (race lost, no grant — user must request a new OTP).
+      - WRONG_CODE → 409 `{ code: 'WRONG_CODE', remainingAttempts }` (minor enumeration vector — see route docstring tradeoff rationale).
+      - NOT_FOUND_OR_EXPIRED → 404.
+    - Never logs the user-supplied code.
+    - Uses logAuthError for the catch (stable event label only).
+  * `src/views/auth/ResetPasswordView.tsx` (NEW):
+    - 2-step flow with shared state machine: 'otp' → 'newPassword' → 'success' (or 'error').
+    - Step 1 ('otp'): email input + 6-digit InputOTP. Submit handler calls /api/auth/reset-password/verify-otp. On OK, stores the grant in component state and transitions to 'newPassword' step. Handles WRONG_CODE (clears input, shows remainingAttempts), NOT_FOUND_OR_EXPIRED (clears input), ALREADY_CONSUMED.
+    - Step 2 ('newPassword'): new password + confirm password inputs with show/hide toggle. Submit handler calls /api/auth/reset-password with `{ grant, newPassword }` (stage 7 will implement this route). Handles GRANT_EXPIRED + GRANT_CONSUMED by transitioning back to 'otp' step and clearing state. Handles PASSWORD_TOO_SHORT validation.
+    - Step 3 ('success'): "Password berhasil diubah" message + "Masuk dengan Password Baru" button (navigates to /login). Tells the user "Semua sesi sebelumnya telah diakhiri" — this is the sessionVersion effect (stage 7).
+    - Mobile-first: Card max-w-md, OTP slots h-12 w-12, inputs full-width with leading icons, buttons full-width.
+    - "Kembali ke verifikasi kode" link in step 2 lets the user restart the flow.
+  * `src/app/reset-password/page.tsx` (NEW):
+    - Next.js page route that renders ResetPasswordView inside SiteShell.
+    - Metadata: noIndex=true.
+  * `src/views/auth/ForgotPasswordView.tsx` (modified):
+    - Added "Saya sudah punya kode — masukkan di sini" button in the "cek email" state. Routes to /reset-password. Lets the user navigate to the reset-password page once they have the OTP code (e.g. they closed the tab and came back, or they want to re-use a code that was sent earlier and is still within the 10-min TTL).
+  * `scripts/test-otp-domain.ts` (extended with SRC72-SRC92 — 31 new assertions):
+    - SRC72: verify-otp route does NOT require auth.
+    - SRC73: accepts { email, code } + validates both formats.
+    - SRC74: calls consumeOtp with purpose: 'PASSWORD_RESET'.
+    - SRC75: calls issueResetGrant on OK.
+    - SRC76: returns grant + expiresAt.
+    - SRC77: handles ALREADY_CONSUMED.
+    - SRC78: handles WRONG_CODE (409 + remainingAttempts).
+    - SRC79: handles NOT_FOUND_OR_EXPIRED (404).
+    - SRC80 + SRC81: returns NOT_FOUND_OR_EXPIRED for non-existent email OR GOOGLE account (anti-enumeration — combined branch).
+    - SRC82: never logs the user-supplied code.
+    - SRC83: /reset-password page exists.
+    - SRC84: ResetPasswordView exists.
+    - SRC85: has 'otp' + 'newPassword' steps.
+    - SRC86: calls /api/auth/reset-password/verify-otp.
+    - SRC87: stores grant via setGrant.
+    - SRC88: calls /api/auth/reset-password (stage 7 route — UI is already wired).
+    - SRC89: has newPassword + confirmPassword inputs.
+    - SRC90: has 'success' step.
+    - SRC91: validates newPassword.length >= 6 + matches confirmPassword.
+    - SRC92: ForgotPasswordView has "Saya sudah punya kode" link to /reset-password.
+
+- Did NOT touch (preserved stable features):
+  * `src/lib/auth.ts`, `src/lib/identity.ts`, `src/lib/oauth-state.ts`, `src/lib/redirect.ts`, `src/lib/google.ts`
+  * `src/lib/otp.ts` + `src/lib/password-reset.ts` (stage 1 foundation — consumeOtp + issueResetGrant are consumed by the new verify-otp route)
+  * `src/lib/email.ts` (sendOtpEmail from stage 2 — unchanged)
+  * `src/app/api/auth/google/callback/route.ts`, all V1 verify-email routes, register/login/send-otp/verify-otp/forgot-password routes (stages 2-5 — unchanged)
+  * `src/views/auth/VerifyEmailView.tsx`, `RegisterView.tsx`, `LoginView.tsx`, `ForgotPasswordView.tsx` (stages 2-5 — unchanged except ForgotPasswordView gets a link to /reset-password)
+  * All admin customer routes + CustomersView (member registry V1)
+  * All toast call sites + sonner.tsx + layout.tsx (Sonner standardization)
+  * All order / voucher / stock / catalog / SEO / Cloudinary logic
+
+Verification:
+- `bunx tsc --noEmit`: clean (0 errors, after clearing stale .next cache).
+- `bun run lint`: clean (0 errors, 0 warnings).
+- `bun run build`: exit 0 (Compiled successfully in 19.1s).
+- `bun run scripts/test-otp-domain.ts`: 219 passed, 0 failed (was 188 at stage 5, +31 new for stage 6).
+- `bun run scripts/test-auth-integrity.ts`: 96 passed, 0 failed (no Auth V1 regression).
+- `bun run scripts/test-verified-identity.ts`: 2101 passed, 0 failed (no Identity V1 regression).
+- `bun run scripts/test-member-registry.ts`: 79 passed, 0 failed (no Member Registry V1 regression).
+- `bun run scripts/test-toast.ts`: 44 passed, 0 failed (no Sonner regression).
+
+Stage Summary:
+- 3 new files + 2 modified in stage 6:
+  * New: src/app/api/auth/reset-password/verify-otp/route.ts (POST, no auth, anti-enumeration NOT_FOUND_OR_EXPIRED for non-existent/GOOGLE, issues reset grant on OK).
+  * New: src/views/auth/ResetPasswordView.tsx (2-step flow: OTP verify → newPassword → success, mobile-first).
+  * New: src/app/reset-password/page.tsx (Next.js page route).
+  * Modified: src/views/auth/ForgotPasswordView.tsx (+ "Saya sudah punya kode" link to /reset-password).
+  * Modified: scripts/test-otp-domain.ts (+SRC72-SRC92, 31 new assertions).
+  * Modified: worklog.md (this entry).
+- V2 spec compliance for stage 6: OTP reset → short-lived single-use reset grant ✅ (10-min TTL, SHA-256 hashed, atomic issuance invalidates old grants), anti-enumeration on verify-otp ✅ (non-existent email + GOOGLE account return same NOT_FOUND_OR_EXPIRED as expired OTP), mobile-first UI ✅, 2-step flow (OTP → newPassword) ✅.
+- 0 stable features reverted. 0 admin / order / voucher / stock / catalog logic touched.
+- Next stage (7): /api/auth/reset-password POST route that consumes the grant + sets new bcrypt password + bumps sessionVersion in atomic interactive transaction. Old password becomes invalid. All prior sessions invalidated (sessionVersion mismatch on next /api/auth/me call).
+- Git safety: small commit, push to main, no force push.

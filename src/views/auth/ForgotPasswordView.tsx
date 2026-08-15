@@ -216,9 +216,18 @@ export function ForgotPasswordView() {
                 </Button>
               </div>
 
-              {/* Stage 6 will add: "Saya sudah punya kode → enter OTP + new password" link
-                  to /reset-password. For now, the user must wait for the OTP and
-                  stage 6 will ship the reset-password page. */}
+              {/* Link to /reset-password — stage 6 ships the reset-password page
+                  where the user enters the OTP + new password. The user can
+                  navigate there directly once they have the OTP code (e.g. they
+                  closed the tab and came back, or they want to re-use a code
+                  that was sent earlier and is still within the 10-min TTL). */}
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => navigate('/reset-password')}
+              >
+                Saya sudah punya kode — masukkan di sini
+              </Button>
             </div>
           )}
 

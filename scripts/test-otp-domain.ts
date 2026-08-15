@@ -187,6 +187,33 @@
  *   SRC70. ForgotPasswordView handles 429 RESEND_COOLDOWN with countdown.
  *   SRC71. LoginView has a "Lupa password?" link to /forgot-password.
  *
+ * Stage 6 — reset-password verify-otp route + reset grant + /reset-password UI:
+ *   SRC72. /api/auth/reset-password/verify-otp route exists, NO AUTH REQUIRED.
+ *   SRC73. verify-otp route accepts { email, code } body, validates both.
+ *   SRC74. verify-otp route calls consumeOtp with purpose: 'PASSWORD_RESET'.
+ *   SRC75. verify-otp route issues a reset grant via issueResetGrant on OK.
+ *   SRC76. verify-otp route returns the raw grant + expiresAt to the client
+ *          (so the client can submit it with the new password).
+ *   SRC77. verify-otp route handles ALREADY_CONSUMED (race lost, no grant).
+ *   SRC78. verify-otp route handles WRONG_CODE (409 + remainingAttempts).
+ *   SRC79. verify-otp route handles NOT_FOUND_OR_EXPIRED (404).
+ *   SRC80. verify-otp route returns NOT_FOUND_OR_EXPIRED for non-existent
+ *          emails (anti-enumeration — same as expired OTP).
+ *   SRC81. verify-otp route returns NOT_FOUND_OR_EXPIRED for GOOGLE-only
+ *          accounts (anti-enumeration — doesn't leak that this is a Google account).
+ *   SRC82. verify-otp route never logs the user-supplied code.
+ *   SRC83. /reset-password page exists at src/app/reset-password/page.tsx.
+ *   SRC84. ResetPasswordView exists at src/views/auth/ResetPasswordView.tsx.
+ *   SRC85. ResetPasswordView has a 2-step flow: 'otp' step + 'newPassword' step.
+ *   SRC86. ResetPasswordView calls /api/auth/reset-password/verify-otp to verify.
+ *   SRC87. ResetPasswordView stores the grant in state after verify-otp OK.
+ *   SRC88. ResetPasswordView calls /api/auth/reset-password to submit new password.
+ *   SRC89. ResetPasswordView shows password + confirm password inputs in step 2.
+ *   SRC90. ResetPasswordView shows success state after password reset OK.
+ *   SRC91. ResetPasswordView validates newPassword.length >= 6 + matches confirm.
+ *   SRC92. ForgotPasswordView has a link to /reset-password ("Saya sudah punya
+ *          kode").
+ *
  * HTTP integration (placeholder — implemented in stage 2+):
  *   (none yet — OTP API routes are implemented in stage 2+)
  */
@@ -895,15 +922,114 @@ assert(/\/forgot-password/.test(loginViewSrc), 'SRC71: LoginView has a link to /
 assert(/Lupa password/.test(loginViewSrc), 'SRC71: LoginView has "Lupa password?" link text')
 
 // ---------------------------------------------------------------------------
+// Stage 6 — reset-password verify-otp route + reset grant + /reset-password UI (SRC72-SRC92)
+// ---------------------------------------------------------------------------
+
+console.log('\n── Stage 6: reset-password verify-otp route source invariants (SRC72-SRC82) ──')
+
+const resetVerifyOtpRoutePath = SRC('app/api/auth/reset-password/verify-otp/route.ts')
+assert(existsSync(resetVerifyOtpRoutePath), 'SRC72: reset-password verify-otp route file exists')
+if (existsSync(resetVerifyOtpRoutePath)) {
+  const rvoSrc = readFileSync(resetVerifyOtpRoutePath, 'utf8')
+
+  // SRC72. NO AUTH REQUIRED.
+  assert(!/requireAuth\(\)/.test(rvoSrc), 'SRC72: reset-password verify-otp route does NOT require auth')
+
+  // SRC73. Accepts { email, code } body, validates both.
+  assert(/email/.test(rvoSrc) && /code/.test(rvoSrc), 'SRC73: reset-password verify-otp route accepts email + code from body')
+  assert(/EMAIL_FORMAT/.test(rvoSrc) || /Format email tidak valid/.test(rvoSrc), 'SRC73: reset-password verify-otp route validates email format')
+  assert(/CODE_FORMAT/.test(rvoSrc) || /Kode reset harus 6 digit/.test(rvoSrc), 'SRC73: reset-password verify-otp route validates code format (6-digit)')
+
+  // SRC74. Calls consumeOtp with purpose: 'PASSWORD_RESET'.
+  assert(/consumeOtp\(/.test(rvoSrc), 'SRC74: reset-password verify-otp route calls consumeOtp')
+  assert(/purpose:\s*['"]PASSWORD_RESET['"]/.test(rvoSrc), 'SRC74: reset-password verify-otp route calls consumeOtp with purpose: "PASSWORD_RESET"')
+
+  // SRC75. Issues reset grant via issueResetGrant on OK.
+  assert(/issueResetGrant/.test(rvoSrc), 'SRC75: reset-password verify-otp route calls issueResetGrant on OK')
+
+  // SRC76. Returns the raw grant + expiresAt.
+  assert(/grant/.test(rvoSrc) && /expiresAt/.test(rvoSrc), 'SRC76: reset-password verify-otp route returns grant + expiresAt')
+
+  // SRC77. Handles ALREADY_CONSUMED.
+  assert(/ALREADY_CONSUMED/.test(rvoSrc), 'SRC77: reset-password verify-otp route handles ALREADY_CONSUMED')
+
+  // SRC78. Handles WRONG_CODE (409 + remainingAttempts).
+  assert(/WRONG_CODE/.test(rvoSrc), 'SRC78: reset-password verify-otp route handles WRONG_CODE')
+  assert(/remainingAttempts/.test(rvoSrc), 'SRC78: reset-password verify-otp route returns remainingAttempts on WRONG_CODE')
+  assert(/status:\s*409/.test(rvoSrc), 'SRC78: reset-password verify-otp route returns 409 on WRONG_CODE')
+
+  // SRC79. Handles NOT_FOUND_OR_EXPIRED (404).
+  assert(/NOT_FOUND_OR_EXPIRED/.test(rvoSrc), 'SRC79: reset-password verify-otp route handles NOT_FOUND_OR_EXPIRED')
+  assert(/status:\s*404/.test(rvoSrc), 'SRC79: reset-password verify-otp route returns 404 on NOT_FOUND_OR_EXPIRED')
+
+  // SRC80. Returns NOT_FOUND_OR_EXPIRED for non-existent emails (anti-enumeration).
+  // The !user branch must return NOT_FOUND_OR_EXPIRED (not a different code).
+  const notFoundBranch = rvoSrc.match(/if\s*\(\s*!user\s*\|\|\s*user\.provider\s*===\s*['"]GOOGLE['"]\s*\)\s*\{[\s\S]*?\}/)
+  if (notFoundBranch) {
+    assert(/NOT_FOUND_OR_EXPIRED/.test(notFoundBranch[0]), 'SRC80 + SRC81: reset-password verify-otp route returns NOT_FOUND_OR_EXPIRED for non-existent email OR GOOGLE account (anti-enumeration)')
+  } else {
+    // Try alternate form
+    assert(/!user.*NOT_FOUND_OR_EXPIRED/s.test(rvoSrc) || /NOT_FOUND_OR_EXPIRED.*!user/s.test(rvoSrc), 'SRC80: reset-password verify-otp route returns NOT_FOUND_OR_EXPIRED for non-existent email')
+  }
+
+  // SRC81. Returns NOT_FOUND_OR_EXPIRED for GOOGLE-only accounts.
+  assert(/provider\s*===\s*['"]GOOGLE['"]/.test(rvoSrc), 'SRC81: reset-password verify-otp route checks provider === "GOOGLE"')
+
+  // SRC82. Never logs the user-supplied code.
+  assert(!/console\.(log|error|warn)\([^)]*\$\{code\}/.test(rvoSrc) && !/console\.(log|error|warn)\([^)]*\$\{trimmedCode\}/.test(rvoSrc), 'SRC82: reset-password verify-otp route does NOT console.log the user-supplied code')
+}
+
+console.log('\n── Stage 6: /reset-password page + ResetPasswordView source invariants (SRC83-SRC92) ──')
+
+// SRC83. Page exists.
+const resetPwPagePath = SRC('app/reset-password/page.tsx')
+assert(existsSync(resetPwPagePath), 'SRC83: /reset-password page exists at src/app/reset-password/page.tsx')
+
+// SRC84. View exists.
+const resetPwViewPath = SRC('views/auth/ResetPasswordView.tsx')
+assert(existsSync(resetPwViewPath), 'SRC84: ResetPasswordView exists at src/views/auth/ResetPasswordView.tsx')
+if (existsSync(resetPwViewPath)) {
+  const rpvSrc = readFileSync(resetPwViewPath, 'utf8')
+
+  // SRC85. 2-step flow: 'otp' + 'newPassword'.
+  assert(/'otp'/.test(rpvSrc) || /["']otp["']/.test(rpvSrc), 'SRC85: ResetPasswordView has "otp" step')
+  assert(/'newPassword'/.test(rpvSrc) || /["']newPassword["']/.test(rpvSrc), 'SRC85: ResetPasswordView has "newPassword" step')
+
+  // SRC86. Calls /api/auth/reset-password/verify-otp.
+  assert(/\/api\/auth\/reset-password\/verify-otp/.test(rpvSrc), 'SRC86: ResetPasswordView calls /api/auth/reset-password/verify-otp')
+
+  // SRC87. Stores grant in state after verify-otp OK.
+  assert(/setGrant/.test(rpvSrc), 'SRC87: ResetPasswordView stores grant in state via setGrant')
+
+  // SRC88. Calls /api/auth/reset-password to submit new password.
+  assert(/\/api\/auth\/reset-password['"]/.test(rpvSrc), 'SRC88: ResetPasswordView calls /api/auth/reset-password to submit new password')
+
+  // SRC89. Shows password + confirm password inputs in step 2.
+  assert(/newPassword/.test(rpvSrc) && /confirmPassword/.test(rpvSrc), 'SRC89: ResetPasswordView has newPassword + confirmPassword inputs')
+
+  // SRC90. Shows success state.
+  assert(/'success'/.test(rpvSrc) || /["']success["']/.test(rpvSrc), 'SRC90: ResetPasswordView has "success" step')
+
+  // SRC91. Validates newPassword.length >= 6 + matches confirm.
+  assert(/newPassword\.length\s*<\s*6/.test(rpvSrc), 'SRC91: ResetPasswordView validates newPassword.length >= 6')
+  assert(/newPassword\s*!==\s*confirmPassword/.test(rpvSrc), 'SRC91: ResetPasswordView validates newPassword matches confirmPassword')
+}
+
+// SRC92. ForgotPasswordView has a link to /reset-password.
+const fpvSrc2 = readFileSync(forgotPwViewPath, 'utf8')
+assert(/\/reset-password/.test(fpvSrc2), 'SRC92: ForgotPasswordView has a link to /reset-password')
+assert(/Saya sudah punya kode/.test(fpvSrc2), 'SRC92: ForgotPasswordView has "Saya sudah punya kode" link text')
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 
 console.log('\n────────────────────────────────────────')
-console.log(`OTP domain + Stages 2-5 (register/send-otp/verify-otp/login/forgot-password): ${pass} passed, ${fail} failed`)
+console.log(`OTP domain + Stages 2-6 (register/send-otp/verify-otp/login/forgot-password/reset-grant): ${pass} passed, ${fail} failed`)
 if (fail > 0) {
   console.log('\nFailures:')
   failures.forEach((f) => console.log(`  - ${f}`))
   process.exit(1)
 }
-console.log('All Stage 1 + Stage 2 + Stage 3 + Stage 4 + Stage 5 static assertions passed.')
+console.log('All Stage 1 + Stage 2 + Stage 3 + Stage 4 + Stage 5 + Stage 6 static assertions passed.')
 process.exit(0)
