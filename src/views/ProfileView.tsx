@@ -6,7 +6,6 @@ import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -15,7 +14,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog'
-import { User, PawPrint, Plus, Pencil, Trash2, Mail, Phone, ShoppingBag } from 'lucide-react'
+import { PawPrint, Plus, Pencil, Trash2, Mail, Phone, ShoppingBag, ChevronRight, CheckCircle2, LockKeyhole, LogOut } from 'lucide-react'
 import { PetType } from '@/hooks/use-fetch'
 import { toast } from 'sonner'
 
@@ -30,7 +29,7 @@ interface PetProfile {
 }
 
 export function ProfileView() {
-  const { user, loading } = useAuth()
+  const { user, loading, logout } = useAuth()
   const { navigate } = useHashRouter()
   const [petProfiles, setPetProfiles] = useState<PetProfile[]>([])
   const [petTypes, setPetTypes] = useState<PetType[]>([])
@@ -78,91 +77,72 @@ export function ProfileView() {
   }
 
   return (
-    <div className="container-page py-6">
-      <h1 className="mb-6 text-2xl font-bold md:text-3xl">Profil Saya</h1>
+    <div className="container-page py-7 pb-10 sm:py-10">
+      <div className="mx-auto max-w-4xl">
+        <div className="mb-7">
+          <p className="text-sm font-semibold text-primary">Ruang personal Anda</p>
+          <h1 className="mt-1 text-2xl font-bold md:text-3xl">Akun Saya</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Kelola pesanan dan profil hewan kesayangan dalam satu tempat.</p>
+        </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        {/* User info card */}
-        <Card className="p-6 md:col-span-1">
-          <div className="flex flex-col items-center text-center">
-            <div className="flex h-20 w-20 items-center justify-center rounded-full gradient-brand text-3xl font-bold text-white">
-              {user.name.charAt(0)}
-            </div>
-            <h2 className="mt-3 text-lg font-bold">{user.name}</h2>
-            <Badge variant="outline" className="mt-1">
-              {user.role === 'ADMIN' ? 'Administrator' : 'Pelanggan'}
-            </Badge>
-
-            <div className="mt-4 w-full space-y-2 border-t border-border pt-4 text-left text-sm">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Mail className="h-4 w-4" /> <span className="text-foreground">{user.email}</span>
+        <section className="relative overflow-hidden rounded-2xl bg-card p-5 shadow-sm ring-1 ring-border/70 sm:p-7">
+          <div className="absolute -right-12 -top-16 h-40 w-40 rounded-full bg-primary/10 blur-2xl" />
+          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl gradient-brand text-2xl font-bold text-white shadow-sm">
+                {user.name.charAt(0).toUpperCase()}
               </div>
-              {user.phone && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Phone className="h-4 w-4" /> <span className="text-foreground">{user.phone}</span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-xl font-bold">{user.name}</h2>
+                  {user.emailVerifiedAt ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-success"><CheckCircle2 className="size-3.5" /> Terverifikasi</span>
+                  ) : <ResendVerificationButton />}
                 </div>
-              )}
-              {/* Verified Identity V1 — show verification status. */}
-              <div className="flex items-center gap-2 text-muted-foreground">
-                {user.emailVerifiedAt ? (
-                  <>
-                    <Badge variant="default" className="bg-green-600 hover:bg-green-600 text-white">
-                      Terverifikasi
-                    </Badge>
-                    {user.provider === 'GOOGLE' && (
-                      <span className="text-xs text-muted-foreground">via Google</span>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <Badge variant="destructive">
-                      Belum terverifikasi
-                    </Badge>
-                    <ResendVerificationButton />
-                  </>
-                )}
+                <p className="mt-1 text-sm text-muted-foreground">Pelanggan Anima Companion</p>
+                <div className="mt-3 flex flex-col gap-1 text-sm text-foreground/80 sm:flex-row sm:gap-4">
+                  <span className="inline-flex items-center gap-2"><Mail className="size-3.5 text-muted-foreground" /> {user.email}</span>
+                  {user.phone && <span className="inline-flex items-center gap-2"><Phone className="size-3.5 text-muted-foreground" /> {maskPhone(user.phone)}</span>}
+                </div>
               </div>
             </div>
-
-            <Button
-              variant="outline"
-              className="mt-4 w-full gap-2"
-              onClick={() => navigate('/orders')}
-            >
-              <ShoppingBag className="h-4 w-4" /> Riwayat Pesanan
-            </Button>
+            <p className="text-xs text-muted-foreground sm:max-w-[10rem] sm:text-right">Data profil saat ini tersimpan aman di akun Anda.</p>
           </div>
-        </Card>
+        </section>
 
-        {/* Pet profiles */}
-        <Card className="p-6 md:col-span-2">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-lg font-semibold">
-              <PawPrint className="h-5 w-5 text-primary" /> Hewan Peliharaan Saya
-            </h2>
-            <Button size="sm" onClick={openAddPet} className="gap-1">
-              <Plus className="h-4 w-4" /> Tambah
-            </Button>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          <button onClick={() => navigate('/orders')} className="group flex items-center justify-between rounded-xl bg-accent/55 p-4 text-left transition-colors hover:bg-accent">
+            <span className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-xl bg-primary/12 text-primary"><ShoppingBag className="size-5" /></span><span><span className="block text-sm font-semibold">Pesanan</span><span className="block text-xs text-muted-foreground">Lihat riwayat belanja</span></span></span>
+            <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+          </button>
+          <button onClick={() => document.getElementById('pet-profiles')?.scrollIntoView({ behavior: 'smooth' })} className="group flex items-center justify-between rounded-xl bg-accent/55 p-4 text-left transition-colors hover:bg-accent">
+            <span className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-xl bg-secondary/10 text-secondary"><PawPrint className="size-5" /></span><span><span className="block text-sm font-semibold">Hewan Saya</span><span className="block text-xs text-muted-foreground">Personalisasi kebutuhan mereka</span></span></span>
+            <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+          </button>
+        </div>
+
+        <section id="pet-profiles" className="mt-10 scroll-mt-24">
+          <div className="mb-4 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Profil hewan</p>
+              <h2 className="mt-1 flex items-center gap-2 text-xl font-bold"><PawPrint className="size-5 text-primary" /> Hewan Saya</h2>
+            </div>
+            <Button size="sm" variant="outline" onClick={openAddPet} className="gap-1.5 rounded-lg"><Plus className="size-4" /> Tambah</Button>
           </div>
 
           {petProfiles.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-10 text-center">
-              <div className="mb-3 text-4xl">🐾</div>
-              <p className="text-sm font-medium">Belum ada hewan peliharaan</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Tambahkan profil hewan Anda untuk pengalaman belanja yang lebih personal
-              </p>
-              <Button size="sm" onClick={openAddPet} className="mt-3 gap-1">
-                <Plus className="h-4 w-4" /> Tambah Hewan
-              </Button>
+            <div className="flex items-center gap-4 rounded-2xl border border-dashed border-border bg-card/55 px-5 py-6">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-2xl">🐾</div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">Belum ada profil hewan</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">Tambahkan profil untuk membantu kami menyesuaikan pengalaman belanja.</p>
+              </div>
+              <Button size="sm" onClick={openAddPet} className="ml-auto shrink-0 gap-1"><Plus className="size-4" /> Tambah</Button>
             </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {petProfiles.map((pet) => (
-                <div
-                  key={pet.id}
-                  className="rounded-xl border border-border bg-background p-4 transition-colors hover:border-primary/30"
-                >
+                <div key={pet.id} className="rounded-2xl bg-card p-4 ring-1 ring-border/70 transition-shadow hover:shadow-sm">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
                       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -199,7 +179,31 @@ export function ProfileView() {
               ))}
             </div>
           )}
-        </Card>
+        </section>
+
+        <section className="mt-10 border-t border-border/70 pt-7">
+          <div className="mb-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Pengaturan</p>
+            <h2 className="mt-1 text-xl font-bold">Akun & keamanan</h2>
+          </div>
+          <div className="divide-y divide-border/70 rounded-2xl bg-card px-4 ring-1 ring-border/70">
+            {user.provider === 'PASSWORD' && (
+              <button onClick={() => navigate('/forgot-password')} className="group flex min-h-14 w-full items-center gap-3 text-left">
+                <LockKeyhole className="size-4 text-muted-foreground" />
+                <span className="flex-1"><span className="block text-sm font-semibold">Ubah password</span><span className="block text-xs text-muted-foreground">Kirim kode reset ke email akun</span></span>
+                <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+              </button>
+            )}
+            <div className="flex min-h-14 items-center gap-3">
+              <CheckCircle2 className="size-4 text-success" />
+              <span className="flex-1"><span className="block text-sm font-semibold">Status email</span><span className="block text-xs text-muted-foreground">{user.emailVerifiedAt ? 'Email terverifikasi' : 'Email belum terverifikasi'}</span></span>
+            </div>
+            <button onClick={() => logout()} className="flex min-h-14 w-full items-center gap-3 text-left text-destructive">
+              <LogOut className="size-4" />
+              <span className="text-sm font-semibold">Keluar dari akun</span>
+            </button>
+          </div>
+        </section>
       </div>
 
       <PetProfileDialog
@@ -211,6 +215,11 @@ export function ProfileView() {
       />
     </div>
   )
+}
+
+function maskPhone(phone: string) {
+  if (phone.length < 7) return phone
+  return `${phone.slice(0, 4)}••••${phone.slice(-3)}`
 }
 
 function PetProfileDialog({
