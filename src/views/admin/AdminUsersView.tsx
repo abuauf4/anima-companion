@@ -24,9 +24,13 @@ import {
   Lock,
   Eye,
   EyeOff,
+  MoreHorizontal,
+  Users,
+  Clock3,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { PERMISSION_KEYS } from '@/lib/admin-permissions'
+import { AdminActionMenu, AdminEmptyState, AdminStatusBadge } from '@/components/admin/AdminListPrimitives'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
 // ============================================================================
 // AdminUsersView — Developer-only "Setting User Admin" management screen.
@@ -71,6 +75,36 @@ interface AdminRow {
   permissions: string[]
 }
 
+const PERMISSION_GROUPS = [
+  { label: 'Dashboard', keys: ['dashboard.view'] },
+  { label: 'Produk', keys: ['products.view', 'products.manage'] },
+  { label: 'Kategori', keys: ['categories.view', 'categories.manage'] },
+  { label: 'Pesanan', keys: ['orders.view', 'orders.manage'] },
+  { label: 'Pelanggan', keys: ['customers.view', 'customers.export'] },
+  { label: 'Banner', keys: ['banners.view', 'banners.manage'] },
+  { label: 'Testimoni', keys: ['testimonials.view', 'testimonials.manage'] },
+  { label: 'FAQ', keys: ['faqs.view', 'faqs.manage'] },
+  { label: 'Voucher', keys: ['vouchers.view', 'vouchers.manage'] },
+  { label: 'Pengaturan', keys: ['settings.view', 'settings.manage'] },
+] as const
+
+const permissionLabels: Record<string, string> = {
+  'dashboard.view': 'Lihat',
+  'products.view': 'Lihat', 'products.manage': 'Kelola',
+  'categories.view': 'Lihat', 'categories.manage': 'Kelola',
+  'orders.view': 'Lihat', 'orders.manage': 'Kelola',
+  'customers.view': 'Lihat', 'customers.export': 'Export',
+  'banners.view': 'Lihat', 'banners.manage': 'Kelola',
+  'testimonials.view': 'Lihat', 'testimonials.manage': 'Kelola',
+  'faqs.view': 'Lihat', 'faqs.manage': 'Kelola',
+  'vouchers.view': 'Lihat', 'vouchers.manage': 'Kelola',
+  'settings.view': 'Lihat', 'settings.manage': 'Kelola',
+}
+
+function formatLastLogin(value: string | null) {
+  return value ? new Date(value).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Belum pernah login'
+}
+
 export function AdminUsersView() {
   const [admins, setAdmins] = useState<AdminRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -96,28 +130,25 @@ export function AdminUsersView() {
   }, [refresh])
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Setting User Admin</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Kelola akun admin internal. Hanya Developer yang dapat mengakses halaman ini.
-          </p>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border/70 pb-4">
+        <div className="min-w-0">
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">Developer control panel</p>
+          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">User Admin</h1>
+          <p className="mt-1 max-w-xl text-sm text-muted-foreground">Kelola akun dan akses internal Anima Companion.</p>
         </div>
         <CreateAdminDialog onCreated={refresh} />
       </div>
 
       {loading ? (
-        <Card className="p-8 text-center text-muted-foreground">Memuat...</Card>
+        <div className="space-y-2" aria-label="Memuat daftar admin">
+          {[1, 2].map((item) => <Card key={item} className="h-24 animate-pulse border-border/60 bg-muted/20 shadow-none" />)}
+        </div>
       ) : admins.length === 0 ? (
-        <Card className="p-8 text-center text-muted-foreground">
-          Belum ada admin. Buat admin pertama atau jalankan seed untuk bootstrap Developer.
-        </Card>
+        <AdminEmptyState icon={<Users className="h-6 w-6" />} title="Belum ada akun admin" description="Buat akun admin internal untuk membagi akses operasional Anima Companion." action={<CreateAdminDialog onCreated={refresh} />} />
       ) : (
-        <div className="space-y-3">
-          {admins.map((admin) => (
-            <AdminRowCard key={admin.id} admin={admin} onChanged={refresh} />
-          ))}
+        <div className="space-y-2.5">
+          {admins.map((admin) => <AdminRowCard key={admin.id} admin={admin} onChanged={refresh} />)}
         </div>
       )}
     </div>
@@ -130,50 +161,77 @@ export function AdminUsersView() {
 
 function AdminRowCard({ admin, onChanged }: { admin: AdminRow; onChanged: () => void }) {
   const isDeveloper = admin.systemRole === 'DEVELOPER'
+  const permissionSummary = isDeveloper
+    ? 'Full system access'
+    : admin.permissions.slice(0, 4).map((key) => key.split('.')[0]).filter((value, index, all) => all.indexOf(value) === index).map((value) => value.charAt(0).toUpperCase() + value.slice(1)).join(' • ') || 'Belum ada akses'
+
+  const actions = isDeveloper ? [] : [
+    { label: 'Edit admin', onSelect: () => document.getElementById(`edit-admin-${admin.id}`)?.click() },
+    { label: 'Atur akses', onSelect: () => document.getElementById(`permissions-admin-${admin.id}`)?.click() },
+    { label: 'Reset password', onSelect: () => document.getElementById(`reset-admin-${admin.id}`)?.click() },
+    { label: admin.isActive ? 'Nonaktifkan' : 'Aktifkan', onSelect: () => document.getElementById(`toggle-admin-${admin.id}`)?.click(), destructive: admin.isActive },
+  ]
 
   return (
-    <Card className="p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <Card className="border-border/70 p-3 shadow-none transition-colors hover:border-primary/30 hover:bg-muted/15 sm:p-4">
+      <div className="flex items-start gap-3">
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold ${isDeveloper ? 'bg-primary/10 text-primary' : 'bg-secondary/10 text-secondary'}`}>
+          {admin.displayName.slice(0, 1).toUpperCase()}
+        </div>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold">{admin.displayName}</span>
-            {isDeveloper ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                <ShieldCheck className="h-3 w-3" /> Developer
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 rounded-full bg-secondary/10 px-2 py-0.5 text-xs font-semibold text-secondary">
-                <Lock className="h-3 w-3" /> Admin
-              </span>
-            )}
-            {!admin.isActive && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive">
-                <PowerOff className="h-3 w-3" /> Nonaktif
-              </span>
-            )}
-            {admin.mustChangePassword && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
-                <ShieldAlert className="h-3 w-3" /> Wajib ganti password
-              </span>
-            )}
+          <div className="flex min-w-0 items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate font-semibold">{admin.displayName}</p>
+              <p className="truncate text-sm text-muted-foreground">@{admin.username}</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              {isDeveloper ? <AdminStatusBadge tone="info"><ShieldCheck className="mr-1 h-3 w-3" /> Developer</AdminStatusBadge> : <AdminStatusBadge tone="neutral"><Lock className="mr-1 h-3 w-3" /> Admin</AdminStatusBadge>}
+              <span className="hidden sm:inline-flex"><AdminActionMenu items={actions} /></span>
+            </div>
           </div>
-          <div className="mt-1 text-sm text-muted-foreground">
-            @{admin.username} · {admin.permissions.length} permission
-            {admin.permissions.length !== 1 ? 's' : ''}
-            {admin.lastLoginAt && (
-              <> · Login terakhir: {new Date(admin.lastLoginAt).toLocaleString('id-ID')}</>
-            )}
+          <div className="mt-3 grid gap-2 text-xs sm:grid-cols-[1fr_auto] sm:items-end">
+            <div>
+              <p className="mb-1 font-medium text-muted-foreground">Akses</p>
+              <p className="truncate text-foreground">{permissionSummary}</p>
+            </div>
+            <div className="sm:text-right">
+              <p className="mb-1 font-medium text-muted-foreground">Terakhir login</p>
+              <p className="inline-flex items-center gap-1 text-foreground"><Clock3 className="h-3 w-3 text-muted-foreground" /> {formatLastLogin(admin.lastLoginAt)}</p>
+            </div>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <AdminStatusBadge tone={admin.isActive ? 'success' : 'danger'}>{admin.isActive ? 'Aktif' : 'Nonaktif'}</AdminStatusBadge>
+            {admin.mustChangePassword && <AdminStatusBadge tone="warning"><ShieldAlert className="mr-1 h-3 w-3" /> Wajib ganti password</AdminStatusBadge>}
           </div>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <EditAdminDialog admin={admin} disabled={isDeveloper} onChanged={onChanged} />
-          <PermissionsDialog admin={admin} disabled={isDeveloper} onChanged={onChanged} />
-          <ResetPasswordDialog admin={admin} disabled={isDeveloper} onDone={onChanged} />
-          <ToggleActiveButton admin={admin} disabled={isDeveloper} onChanged={onChanged} />
-        </div>
+        {!isDeveloper && <div className="sm:hidden"><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Aksi untuk ${admin.displayName}`}><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">{actions.map((action) => <DropdownMenuItem key={action.label} onSelect={action.onSelect} className={action.destructive ? 'text-destructive focus:text-destructive' : ''}>{action.label}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu></div>}
       </div>
+      <div className="hidden"><EditAdminDialog admin={admin} disabled={isDeveloper} onChanged={onChanged} /><PermissionsDialog admin={admin} disabled={isDeveloper} onChanged={onChanged} /><ResetPasswordDialog admin={admin} disabled={isDeveloper} onDone={onChanged} /><ToggleActiveButton admin={admin} disabled={isDeveloper} onChanged={onChanged} /></div>
     </Card>
+  )
+}
+
+function PermissionGroup({
+  label,
+  keys,
+  selected,
+  onToggle,
+}: {
+  label: string
+  keys: readonly string[]
+  selected: Set<string>
+  onToggle: (key: string) => void
+}) {
+  return (
+    <div className="rounded-md border border-border/60 bg-background p-2.5">
+      <p className="mb-2 text-xs font-semibold">{label}</p>
+      <div className="space-y-1">
+        {keys.map((key) => <label key={key} className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-1.5 text-sm transition-colors hover:bg-muted/60">
+          <Checkbox checked={selected.has(key)} onCheckedChange={() => onToggle(key)} />
+          <span>{permissionLabels[key] || 'Akses'}</span>
+        </label>)}
+      </div>
+    </div>
   )
 }
 
@@ -244,7 +302,7 @@ function CreateAdminDialog({ onCreated }: { onCreated: () => void }) {
           <Plus className="mr-2 h-4 w-4" /> Buat Admin
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[min(92vh,760px)] overflow-y-auto p-4 sm:max-w-lg sm:p-6">
         <DialogHeader>
           <DialogTitle>Buat Admin Baru</DialogTitle>
         </DialogHeader>
@@ -298,21 +356,13 @@ function CreateAdminDialog({ onCreated }: { onCreated: () => void }) {
               Admin wajib mengganti password ini saat login pertama.
             </p>
           </div>
-          <div>
-            <Label>Permission Awal (opsional)</Label>
-            <p className="mb-2 mt-1 text-xs text-muted-foreground">
-              Developer bypass semua permission. Pilih permission untuk Admin ini.
-            </p>
-            <div className="grid max-h-48 grid-cols-1 gap-2 overflow-y-auto rounded-lg border border-border p-3 sm:grid-cols-2">
-              {PERMISSION_KEYS.map((key) => (
-                <label key={key} className="flex items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={selectedPermissions.has(key)}
-                    onCheckedChange={() => togglePermission(key)}
-                  />
-                  <span className="font-mono text-xs">{key}</span>
-                </label>
-              ))}
+          <div className="rounded-lg border border-border/70 bg-muted/10 p-3">
+            <div className="mb-3 flex items-start gap-2">
+              <ShieldCheck className="mt-0.5 h-4 w-4 text-primary" />
+              <div><p className="text-sm font-medium">Akses awal</p><p className="text-xs text-muted-foreground">Pilih area yang dapat dikelola admin ini.</p></div>
+            </div>
+            <div className="grid max-h-64 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+              {PERMISSION_GROUPS.map((group) => <PermissionGroup key={group.label} label={group.label} keys={group.keys} selected={selectedPermissions} onToggle={togglePermission} />)}
             </div>
           </div>
           <DialogFooter>
@@ -374,11 +424,11 @@ function EditAdminDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" disabled={disabled}>
+        <Button id={`edit-admin-${admin.id}`} variant="outline" size="sm" disabled={disabled}>
           Edit
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="p-4 sm:max-w-md sm:p-6">
         <DialogHeader>
           <DialogTitle>Edit Admin</DialogTitle>
         </DialogHeader>
@@ -466,11 +516,11 @@ function PermissionsDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" disabled={disabled}>
+        <Button id={`permissions-admin-${admin.id}`} variant="outline" size="sm" disabled={disabled}>
           Permission
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[min(92vh,760px)] overflow-y-auto p-4 sm:max-w-lg sm:p-6">
         <DialogHeader>
           <DialogTitle>Permission: {admin.displayName}</DialogTitle>
         </DialogHeader>
@@ -478,16 +528,8 @@ function PermissionsDialog({
           <p className="text-sm text-muted-foreground">
             Pilih permission untuk admin ini. Developer bypass semua permission.
           </p>
-          <div className="grid grid-cols-1 gap-2 rounded-lg border border-border p-3 sm:grid-cols-2">
-            {PERMISSION_KEYS.map((key) => (
-              <label key={key} className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={selected.has(key)}
-                  onCheckedChange={() => toggle(key)}
-                />
-                <span className="font-mono text-xs">{key}</span>
-              </label>
-            ))}
+          <div className="grid gap-2 sm:grid-cols-2">
+            {PERMISSION_GROUPS.map((group) => <PermissionGroup key={group.label} label={group.label} keys={group.keys} selected={selected} onToggle={toggle} />)}
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={loading}>
@@ -554,11 +596,11 @@ function ResetPasswordDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" disabled={disabled}>
+        <Button id={`reset-admin-${admin.id}`} variant="outline" size="sm" disabled={disabled}>
           <KeyRound className="mr-1 h-3.5 w-3.5" /> Reset Password
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="p-4 sm:max-w-md sm:p-6">
         <DialogHeader>
           <DialogTitle>Reset Password: {admin.displayName}</DialogTitle>
         </DialogHeader>
@@ -617,6 +659,7 @@ function ToggleActiveButton({
   const [loading, setLoading] = useState(false)
 
   const handleToggle = async () => {
+    if (admin.isActive && !window.confirm(`Nonaktifkan akun ${admin.displayName}? Akun ini tidak dapat masuk sampai diaktifkan kembali.`)) return
     setLoading(true)
     try {
       const res = await fetch(`/api/admin/users/${admin.id}`, {
@@ -637,6 +680,7 @@ function ToggleActiveButton({
 
   return (
     <Button
+      id={`toggle-admin-${admin.id}`}
       variant={admin.isActive ? 'destructive' : 'default'}
       size="sm"
       disabled={disabled || loading}
