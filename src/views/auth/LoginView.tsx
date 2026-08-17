@@ -7,10 +7,10 @@ import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card } from '@/components/ui/card'
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
+import { Logo } from '@/components/layout/Logo'
 
 // Demo-credential helpers are only available when Next.js is running in
 // development mode. In production builds, `process.env.NODE_ENV === 'production'`
@@ -105,36 +105,40 @@ export function LoginView() {
   }
 
   return (
-    <div className="container-page flex min-h-[80vh] items-center justify-center py-10">
-      <div className="w-full max-w-md">
-        <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl gradient-brand text-white text-xl font-bold">
-            A
+    <div className="gradient-mesh flex min-h-[calc(100vh-9rem)] items-center py-8 sm:py-12">
+      <div className="container-page">
+        <div className="mx-auto w-full max-w-[27rem]">
+          <div className="mb-6 text-center">
+            <Logo className="mx-auto" />
+            <div className="mt-6 flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+              <ShieldCheck className="size-3.5" /> Akun Anima Companion
+            </div>
+            <h1 className="mt-3 text-2xl font-bold sm:text-[1.75rem]">Masuk ke Anima Companion</h1>
+            <p className="mx-auto mt-2 max-w-xs text-sm leading-6 text-muted-foreground">
+              Simpan kebutuhan si kecil dan lanjutkan belanja dengan lebih nyaman.
+            </p>
           </div>
-          <h1 className="text-2xl font-bold">Masuk ke Akun Anda</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Selamat datang kembali di Anima Companion
-          </p>
-        </div>
 
-        <Card className="p-6">
+          <div className="rounded-2xl bg-card/90 p-5 shadow-[0_16px_50px_-24px_oklch(0.18_0.02_30_/_0.28)] ring-1 ring-border/70 backdrop-blur-sm sm:p-6">
           {/* Google Sign-In — hidden when Google OAuth is not configured
               (the GoogleSignInButton component returns null in that case).
               Uses the SAME safeInternalPath() open-redirect defense as the
               password flow for the `?next=` parameter. */}
           <div className="space-y-3">
-            <GoogleSignInButton label="Masuk dengan Google" />
+            <div className="rounded-xl bg-accent/45 p-1">
+              <GoogleSignInButton label="Lanjutkan dengan Google" />
+            </div>
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t border-border" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">atau</span>
+                <span className="bg-card px-3 text-[11px] font-medium text-muted-foreground">atau lanjut dengan email</span>
               </div>
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="mt-5 space-y-4">
             <div>
               <Label htmlFor="email">Email</Label>
               <div className="relative mt-1.5">
@@ -178,7 +182,7 @@ export function LoginView() {
                 where the user enters their email to receive a PASSWORD_RESET
                 OTP. Anti-enumeration: the server always returns { sent: true }
                 whether or not the email exists. */}
-            <div className="flex justify-end">
+            <div className="-mt-1 flex justify-end">
               <button
                 type="button"
                 onClick={() => navigate('/forgot-password')}
@@ -188,7 +192,7 @@ export function LoginView() {
               </button>
             </div>
 
-            <Button type="submit" className="w-full" size="lg" disabled={loading}>
+            <Button type="submit" className="mt-1 h-11 w-full rounded-xl" size="lg" disabled={loading}>
               {loading ? (
                 <>
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -202,11 +206,11 @@ export function LoginView() {
 
           <p className="mt-4 text-center text-sm text-muted-foreground">
             Belum punya akun?{' '}
-            <button onClick={() => navigate('/register')} className="font-medium text-primary hover:underline">
-              Daftar sekarang
+            <button onClick={() => navigate('/register')} className="font-semibold text-primary hover:underline">
+              Daftar
             </button>
           </p>
-        </Card>
+          </div>
 
         {/* Demo credentials — DEVELOPMENT ONLY.
             Gated by process.env.NODE_ENV (inlined at build time). In production
@@ -214,7 +218,7 @@ export function LoginView() {
             tree-shaken out of the client bundle, so the demo email/password
             strings can never appear in production. */}
         {SHOW_DEMO_CREDENTIALS && (
-          <Card className="mt-4 bg-accent/50 p-4">
+          <div className="mt-4 rounded-xl border border-dashed border-border/80 bg-card/60 p-4">
             <p className="mb-2 text-xs font-medium text-muted-foreground">Akun Demo (klik untuk isi otomatis):</p>
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -232,8 +236,9 @@ export function LoginView() {
                 <p className="text-muted-foreground">budi@example.com</p>
               </button>
             </div>
-          </Card>
+          </div>
         )}
+        </div>
       </div>
     </div>
   )

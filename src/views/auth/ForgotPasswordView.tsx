@@ -5,7 +5,7 @@ import { useHashRouter } from '@/lib/router'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card } from '@/components/ui/card'
+import { AuthShell } from '@/components/auth/AuthShell'
 import { Mail, ArrowLeft, Loader2, RefreshCw, CheckCircle2 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -132,19 +132,16 @@ export function ForgotPasswordView() {
   }
 
   return (
-    <div className="container-page flex min-h-[80vh] items-center justify-center py-10">
-      <div className="w-full max-w-md">
-        <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl gradient-brand text-white text-xl font-bold">
-            A
-          </div>
-          <h1 className="text-2xl font-bold">Lupa Password</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Masukkan email Anda — kami akan mengirim kode reset password
-          </p>
-        </div>
-
-        <Card className="p-6">
+    <AuthShell
+      title="Lupa password"
+      description="Masukkan email Anda dan kami akan mengirim kode reset password."
+      footer={(
+        <p className="mt-4 text-center text-xs text-muted-foreground">
+          Ingat password Anda?{' '}
+          <button onClick={() => navigate('/login')} className="font-semibold text-primary hover:underline">Masuk</button>
+        </p>
+      )}
+    >
           {!sent ? (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -242,15 +239,6 @@ export function ForgotPasswordView() {
               Kembali ke login
             </Button>
           </div>
-        </Card>
-
-        <p className="mt-4 text-center text-xs text-muted-foreground">
-          Ingat password Anda?{' '}
-          <button onClick={() => navigate('/login')} className="font-medium text-primary hover:underline">
-            Masuk di sini
-          </button>
-        </p>
-      </div>
-    </div>
+        </AuthShell>
   )
 }

@@ -7,8 +7,8 @@ import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card } from '@/components/ui/card'
 import { Mail, Lock, User, Phone, Eye, EyeOff } from 'lucide-react'
+import { AuthShell } from '@/components/auth/AuthShell'
 import { toast } from 'sonner'
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
 
@@ -91,33 +91,28 @@ export function RegisterView() {
   }
 
   return (
-    <div className="container-page flex min-h-[80vh] items-center justify-center py-10">
-      <div className="w-full max-w-md">
-        <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl gradient-brand text-white text-xl font-bold">
-            A
+    <AuthShell
+      title="Buat akun Anima Companion"
+      description="Simpan kebutuhan si kecil dan dapatkan pengalaman belanja yang lebih personal."
+      compact
+      footer={(
+        <p className="mt-4 text-center text-xs leading-5 text-muted-foreground">
+          Dengan mendaftar, Anda menyetujui Syarat & Ketentuan dan Kebijakan Privasi kami.
+        </p>
+      )}
+    >
+      {/* Google Sign-Up — same as LoginView, hidden when unconfigured. */}
+      <div className="space-y-3">
+        <GoogleSignInButton label="Daftar dengan Google" />
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-card px-3 text-[11px] font-medium text-muted-foreground">atau daftar dengan email</span>
           </div>
-          <h1 className="text-2xl font-bold">Buat Akun Baru</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Daftar untuk pengalaman belanja yang lebih baik
-          </p>
         </div>
+      </div>
 
-        <Card className="p-6">
-          {/* Google Sign-Up — same as LoginView, hidden when unconfigured. */}
-          <div className="space-y-3">
-            <GoogleSignInButton label="Daftar dengan Google" />
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-border" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">atau</span>
-              </div>
-            </div>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="mt-5 space-y-4">
             <div>
               <Label htmlFor="name">Nama Lengkap <span className="text-destructive">*</span></Label>
               <div className="relative mt-1.5">
@@ -218,16 +213,10 @@ export function RegisterView() {
 
           <p className="mt-4 text-center text-sm text-muted-foreground">
             Sudah punya akun?{' '}
-            <button onClick={() => navigate('/login')} className="font-medium text-primary hover:underline">
-              Masuk di sini
+            <button onClick={() => navigate('/login')} className="font-semibold text-primary hover:underline">
+              Masuk
             </button>
           </p>
-        </Card>
-
-        <p className="mt-4 text-center text-xs text-muted-foreground">
-          Dengan mendaftar, Anda menyetujui Syarat & Ketentuan dan Kebijakan Privasi kami.
-        </p>
-      </div>
-    </div>
+        </AuthShell>
   )
 }
