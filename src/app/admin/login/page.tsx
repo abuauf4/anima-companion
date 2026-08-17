@@ -41,7 +41,7 @@ export default async function AdminLoginPage({ searchParams }: SearchParams) {
   }
 
   return (
-    <SiteShell>
+    <SiteShell admin>
       <AdminLoginView next={next} />
     </SiteShell>
   )

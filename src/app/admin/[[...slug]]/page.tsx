@@ -55,7 +55,7 @@ export default async function AdminPage({ params }: Params) {
 
   if (!admin) {
     return (
-      <SiteShell>
+      <SiteShell admin>
         <AdminLoginRequiredView />
       </SiteShell>
     )
@@ -66,7 +66,7 @@ export default async function AdminPage({ params }: Params) {
   }
 
   return (
-    <SiteShell>
+    <SiteShell admin>
       <AdminLayout section={section} />
     </SiteShell>
   )

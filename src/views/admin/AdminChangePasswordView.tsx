@@ -90,10 +90,10 @@ export function AdminChangePasswordView({
   }
 
   return (
-    <div className="container-page flex min-h-[80vh] items-center justify-center py-10">
-      <div className="w-full max-w-md">
+    <div className="admin-login-page flex min-h-screen items-center justify-center px-4 py-8">
+      <div className="w-full max-w-[420px]">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl gradient-brand text-white">
+          <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-foreground text-background">
             {mustChangePassword ? <ShieldAlert className="h-6 w-6" /> : <ShieldCheck className="h-6 w-6" />}
           </div>
           <h1 className="text-2xl font-bold">
@@ -116,7 +116,7 @@ export function AdminChangePasswordView({
           </div>
         )}
 
-        <Card className="p-6">
+        <Card className="border-border/70 p-6 shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <Label htmlFor="currentPassword">Password Saat Ini</Label>

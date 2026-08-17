@@ -87,19 +87,20 @@ export function AdminLoginView({ next }: { next?: string }) {
   }
 
   return (
-    <div className="container-page flex min-h-[80vh] items-center justify-center py-10">
-      <div className="w-full max-w-md">
-        <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl gradient-brand text-white">
-            <ShieldCheck className="h-6 w-6" />
+    <div className="admin-login-page flex min-h-screen items-center justify-center px-4 py-8">
+      <div className="w-full max-w-[420px]">
+        <div className="mb-7 text-center">
+          <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-foreground text-background">
+            <ShieldCheck className="h-5 w-5" />
           </div>
-          <h1 className="text-2xl font-bold">Admin Anima Companion</h1>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-secondary">ANIMA · ADMIN CONSOLE</p>
+          <h1 className="mt-2 text-2xl font-bold">Masuk ke panel internal</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Login khusus admin internal
           </p>
         </div>
 
-        <Card className="p-6">
+        <Card className="border-border/70 p-6 shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <Label htmlFor="username">Username</Label>

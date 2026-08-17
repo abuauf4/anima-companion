@@ -6,16 +6,11 @@ import { Footer } from '@/components/layout/Footer'
 import { WhatsAppFloatingButton } from '@/components/layout/WhatsAppFloatingButton'
 import { MobileBottomBar } from '@/components/layout/MobileBottomBar'
 
-/**
- * SiteShell — the public site chrome (AnnouncementBar + Navbar + main + Footer
- * + WhatsApp button + MobileBottomBar).
- *
- * Extracted from the original `src/app/page.tsx` so each App Router page file
- * can wrap its view in the same shared layout.
- *
- * Children are the page-specific view (e.g. <HomeView />).
- */
-export function SiteShell({ children }: { children: React.ReactNode }) {
+export function SiteShell({ children, admin = false }: { children: React.ReactNode; admin?: boolean }) {
+  if (admin) {
+    return <div className="admin-root min-h-screen bg-muted/40">{children}</div>
+  }
+
   return (
     <div className="flex min-h-screen flex-col">
       <AnnouncementBar />

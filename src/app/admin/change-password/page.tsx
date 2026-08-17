@@ -34,7 +34,7 @@ export default async function AdminChangePasswordPage() {
   // Pass mustChangePassword to the view so it can show the forced-change
   // banner (vs the voluntary-change heading).
   return (
-    <SiteShell>
+    <SiteShell admin>
       <AdminChangePasswordView
         mustChangePassword={admin.mustChangePassword}
         displayName={admin.displayName}
