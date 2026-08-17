@@ -70,14 +70,14 @@ export function DashboardView() {
   }))
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col space-y-4 md:space-y-6">
       <div>
-        <p className="text-sm font-semibold text-secondary">Ringkasan hari ini</p>
+        <p className="text-sm font-semibold text-foreground">Ringkasan hari ini</p>
         <p className="mt-1 text-sm text-muted-foreground">Pantau aktivitas toko dan pekerjaan yang perlu ditindaklanjuti.</p>
       </div>
 
-      {/* Stat cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Keep the primary metric prominent while making the supporting stats scan quickly on mobile. */}
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
         <StatCard
           title="Total Pendapatan"
           value={formatRupiah(stats.totalRevenue)}
@@ -85,30 +85,34 @@ export function DashboardView() {
           trend={stats.revenueGrowth}
           trendLabel="vs bulan lalu"
           color="primary"
+          className="col-span-3 sm:col-span-2 lg:col-span-1"
         />
         <StatCard
-          title="Total Pesanan"
+          title="Pesanan"
           value={String(stats.totalOrders)}
           icon={ShoppingCart}
-          subValue={`${stats.pendingOrders} menunggu konfirmasi`}
+          subValue={`${stats.pendingOrders} menunggu`}
           color="secondary"
+          compact
         />
         <StatCard
-          title="Total Pelanggan"
+          title="Pelanggan"
           value={String(stats.totalCustomers)}
           icon={Users}
           color="success"
+          compact
         />
         <StatCard
-          title="Total Produk"
+          title="Produk"
           value={String(stats.totalProducts)}
           icon={Package}
           color="primary"
+          compact
         />
       </div>
 
       {/* Charts */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="order-2 grid gap-4 lg:order-1 lg:gap-6 lg:grid-cols-2">
         {/* Sales by Problem */}
         <Card className="p-6">
           <div className="mb-4 flex items-center justify-between">
@@ -173,7 +177,7 @@ export function DashboardView() {
       </div>
 
       {/* Recent Orders */}
-      <Card className="p-6">
+      <Card className="order-1 p-4 lg:order-2 lg:p-6">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">Pesanan Terbaru</h2>
@@ -224,7 +228,7 @@ export function DashboardView() {
 }
 
 function StatCard({
-  title, value, icon: Icon, trend, trendLabel, subValue, color,
+  title, value, icon: Icon, trend, trendLabel, subValue, color, compact, className,
 }: {
   title: string
   value: string
@@ -233,6 +237,8 @@ function StatCard({
   trendLabel?: string
   subValue?: string
   color: 'primary' | 'secondary' | 'success'
+  compact?: boolean
+  className?: string
 }) {
   const colorClass = {
     primary: 'bg-primary/10 text-primary',
@@ -241,13 +247,13 @@ function StatCard({
   }[color]
 
   return (
-    <Card className="p-5">
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
-          <p className="mt-1 text-2xl font-bold">{value}</p>
+    <Card className={`rounded-lg p-3 shadow-none sm:rounded-xl sm:p-5 sm:shadow-sm ${className || ''}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className={`font-medium text-muted-foreground ${compact ? 'text-[10px] leading-tight sm:text-xs' : 'text-xs uppercase tracking-wide'}`}>{title}</p>
+          <p className={`mt-1 truncate font-bold ${compact ? 'text-xl sm:text-2xl' : 'text-xl sm:text-2xl'}`}>{value}</p>
           {subValue && (
-            <p className="mt-1 text-xs text-muted-foreground">{subValue}</p>
+            <p className={`mt-1 truncate text-muted-foreground ${compact ? 'text-[10px] sm:text-xs' : 'text-xs'}`}>{subValue}</p>
           )}
           {trend !== undefined && (
             <div className="mt-2 flex items-center gap-1 text-xs">
@@ -264,8 +270,8 @@ function StatCard({
             </div>
           )}
         </div>
-        <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${colorClass}`}>
-          <Icon className="h-5 w-5" />
+        <div className={`flex shrink-0 items-center justify-center rounded-lg ${compact ? 'h-7 w-7 sm:h-10 sm:w-10' : 'h-9 w-9 sm:h-10 sm:w-10'} ${colorClass}`}>
+          <Icon className={compact ? 'h-3.5 w-3.5 sm:h-5 sm:w-5' : 'h-4 w-4 sm:h-5 sm:w-5'} />
         </div>
       </div>
     </Card>
