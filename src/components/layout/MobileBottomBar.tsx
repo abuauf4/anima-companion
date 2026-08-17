@@ -5,13 +5,14 @@ import { useHashRouter } from '@/lib/router'
 import { useWishlistStore } from '@/lib/store'
 import { whatsappAdminUrl } from '@/lib/config'
 import { Home, ShoppingBag, User, Menu, Heart, ChevronRight, PawPrint, Shield, MessageCircle } from 'lucide-react'
+import { useAuth } from '@/hooks/use-auth'
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { useAuth } from '@/hooks/use-auth'
+
 
 /**
  * Mobile Bottom Bar — thinner, 5 items.
@@ -24,25 +25,38 @@ export function MobileBottomBar() {
   const { route, navigate } = useHashRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const wishlistCount = useWishlistStore((s) => s.items.length)
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
 
   const isActive = (path: string) => {
     if (path === '/') return route.path === '/'
     return route.segments[0] === path
   }
 
-  const navLinks = [
-    { label: 'Beranda', path: '/', icon: Home },
-    { label: 'Semua Produk', path: '/produk', icon: ShoppingBag },
-    { label: 'Belanja untuk Kucing', path: '/produk?pet=kucing', icon: PawPrint },
-    { label: 'Belanja untuk Anjing', path: '/produk?pet=anjing', icon: PawPrint },
-    { label: 'Shop by Problem', path: '/problem', icon: Shield },
-    { label: 'Konsultasi', path: '/kontak', icon: MessageCircle },
-    { label: 'Wishlist', path: '/wishlist', icon: Heart, badge: wishlistCount },
+  const menuGroups = [
+    {
+      label: 'Belanja',
+      links: [
+        { label: 'Semua Produk', path: '/produk', icon: ShoppingBag },
+        { label: 'Belanja untuk Kucing', path: '/produk?pet=kucing', icon: PawPrint },
+        { label: 'Belanja untuk Anjing', path: '/produk?pet=anjing', icon: PawPrint },
+        { label: 'Shop by Problem', path: '/problem', icon: Shield },
+      ],
+    },
+    {
+      label: 'Jelajah Anima',
+      links: [
+        { label: 'Beranda', path: '/', icon: Home },
+        { label: 'Wishlist', path: '/wishlist', icon: Heart, badge: wishlistCount },
+      ],
+    },
+    {
+      label: 'Bantuan',
+      links: [{ label: 'Konsultasi', path: '/kontak', icon: MessageCircle }],
+    },
   ]
 
   // Hide bottom bar on product detail — sticky CTA bar handles checkout there
-  const isProductDetail = route.segments[0] === 'produk'
+  const isProductDetail = route.segments[0] === 'produk' && route.segments.length > 1
   if (isProductDetail) return null
 
   return (
@@ -54,74 +68,39 @@ export function MobileBottomBar() {
             <SheetTitle>Menu</SheetTitle>
           </SheetHeader>
           <nav className="mt-6 flex flex-col gap-1">
-            {navLinks.map((link) => {
-              const Icon = link.icon
-              return (
-                <button
-                  key={link.path}
-                  onClick={() => {
-                    navigate(link.path)
-                    setSidebarOpen(false)
-                  }}
-                  className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-accent"
-                >
-                  <span className="flex items-center gap-3">
-                    <Icon className="size-4 text-muted-foreground" />
-                    {link.label}
-                    {link.badge && link.badge > 0 ? (
-                      <span className="flex size-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white">
-                        {link.badge}
+            {menuGroups.map((group) => (
+              <div key={group.label} className="mb-5 last:mb-0">
+                <p className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">{group.label}</p>
+                {group.links.map((link) => {
+                  const Icon = link.icon
+                  return (
+                    <button
+                      key={link.path}
+                      onClick={() => {
+                        navigate(link.path)
+                        setSidebarOpen(false)
+                      }}
+                      className="flex min-h-11 w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium hover:bg-accent"
+                    >
+                      <span className="flex items-center gap-3">
+                        <Icon className="size-4 text-muted-foreground" />
+                        {link.label}
+                        {link.badge && link.badge > 0 ? (
+                          <span className="flex size-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white">{link.badge}</span>
+                        ) : null}
                       </span>
-                    ) : null}
-                  </span>
-                  <ChevronRight className="size-4 text-muted-foreground" />
-                </button>
-              )
-            })}
+                      <ChevronRight className="size-4 text-muted-foreground" />
+                    </button>
+                  )
+                })}
+              </div>
+            ))}
 
             <div className="my-2 h-px bg-border" />
 
-            {user ? (
-              <>
-                <button
-                  onClick={() => { navigate('/profile'); setSidebarOpen(false) }}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-accent"
-                >
-                  <User className="size-4 text-muted-foreground" /> Profil Saya
-                </button>
-                <button
-                  onClick={() => { navigate('/orders'); setSidebarOpen(false) }}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-accent"
-                >
-                  <ShoppingBag className="size-4 text-muted-foreground" /> Riwayat Pesanan
-                </button>
-                {/* Admin entry point intentionally removed from public mobile
-                    menu. /admin is the canonical admin entrance and is
-                    server-side protected. Admins navigate to /admin by typing
-                    the URL directly. */}
-                <button
-                  onClick={() => { logout(); setSidebarOpen(false) }}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium text-destructive hover:bg-accent"
-                >
-                  Keluar
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={() => { navigate('/login'); setSidebarOpen(false) }}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-accent"
-                >
-                  <User className="size-4 text-muted-foreground" /> Masuk
-                </button>
-                <button
-                  onClick={() => { navigate('/register'); setSidebarOpen(false) }}
-                  className="flex w-full items-center gap-3 rounded-lg rounded-lg bg-primary px-3 py-3 text-left text-sm font-medium text-primary-foreground"
-                >
-                  Daftar
-                </button>
-              </>
-            )}
+            <p className="px-3 pt-2 text-xs leading-5 text-muted-foreground">
+              Jelajahi produk, panduan, dan bantuan Anima Companion.
+            </p>
           </nav>
         </SheetContent>
       </Sheet>
@@ -171,7 +150,7 @@ export function MobileBottomBar() {
           aria-label="Chat WhatsApp"
           className="flex flex-col items-center gap-0.5 px-1"
         >
-          <span className="-mt-4 flex h-11 w-11 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg shadow-emerald-500/30 ring-[3px] ring-card transition-transform active:scale-95">
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#25D366] text-white shadow-md shadow-emerald-500/20 ring-2 ring-card transition-transform active:scale-95">
             <svg viewBox="0 0 32 32" className="h-6 w-6 fill-current" aria-hidden="true">
               <path d="M19.11 17.205c-.372 0-1.088 1.39-1.518 1.39a.63.63 0 0 1-.315-.1c-.802-.402-1.504-.817-2.163-1.447-.545-.516-1.146-1.29-1.46-1.963a.426.426 0 0 1-.073-.215c0-.33.99-.945.99-1.49 0-.143-.73-2.09-.832-2.335-.143-.372-.214-.487-.6-.487-.187 0-.36-.043-.53-.043-.302 0-.53.115-.746.315-.688.645-1.032 1.318-1.06 2.264v.114c-.015.99.472 1.977 1.017 2.78 1.23 1.82 2.506 3.41 4.554 4.34.616.287 2.035.888 2.722.888.817 0 2.15-.515 2.478-1.318.13-.33.244-.73.244-1.088 0-.058 0-.144-.03-.215-.1-.172-2.434-1.39-2.678-1.39z" />
               <path d="M16.04 4h-.087C9.347 4 4.087 9.26 4.087 15.87c0 2.27.622 4.41 1.7 6.233L4 28l8.066-1.766c1.763.965 3.787 1.514 5.93 1.514h.045C24.653 27.748 30 22.488 30 15.87 30 9.26 24.74 4 16.04 4zm0 22.21h-.043c-1.93 0-3.873-.515-5.535-1.49l-.402-.243-4.66 1.276 1.247-4.553-.27-.43a9.51 9.51 0 0 1-1.49-5.115c0-5.285 4.3-9.585 9.614-9.585 2.552 0 4.97 1.018 6.787 2.836a9.55 9.55 0 0 1 2.806 6.788c0 5.285-4.3 9.585-9.614 9.585z" />
