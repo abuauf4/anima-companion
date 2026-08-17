@@ -170,12 +170,12 @@ function FaqDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[calc(100vh-1rem)] max-w-[calc(100%-1.5rem)] overflow-y-auto p-4 sm:max-h-[90vh] sm:max-w-lg sm:p-6">
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit FAQ' : 'Tambah FAQ'}</DialogTitle>
           <DialogDescription>Pertanyaan yang sering diajukan pelanggan</DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-2">
+        <div className="space-y-5 py-1">
           <div>
             <Label>Pertanyaan <span className="text-destructive">*</span></Label>
             <Input value={form.question} onChange={(e) => setForm({ ...form, question: e.target.value })} className="mt-1.5" placeholder="Apakah produk sudah terdaftar BPOM?" />
@@ -194,10 +194,10 @@ function FaqDialog({
             <Input type="number" value={form.order} onChange={(e) => setForm({ ...form, order: e.target.value })} className="mt-1.5" />
             <p className="mt-1 text-xs text-muted-foreground">Angka lebih kecil tampil lebih dulu</p>
           </div>
-          <label className="flex items-center gap-2 text-sm">
+          <div className="flex min-h-10 items-center gap-3 rounded-lg border border-border/70 px-3 text-sm">
             <Switch checked={form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: v })} />
             Tampilkan di halaman publik
-          </label>
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Batal</Button>

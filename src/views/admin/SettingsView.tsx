@@ -151,7 +151,7 @@ export function SettingsView() {
       )}
 
       {/* HERO SECTION */}
-      <Card className="space-y-4 p-6">
+      <Card className="space-y-4 p-4 sm:p-6">
         <div>
           <h2 className="text-lg font-semibold">Hero Section</h2>
           <p className="text-xs text-muted-foreground">Teks utama di bagian atas homepage</p>
@@ -160,7 +160,7 @@ export function SettingsView() {
           <Field label="Eyebrow (label kecil di atas judul)">
             <Input value={form.heroEyebrow} onChange={(e) => setForm({ ...form, heroEyebrow: e.target.value })} />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Judul Baris 1">
               <Input value={form.heroTitle1} onChange={(e) => setForm({ ...form, heroTitle1: e.target.value })} />
             </Field>
@@ -176,7 +176,7 @@ export function SettingsView() {
             className="min-h-20"
           />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Hook Judul Baris 1">
             <Input value={form.heroHookTitle1} onChange={(e) => setForm({ ...form, heroHookTitle1: e.target.value })} />
           </Field>
@@ -187,7 +187,7 @@ export function SettingsView() {
       </Card>
 
       {/* TRUST BADGES */}
-      <Card className="space-y-4 p-6">
+      <Card className="space-y-4 p-4 sm:p-6">
         <div>
           <h2 className="text-lg font-semibold">Trust Badges</h2>
           <p className="text-xs text-muted-foreground">4 statistik di bawah hero section</p>
@@ -216,7 +216,7 @@ export function SettingsView() {
       </Card>
 
       {/* CONTACT */}
-      <Card className="space-y-4 p-6">
+      <Card className="space-y-4 p-4 sm:p-6">
         <div>
           <h2 className="text-lg font-semibold">Kontak & Sosial Media</h2>
           <p className="text-xs text-muted-foreground">Informasi kontak yang ditampilkan di situs</p>
@@ -247,7 +247,7 @@ export function SettingsView() {
       </Card>
 
       {/* ANNOUNCEMENT BAR */}
-      <Card className="space-y-4 p-6">
+      <Card className="space-y-4 p-4 sm:p-6">
         <div>
           <h2 className="text-lg font-semibold">Announcement Bar</h2>
           <p className="text-xs text-muted-foreground">Pesan yang berputar di bar paling atas situs</p>
@@ -269,7 +269,7 @@ export function SettingsView() {
       </Card>
 
       {/* MISC */}
-      <Card className="space-y-4 p-6">
+      <Card className="space-y-4 p-4 sm:p-6">
         <div>
           <h2 className="text-lg font-semibold">Lain-lain</h2>
           <p className="text-xs text-muted-foreground">Pengaturan operasional toko</p>

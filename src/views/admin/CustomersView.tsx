@@ -400,7 +400,7 @@ export function CustomersView() {
         open={!!selected || detailLoading}
         onOpenChange={(v) => !v && setSelected(null)}
       >
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[calc(100vh-1rem)] max-w-[calc(100%-1.5rem)] overflow-y-auto p-4 sm:max-h-[90vh] sm:max-w-xl sm:p-6">
           {detailLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -430,7 +430,7 @@ export function CustomersView() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div className="rounded-lg border border-border p-3">
                     <p className="text-xs text-muted-foreground">Total Pesanan</p>
                     <p className="text-xl font-bold text-primary">{selected.orders.length}</p>

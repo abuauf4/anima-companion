@@ -133,7 +133,7 @@ function CategoryDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-[calc(100%-1.5rem)] p-4 sm:max-w-lg sm:p-6">
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit Kategori' : 'Tambah Kategori'}</DialogTitle>
           <DialogDescription>Slug akan dibuat otomatis dari nama</DialogDescription>

@@ -172,7 +172,7 @@ function BannerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[calc(100vh-1rem)] max-w-[calc(100%-1.5rem)] overflow-y-auto p-4 sm:max-h-[90vh] sm:max-w-lg sm:p-6">
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit Banner' : 'Tambah Banner'}</DialogTitle>
           <DialogDescription>Banner untuk homepage dan promo section</DialogDescription>
@@ -190,7 +190,7 @@ function BannerDialog({
             <Label>URL Gambar <span className="text-destructive">*</span></Label>
             <Input value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} placeholder="https://..." className="mt-1.5" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <Label>Posisi</Label>
               <Select value={form.position} onValueChange={(v) => setForm({ ...form, position: v })}>
@@ -210,7 +210,7 @@ function BannerDialog({
             <Label>Link (opsional)</Label>
             <Input value={form.link} onChange={(e) => setForm({ ...form, link: e.target.value })} placeholder="#/shop" className="mt-1.5" />
           </div>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex min-h-10 items-center gap-3 rounded-lg border border-border/70 px-3 text-sm">
             <Switch checked={form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: v })} />
             Aktif
           </label>

@@ -327,7 +327,7 @@ function ProductDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[calc(100vh-1rem)] max-w-[calc(100%-1.5rem)] overflow-y-auto p-4 sm:max-h-[90vh] sm:max-w-2xl sm:p-6">
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit Produk' : 'Tambah Produk Baru'}</DialogTitle>
           <DialogDescription>
@@ -335,8 +335,12 @@ function ProductDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
-          <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-5 py-1">
+          <div className="border-b border-border/70 pb-2">
+            <h3 className="text-sm font-semibold">Informasi Produk</h3>
+            <p className="text-xs text-muted-foreground">Identitas utama yang tampil di katalog.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="col-span-2">
               <Label>Nama Produk <span className="text-destructive">*</span></Label>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1.5" />
@@ -375,7 +379,11 @@ function ProductDialog({
               <Input type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} className="mt-1.5" />
             </div>
 
-            {/* ============ Image upload section ============ */}
+            <div className="border-b border-border/70 pb-2 pt-2">
+              <h3 className="text-sm font-semibold">Media & Deskripsi</h3>
+              <p className="text-xs text-muted-foreground">Lengkapi visual dan informasi pendukung produk.</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
             <div className="col-span-2">
               <Label>Gambar Produk</Label>
               <p className="mt-1 text-xs text-muted-foreground">
@@ -548,19 +556,20 @@ function ProductDialog({
           </div>
 
           <div className="flex flex-wrap gap-4 border-t border-border pt-4">
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex min-h-10 items-center gap-3 rounded-lg border border-border/70 px-3 text-sm">
               <Switch checked={form.isBestSeller} onCheckedChange={(v) => setForm({ ...form, isBestSeller: v })} />
               Best Seller
             </label>
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex min-h-10 items-center gap-3 rounded-lg border border-border/70 px-3 text-sm">
               <Switch checked={form.isNew} onCheckedChange={(v) => setForm({ ...form, isNew: v })} />
               Produk Baru
             </label>
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex min-h-10 items-center gap-3 rounded-lg border border-border/70 px-3 text-sm">
               <Switch checked={form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: v })} />
               Aktif
             </label>
           </div>
+        </div>
         </div>
 
         <DialogFooter>

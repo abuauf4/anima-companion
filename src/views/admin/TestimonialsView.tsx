@@ -201,13 +201,13 @@ function TestimonialDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[calc(100vh-1rem)] max-w-[calc(100%-1.5rem)] overflow-y-auto p-4 sm:max-h-[90vh] sm:max-w-lg sm:p-6">
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit Testimoni' : 'Tambah Testimoni'}</DialogTitle>
           <DialogDescription>Ulasan pelanggan untuk ditampilkan di homepage</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <Label>Nama Pelanggan <span className="text-destructive">*</span></Label>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1.5" placeholder="Budi Santoso" />
@@ -217,7 +217,7 @@ function TestimonialDialog({
               <Input value={form.petName} onChange={(e) => setForm({ ...form, petName: e.target.value })} className="mt-1.5" placeholder="Mochi" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <Label>Jenis Hewan</Label>
               <Select value={form.petType} onValueChange={(v) => setForm({ ...form, petType: v })}>
@@ -254,7 +254,7 @@ function TestimonialDialog({
             <Label>URL Avatar (opsional)</Label>
             <Input value={form.avatar} onChange={(e) => setForm({ ...form, avatar: e.target.value })} className="mt-1.5" placeholder="https://..." />
           </div>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex min-h-10 items-center gap-3 rounded-lg border border-border/70 px-3 text-sm">
             <Switch checked={form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: v })} />
             Tampilkan di homepage
           </label>
