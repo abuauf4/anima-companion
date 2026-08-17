@@ -15,6 +15,7 @@ import { ShoppingCart, ChevronLeft, ChevronRight, MessageCircle } from 'lucide-r
 import { formatRupiah, formatDateTime, ORDER_STATUS } from '@/lib/format'
 import { whatsappAdminUrl } from '@/lib/config'
 import { toast } from 'sonner'
+import { AdminActionMenu, AdminEmptyState, AdminPageHeader, AdminStatusBadge } from '@/components/admin/AdminListPrimitives'
 
 interface Order {
   id: string
@@ -84,11 +85,8 @@ export function OrdersView() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Pesanan</h1>
-        <p className="text-sm text-muted-foreground">Kelola pesanan pelanggan</p>
-      </div>
+    <div className="space-y-4 sm:space-y-6">
+      <AdminPageHeader title="Pesanan" description="Kelola pesanan pelanggan" />
 
       {/* Filter */}
       <div className="flex flex-wrap gap-2">
@@ -109,20 +107,17 @@ export function OrdersView() {
       </div>
 
       {/* Table */}
-      <Card className="overflow-hidden">
+      <Card className="overflow-hidden rounded-xl shadow-none">
         {loading ? (
           <div className="space-y-2 p-4">
             {[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
           </div>
         ) : orders.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <ShoppingCart className="mb-3 h-12 w-12 text-muted-foreground" />
-            <p className="text-sm font-medium">Belum ada pesanan</p>
-          </div>
+          <AdminEmptyState icon={<ShoppingCart className="h-8 w-8" />} title="Belum ada pesanan" description="Pesanan baru akan muncul di sini." />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
-              <thead className="bg-accent/50">
+              <thead className="bg-muted/50">
                 <tr className="text-left text-xs uppercase text-muted-foreground">
                   <th className="px-4 py-3 font-medium">No. Pesanan</th>
                   <th className="px-4 py-3 font-medium">Pelanggan</th>
@@ -137,7 +132,7 @@ export function OrdersView() {
                 {orders.map((o) => {
                   const status = ORDER_STATUS[o.status] || { label: o.status, color: 'gray' }
                   return (
-                    <tr key={o.id} className="border-t border-border hover:bg-accent/20">
+                    <tr key={o.id} className="border-t border-border/70 transition-colors hover:bg-muted/40">
                       <td className="px-4 py-3 font-mono text-xs font-medium">
                         <button onClick={() => setSelected(o)} className="hover:text-primary hover:underline">
                           {o.orderNumber}
@@ -151,7 +146,7 @@ export function OrdersView() {
                       <td className="px-4 py-3">{o.items.length} item</td>
                       <td className="px-4 py-3 font-semibold">{formatRupiah(o.total)}</td>
                       <td className="px-4 py-3">
-                        <Badge variant="outline" className="text-[10px]">{status.label}</Badge>
+                        <AdminStatusBadge tone={o.status === 'COMPLETED' ? 'success' : o.status === 'CANCELLED' ? 'danger' : o.status === 'PENDING' ? 'warning' : 'info'}>{status.label}</AdminStatusBadge>
                       </td>
                       <td className="px-4 py-3">
                         <Select
@@ -178,6 +173,17 @@ export function OrdersView() {
           </div>
         )}
       </Card>
+
+      {!loading && orders.length > 0 && <div className="space-y-2 md:hidden">
+        {orders.map((o) => {
+          const status = ORDER_STATUS[o.status] || { label: o.status }
+          return <Card key={`mobile-${o.id}`} className="rounded-xl p-3 shadow-none">
+            <div className="flex items-start justify-between gap-2"><button onClick={() => setSelected(o)} className="font-mono text-xs font-semibold text-primary">{o.orderNumber}</button><AdminActionMenu items={[{ label: 'Lihat detail', onSelect: () => setSelected(o) }]} /></div>
+            <div className="mt-2 flex items-end justify-between gap-3"><div><p className="text-sm font-medium">{o.customerName}</p><p className="text-[11px] text-muted-foreground">{formatDateTime(o.createdAt)} · {o.items.length} item</p></div><p className="text-sm font-semibold">{formatRupiah(o.total)}</p></div>
+            <div className="mt-2 flex items-center justify-between gap-2"><AdminStatusBadge tone={o.status === 'COMPLETED' ? 'success' : o.status === 'CANCELLED' ? 'danger' : o.status === 'PENDING' ? 'warning' : 'info'}>{status.label}</AdminStatusBadge><Select value={o.status} onValueChange={(v) => updateStatus(o.id, v)}><SelectTrigger className="h-7 w-28 text-[11px]"><SelectValue /></SelectTrigger><SelectContent>{STATUS_FLOW.map((s) => <SelectItem key={s} value={s} className="text-xs">{ORDER_STATUS[s].label}</SelectItem>)}</SelectContent></Select></div>
+          </Card>
+        })}
+      </div>}
 
       {/* Pagination */}
       {totalPages > 1 && (

@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Plus, Pencil, Trash2, HelpCircle } from 'lucide-react'
 import { toast } from 'sonner'
+import { AdminActionMenu, AdminEmptyState, AdminStatusBadge } from '@/components/admin/AdminListPrimitives'
 
 interface Faq {
   id: string
@@ -68,38 +69,27 @@ export function FaqView() {
       </div>
 
       {loading ? (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20" />)}
         </div>
       ) : faqs.length === 0 ? (
-        <Card className="flex flex-col items-center justify-center py-16 text-center">
-          <HelpCircle className="mb-3 h-12 w-12 text-muted-foreground" />
-          <p className="text-sm font-medium">Belum ada FAQ</p>
-          <p className="text-xs text-muted-foreground">Tambah pertanyaan untuk halaman kontak</p>
-        </Card>
+        <AdminEmptyState icon={<HelpCircle className="h-8 w-8" />} title="Belum ada FAQ" description="Tambah pertanyaan untuk membantu pelanggan." action={<Button size="sm" onClick={() => { setEditing(null); setDialogOpen(true) }}><Plus className="mr-1.5 h-4 w-4" />Tambah FAQ</Button>} />
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {faqs.map((f) => (
-            <Card key={f.id} className="p-4">
+            <Card key={f.id} className="rounded-xl p-3 shadow-none">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline" className="text-[10px]">#{f.order}</Badge>
-                    <Badge className={f.isActive ? 'bg-success text-success-foreground text-[10px]' : 'text-[10px]'}>
+                    <AdminStatusBadge tone={f.isActive ? 'success' : 'neutral'}>
                       {f.isActive ? 'Aktif' : 'Nonaktif'}
-                    </Badge>
+                    </AdminStatusBadge>
                   </div>
                   <p className="mt-2 font-semibold">{f.question}</p>
                   <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{f.answer}</p>
                 </div>
-                <div className="flex shrink-0 gap-1">
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditing(f); setDialogOpen(true) }}>
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(f.id)}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
+                <AdminActionMenu items={[{ label: 'Edit FAQ', onSelect: () => { setEditing(f); setDialogOpen(true) } }, { label: 'Hapus FAQ', destructive: true, onSelect: () => handleDelete(f.id) }]} />
               </div>
             </Card>
           ))}

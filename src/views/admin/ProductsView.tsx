@@ -19,6 +19,7 @@ import { Plus, Pencil, Search, Trash2, Package, Star, ArrowLeft, ArrowRight, Lin
 import { formatRupiah } from '@/lib/format'
 import { toast } from 'sonner'
 import { CloudinaryUploader } from '@/components/admin/CloudinaryUploader'
+import { AdminActionMenu, AdminEmptyState, AdminPageHeader, AdminStatusBadge } from '@/components/admin/AdminListPrimitives'
 
 interface AdminProduct {
   id: string
@@ -83,16 +84,10 @@ export function ProductsView() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Produk</h1>
-          <p className="text-sm text-muted-foreground">Kelola produk Anima Companion</p>
-        </div>
-        <Button onClick={() => { setEditing(null); setDialogOpen(true) }} className="gap-2">
+    <div className="space-y-4 sm:space-y-6">
+      <AdminPageHeader title="Produk" description="Kelola produk Anima Companion" action={<Button onClick={() => { setEditing(null); setDialogOpen(true) }} className="h-9 gap-2">
           <Plus className="h-4 w-4" /> Tambah Produk
-        </Button>
-      </div>
+        </Button>} />
 
       {/* Search */}
       <form onSubmit={handleSearch}>
@@ -108,21 +103,17 @@ export function ProductsView() {
       </form>
 
       {/* Table */}
-      <Card className="overflow-hidden">
+      <Card className="overflow-hidden rounded-xl shadow-none">
         {loading ? (
           <div className="space-y-2 p-4">
             {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
           </div>
         ) : products.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <Package className="mb-3 h-12 w-12 text-muted-foreground" />
-            <p className="text-sm font-medium">Belum ada produk</p>
-            <p className="text-xs text-muted-foreground">Klik "Tambah Produk" untuk menambahkan</p>
-          </div>
+          <AdminEmptyState icon={<Package className="h-8 w-8" />} title="Belum ada produk" description="Tambahkan produk pertama untuk mulai mengelola katalog." action={<Button size="sm" onClick={() => { setEditing(null); setDialogOpen(true) }}><Plus className="mr-1.5 h-4 w-4" />Tambah Produk</Button>} />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
-              <thead className="bg-accent/50">
+              <thead className="bg-muted/50">
                 <tr className="text-left text-xs uppercase text-muted-foreground">
                   <th className="px-4 py-3 font-medium">Produk</th>
                   <th className="px-4 py-3 font-medium">SKU</th>
@@ -136,7 +127,7 @@ export function ProductsView() {
               </thead>
               <tbody>
                 {products.map((p) => (
-                  <tr key={p.id} className="border-t border-border hover:bg-accent/20">
+                  <tr key={p.id} className="border-t border-border/70 transition-colors hover:bg-muted/40">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
@@ -169,36 +160,19 @@ export function ProductsView() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">
-                        {p.isBestSeller && <Badge className="text-[9px] bg-primary">Best</Badge>}
-                        {p.isNew && <Badge className="text-[9px] bg-secondary">Baru</Badge>}
-                        {!p.isActive && <Badge variant="secondary" className="text-[9px]">Nonaktif</Badge>}
+                        {p.isBestSeller && <AdminStatusBadge tone="info">Best</AdminStatusBadge>}
+                        {p.isNew && <AdminStatusBadge tone="warning">Baru</AdminStatusBadge>}
+                        {!p.isActive && <AdminStatusBadge>Nonaktif</AdminStatusBadge>}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{p._count.orderItems}</td>
                     <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => { setEditing(p); setDialogOpen(true) }}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive"
-                          onClick={async () => {
+                      <AdminActionMenu items={[{ label: 'Edit produk', onSelect: () => { setEditing(p); setDialogOpen(true) } }, { label: 'Nonaktifkan', destructive: true, onSelect: async () => {
                             if (!confirm(`Nonaktifkan produk "${p.name}"?`)) return
                             await fetch(`/api/admin/products/${p.id}`, { method: 'DELETE' })
                             toast.success('Produk dinonaktifkan')
                             load(search)
-                          }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
+                          }}]} />
                     </td>
                   </tr>
                 ))}
@@ -207,6 +181,19 @@ export function ProductsView() {
           </div>
         )}
       </Card>
+
+      {!loading && products.length > 0 && <div className="space-y-2 md:hidden">
+        {products.map((p) => <Card key={`mobile-${p.id}`} className="rounded-xl p-3 shadow-none">
+          <div className="flex items-start gap-3">
+            <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">{p.images[0] && <img src={p.images[0].url} alt="" className="h-full w-full object-cover" />}</div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-sm font-medium">{p.name}</p><p className="truncate text-[11px] text-muted-foreground">{p.brand} · {p.sku}</p></div><AdminActionMenu items={[{ label: 'Edit produk', onSelect: () => { setEditing(p); setDialogOpen(true) } }, { label: 'Nonaktifkan', destructive: true, onSelect: async () => { if (!confirm(`Nonaktifkan produk "${p.name}"?`)) return; await fetch(`/api/admin/products/${p.id}`, { method: 'DELETE' }); toast.success('Produk dinonaktifkan'); load(search) } }]} /></div>
+              <div className="mt-2 flex items-center justify-between gap-2"><span className="text-sm font-semibold">{formatRupiah(p.salePrice || p.price)}</span><span className={p.stock <= 5 ? 'text-xs font-semibold text-destructive' : 'text-xs text-muted-foreground'}>Stok {p.stock}</span></div>
+              <div className="mt-2 flex flex-wrap gap-1.5">{p.isActive ? <AdminStatusBadge tone="success">Aktif</AdminStatusBadge> : <AdminStatusBadge>Nonaktif</AdminStatusBadge>}<AdminStatusBadge>{p.category.name}</AdminStatusBadge></div>
+            </div>
+          </div>
+        </Card>)}
+      </div>}
 
       <ProductDialog
         open={dialogOpen}

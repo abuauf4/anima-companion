@@ -18,6 +18,7 @@ import {
 import { Plus, Pencil, Trash2, Ticket, Copy } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatRupiah } from '@/lib/format'
+import { AdminActionMenu, AdminEmptyState, AdminStatusBadge } from '@/components/admin/AdminListPrimitives'
 
 interface Voucher {
   id: string
@@ -87,21 +88,18 @@ export function VouchersView() {
           {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-32" />)}
         </div>
       ) : vouchers.length === 0 ? (
-        <Card className="flex flex-col items-center justify-center py-16 text-center">
-          <Ticket className="mb-3 h-12 w-12 text-muted-foreground" />
-          <p className="text-sm font-medium">Belum ada voucher</p>
-        </Card>
+        <AdminEmptyState icon={<Ticket className="h-8 w-8" />} title="Belum ada voucher" description="Buat voucher pertama untuk memberikan promo kepada pelanggan." action={<Button size="sm" onClick={() => { setEditing(null); setDialogOpen(true) }}><Plus className="mr-1.5 h-4 w-4" />Tambah Voucher</Button>} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {vouchers.map((v) => (
-            <Card key={v.id} className="overflow-hidden">
+            <Card key={v.id} className="overflow-hidden rounded-xl shadow-none">
               <div className="flex">
                 {/* Left - dashed border */}
                 <div className="flex flex-col items-center justify-center bg-gradient-to-br from-primary/15 to-secondary/15 p-4 border-r-2 border-dashed border-border">
                   <Ticket className="h-8 w-8 text-primary" />
                 </div>
                 {/* Right - content */}
-                <div className="flex-1 p-4">
+                <div className="min-w-0 flex-1 p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <button
@@ -115,20 +113,7 @@ export function VouchersView() {
                         {v.type === 'PERCENTAGE' ? `Diskon ${v.value}%` : `Potongan ${formatRupiah(v.value)}`}
                       </p>
                     </div>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditing(v); setDialogOpen(true) }}>
-                        <Pencil className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive hover:text-destructive"
-                        aria-label={`Hapus voucher ${v.code}`}
-                        onClick={() => handleDelete(v)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
+                    <AdminActionMenu items={[{ label: 'Edit voucher', onSelect: () => { setEditing(v); setDialogOpen(true) } }, { label: 'Hapus voucher', destructive: true, onSelect: () => handleDelete(v) }]} />
                   </div>
                   {v.description && (
                     <p className="mt-2 text-xs text-muted-foreground">{v.description}</p>
@@ -142,9 +127,9 @@ export function VouchersView() {
                         s/d {new Date(v.validUntil).toLocaleDateString('id-ID')}
                       </Badge>
                     )}
-                    <Badge className={v.isActive ? 'bg-success text-success-foreground text-[10px]' : 'text-[10px]'}>
+                    <AdminStatusBadge tone={v.isActive ? 'success' : 'neutral'}>
                       {v.isActive ? 'Aktif' : 'Nonaktif'}
-                    </Badge>
+                    </AdminStatusBadge>
                   </div>
                 </div>
               </div>

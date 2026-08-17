@@ -15,6 +15,7 @@ import {
   ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { formatRupiah, formatDate } from '@/lib/format'
+import { AdminActionMenu, AdminEmptyState, AdminPageHeader, AdminStatusBadge } from '@/components/admin/AdminListPrimitives'
 
 // ============================================================================
 // Member Registry — admin view.
@@ -201,15 +202,8 @@ export function CustomersView() {
   const hasActiveFilters = !!(search || verified || provider)
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Member</h1>
-          <p className="text-sm text-muted-foreground">
-            Registry member terverifikasi — {pagination.total} member
-          </p>
-        </div>
-        <Button
+    <div className="space-y-4 sm:space-y-6">
+      <AdminPageHeader title="Member" description={`Registry member terverifikasi — ${pagination.total} member`} action={<Button
           variant="outline"
           size="sm"
           onClick={handleExport}
@@ -222,8 +216,7 @@ export function CustomersView() {
             <Download className="h-4 w-4" />
           )}
           Export CSV
-        </Button>
-      </div>
+        </Button>} />
 
       {/* Search + filters */}
       <div className="space-y-3">
@@ -298,19 +291,14 @@ export function CustomersView() {
           </div>
         </Card>
       ) : members.length === 0 ? (
-        <Card className="flex flex-col items-center justify-center py-16 text-center">
-          <Users className="mb-3 h-12 w-12 text-muted-foreground" />
-          <p className="text-sm font-medium">
-            {hasActiveFilters ? 'Tidak ada member yang cocok dengan filter' : 'Belum ada member'}
-          </p>
-        </Card>
+        <AdminEmptyState icon={<Users className="h-8 w-8" />} title={hasActiveFilters ? 'Tidak ada member yang cocok dengan filter' : 'Belum ada member'} description={hasActiveFilters ? 'Coba ubah atau reset filter untuk melihat member lain.' : 'Member baru akan muncul di sini.'} />
       ) : (
         <>
           {/* Desktop table — md+ */}
-          <Card className="hidden overflow-hidden md:block">
+          <Card className="hidden overflow-hidden rounded-xl shadow-none md:block">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-accent/50">
+                <thead className="bg-muted/50">
                   <tr className="text-left text-xs uppercase text-muted-foreground">
                     <th className="px-4 py-3 font-medium">Member</th>
                     <th className="px-4 py-3 font-medium">Kontak</th>
@@ -322,7 +310,7 @@ export function CustomersView() {
                 </thead>
                 <tbody>
                   {members.map((m) => (
-                    <tr key={m.id} className="border-t border-border hover:bg-accent/20">
+                    <tr key={m.id} className="border-t border-border/70 transition-colors hover:bg-muted/40">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <div className="flex h-9 w-9 items-center justify-center rounded-full gradient-brand text-white text-sm font-bold">
@@ -380,15 +368,9 @@ export function CustomersView() {
                       <p className="text-xs text-muted-foreground">{m.phone || '-'}</p>
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openDetail(m)}
-                  >
-                    Detail
-                  </Button>
+                  <AdminActionMenu items={[{ label: 'Lihat detail', onSelect: () => openDetail(m) }]} />
                 </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   <ProviderBadge provider={m.provider} />
                   <VerificationBadge verified={m.emailVerified} />
                   <Badge variant="outline" className="text-[10px]">
@@ -553,17 +535,17 @@ export function CustomersView() {
 function VerificationBadge({ verified }: { verified: boolean }) {
   if (verified) {
     return (
-      <Badge className="gap-1 bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
+      <AdminStatusBadge tone="success">
         <ShieldCheck className="h-3 w-3" />
         Verified
-      </Badge>
+      </AdminStatusBadge>
     )
   }
   return (
-    <Badge variant="outline" className="gap-1 text-muted-foreground">
+    <AdminStatusBadge>
       <ShieldAlert className="h-3 w-3" />
       Unverified
-    </Badge>
+    </AdminStatusBadge>
   )
 }
 

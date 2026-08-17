@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select'
 import { Plus, Pencil, Trash2, Image as ImageIcon } from 'lucide-react'
 import { toast } from 'sonner'
+import { AdminActionMenu, AdminEmptyState, AdminPageHeader, AdminStatusBadge } from '@/components/admin/AdminListPrimitives'
 
 interface Banner {
   id: string
@@ -52,10 +53,10 @@ export function BannersView() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Banner</h1>
+          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Banner</h1>
           <p className="text-sm text-muted-foreground">Kelola banner homepage & promo</p>
         </div>
         <Button onClick={() => { setEditing(null); setDialogOpen(true) }} className="gap-2">
@@ -68,14 +69,11 @@ export function BannersView() {
           {[1, 2, 3].map((i) => <Skeleton key={i} className="h-28" />)}
         </div>
       ) : banners.length === 0 ? (
-        <Card className="flex flex-col items-center justify-center py-16 text-center">
-          <ImageIcon className="mb-3 h-12 w-12 text-muted-foreground" />
-          <p className="text-sm font-medium">Belum ada banner</p>
-        </Card>
+        <AdminEmptyState icon={<ImageIcon className="h-8 w-8" />} title="Belum ada banner" description="Tambahkan banner untuk mengatur materi promosi homepage." action={<Button size="sm" onClick={() => { setEditing(null); setDialogOpen(true) }}><Plus className="mr-1.5 h-4 w-4" />Tambah Banner</Button>} />
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {banners.map((b) => (
-            <Card key={b.id} className="flex gap-4 p-4">
+            <Card key={b.id} className="flex gap-3 rounded-xl p-3 shadow-none">
               { }
               <img src={b.imageUrl} alt={b.title} className="h-20 w-32 shrink-0 rounded-lg border border-border object-cover" />
               <div className="flex-1 min-w-0">
@@ -84,21 +82,14 @@ export function BannersView() {
                     <p className="font-semibold truncate">{b.title}</p>
                     {b.subtitle && <p className="text-xs text-muted-foreground truncate">{b.subtitle}</p>}
                   </div>
-                  <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditing(b); setDialogOpen(true) }}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(b.id)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
+                  <AdminActionMenu items={[{ label: 'Edit banner', onSelect: () => { setEditing(b); setDialogOpen(true) } }, { label: 'Hapus banner', destructive: true, onSelect: () => handleDelete(b.id) }]} />
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                   <Badge variant="outline" className="text-[10px]">{b.position === 'HOME' ? 'Homepage' : b.position === 'PROMO' ? 'Promo' : b.position}</Badge>
                   <Badge variant="outline" className="text-[10px]">Order: {b.order}</Badge>
-                  <Badge className={b.isActive ? 'bg-success text-success-foreground text-[10px]' : 'text-[10px]'}>
+                  <AdminStatusBadge tone={b.isActive ? 'success' : 'neutral'}>
                     {b.isActive ? 'Aktif' : 'Nonaktif'}
-                  </Badge>
+                  </AdminStatusBadge>
                   {b.link && <span className="text-muted-foreground truncate">→ {b.link}</span>}
                 </div>
               </div>

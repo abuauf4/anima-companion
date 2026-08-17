@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { Plus, Pencil, Trash2, Tags } from 'lucide-react'
 import { toast } from 'sonner'
+import { AdminActionMenu, AdminEmptyState, AdminPageHeader } from '@/components/admin/AdminListPrimitives'
 
 interface Category {
   id: string
@@ -38,22 +39,16 @@ export function CategoriesView() {
   useEffect(() => { load() }, [])
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Kategori</h1>
-          <p className="text-sm text-muted-foreground">Kelola kategori produk</p>
-        </div>
-        <Button onClick={() => { setEditing(null); setDialogOpen(true) }} className="gap-2">
+    <div className="space-y-4 sm:space-y-6">
+      <AdminPageHeader title="Kategori" description="Kelola kategori produk" action={<Button onClick={() => { setEditing(null); setDialogOpen(true) }} className="h-9 gap-2">
           <Plus className="h-4 w-4" /> Tambah Kategori
-        </Button>
-      </div>
+        </Button>} />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {loading ? (
           [1, 2, 3].map((i) => <Skeleton key={i} className="h-28" />)
-        ) : categories.map((c) => (
-          <Card key={c.id} className="flex items-center justify-between p-4">
+        ) : categories.length === 0 ? <AdminEmptyState icon={<Tags className="h-8 w-8" />} title="Belum ada kategori" description="Buat kategori untuk merapikan katalog produk." action={<Button size="sm" onClick={() => { setEditing(null); setDialogOpen(true) }}><Plus className="mr-1.5 h-4 w-4" />Tambah Kategori</Button>} /> : categories.map((c) => (
+          <Card key={c.id} className="flex items-center justify-between rounded-xl p-3 shadow-none">
             <div className="flex items-center gap-3">
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <Tags className="h-5 w-5" />
@@ -64,15 +59,7 @@ export function CategoriesView() {
                 <Badge variant="outline" className="mt-1 text-[10px]">{c._count.products} produk</Badge>
               </div>
             </div>
-            <div className="flex gap-1">
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditing(c); setDialogOpen(true) }}>
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-destructive"
-                onClick={async () => {
+            <AdminActionMenu items={[{ label: 'Edit kategori', onSelect: () => { setEditing(c); setDialogOpen(true) } }, { label: 'Hapus kategori', destructive: true, onSelect: async () => {
                   if (!confirm(`Hapus kategori "${c.name}"?`)) return
                   const res = await fetch(`/api/admin/categories/${c.id}`, { method: 'DELETE' })
                   if (res.ok) {
@@ -82,11 +69,7 @@ export function CategoriesView() {
                     const data = await res.json()
                     toast.error(data.error || 'Gagal menghapus')
                   }
-                }}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+                }}]} />
           </Card>
         ))}
       </div>

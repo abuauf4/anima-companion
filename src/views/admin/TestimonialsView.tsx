@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select'
 import { Plus, Pencil, Trash2, MessageSquare, Star } from 'lucide-react'
 import { toast } from 'sonner'
+import { AdminActionMenu, AdminEmptyState, AdminStatusBadge } from '@/components/admin/AdminListPrimitives'
 
 interface Testimonial {
   id: string
@@ -76,19 +77,15 @@ export function TestimonialsView() {
       </div>
 
       {loading ? (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {[1, 2, 3].map((i) => <Skeleton key={i} className="h-28" />)}
         </div>
       ) : testimonials.length === 0 ? (
-        <Card className="flex flex-col items-center justify-center py-16 text-center">
-          <MessageSquare className="mb-3 h-12 w-12 text-muted-foreground" />
-          <p className="text-sm font-medium">Belum ada testimoni</p>
-          <p className="text-xs text-muted-foreground">Tambah testimoni untuk ditampilkan di homepage</p>
-        </Card>
+        <AdminEmptyState icon={<MessageSquare className="h-8 w-8" />} title="Belum ada testimoni" description="Tambah testimoni untuk ditampilkan di homepage." action={<Button size="sm" onClick={() => { setEditing(null); setDialogOpen(true) }}><Plus className="mr-1.5 h-4 w-4" />Tambah Testimoni</Button>} />
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {testimonials.map((t) => (
-            <Card key={t.id} className="p-4">
+            <Card key={t.id} className="rounded-xl p-3 shadow-none">
               <div className="flex items-start gap-3">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-full gradient-brand text-sm font-bold text-white">
                   {t.name.charAt(0).toUpperCase()}
@@ -99,14 +96,7 @@ export function TestimonialsView() {
                       <p className="font-semibold truncate">{t.name}</p>
                       <p className="text-xs text-muted-foreground">{t.petName} · {t.petType}</p>
                     </div>
-                    <div className="flex gap-1 shrink-0">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditing(t); setDialogOpen(true) }}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(t.id)}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
+                    <AdminActionMenu items={[{ label: 'Edit testimoni', onSelect: () => { setEditing(t); setDialogOpen(true) } }, { label: 'Hapus testimoni', destructive: true, onSelect: () => handleDelete(t.id) }]} />
                   </div>
                   <div className="mt-1.5 flex items-center gap-0.5">
                     {Array.from({ length: 5 }).map((_, i) => (
@@ -118,9 +108,9 @@ export function TestimonialsView() {
                   </div>
                   <p className="mt-2 text-sm text-foreground/90 line-clamp-3">&ldquo;{t.message}&rdquo;</p>
                   <div className="mt-2">
-                    <Badge className={t.isActive ? 'bg-success text-success-foreground text-[10px]' : 'text-[10px]'}>
+                    <AdminStatusBadge tone={t.isActive ? 'success' : 'neutral'}>
                       {t.isActive ? 'Aktif' : 'Nonaktif'}
-                    </Badge>
+                    </AdminStatusBadge>
                   </div>
                 </div>
               </div>
