@@ -327,7 +327,7 @@ function ProductDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100vh-1rem)] max-w-[calc(100%-1.5rem)] overflow-y-auto p-4 sm:max-h-[90vh] sm:max-w-2xl sm:p-6">
+      <DialogContent className="top-4 flex h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] min-w-0 translate-y-0 flex-col gap-3 overflow-hidden p-4 sm:top-[50%] sm:h-auto sm:max-h-[90vh] sm:w-full sm:max-w-2xl sm:translate-y-[-50%] sm:gap-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit Produk' : 'Tambah Produk Baru'}</DialogTitle>
           <DialogDescription>
@@ -335,13 +335,13 @@ function ProductDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-5 py-1">
+        <div className="min-h-0 min-w-0 flex-1 space-y-5 overflow-y-auto overflow-x-hidden py-1 pr-1">
           <div className="border-b border-border/70 pb-2">
             <h3 className="text-sm font-semibold">Informasi Produk</h3>
             <p className="text-xs text-muted-foreground">Identitas utama yang tampil di katalog.</p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="col-span-2">
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="col-span-1 min-w-0 sm:col-span-2">
               <Label>Nama Produk <span className="text-destructive">*</span></Label>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1.5" />
             </div>
@@ -383,8 +383,8 @@ function ProductDialog({
               <h3 className="text-sm font-semibold">Media & Deskripsi</h3>
               <p className="text-xs text-muted-foreground">Lengkapi visual dan informasi pendukung produk.</p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-            <div className="col-span-2">
+            <div className="col-span-1 grid min-w-0 grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-2">
+            <div className="col-span-1 min-w-0 sm:col-span-2">
               <Label>Gambar Produk</Label>
               <p className="mt-1 text-xs text-muted-foreground">
                 Gambar pertama adalah <strong>gambar utama</strong> di product card & detail.
@@ -471,7 +471,7 @@ function ProductDialog({
               )}
 
               {/* Uploader */}
-              <div className="mt-3">
+              <div className="mt-3 min-w-0">
                 <CloudinaryUploader
                   onUploaded={addImageUrl}
                   disabled={saving}
@@ -533,23 +533,23 @@ function ProductDialog({
               </div>
             </div>
 
-            <div className="col-span-2">
+            <div className="col-span-1 min-w-0 sm:col-span-2">
               <Label>No. BPOM</Label>
               <Input value={form.bpomNumber} onChange={(e) => setForm({ ...form, bpomNumber: e.target.value })} placeholder="BPOM TR XXXXXXXXXXXX" className="mt-1.5" />
             </div>
-            <div className="col-span-2">
+            <div className="col-span-1 min-w-0 sm:col-span-2">
               <Label>Deskripsi</Label>
               <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className="mt-1.5" />
             </div>
-            <div className="col-span-2">
+            <div className="col-span-1 min-w-0 sm:col-span-2">
               <Label>Manfaat</Label>
               <Textarea value={form.benefit} onChange={(e) => setForm({ ...form, benefit: e.target.value })} rows={2} className="mt-1.5" />
             </div>
-            <div className="col-span-2">
+            <div className="col-span-1 min-w-0 sm:col-span-2">
               <Label>Cara Pakai</Label>
               <Textarea value={form.usage} onChange={(e) => setForm({ ...form, usage: e.target.value })} rows={2} className="mt-1.5" />
             </div>
-            <div className="col-span-2">
+            <div className="col-span-1 min-w-0 sm:col-span-2">
               <Label>Kandungan</Label>
               <Textarea value={form.ingredients} onChange={(e) => setForm({ ...form, ingredients: e.target.value })} rows={2} className="mt-1.5" />
             </div>
@@ -572,7 +572,7 @@ function ProductDialog({
         </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0 border-t border-border/70 pt-3 sm:border-0 sm:pt-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Batal</Button>
           <Button onClick={handleSave} disabled={saving}>
             {saving ? 'Menyimpan...' : editing ? 'Simpan Perubahan' : 'Tambah Produk'}

@@ -400,17 +400,17 @@ export function CustomersView() {
         open={!!selected || detailLoading}
         onOpenChange={(v) => !v && setSelected(null)}
       >
-        <DialogContent className="max-h-[calc(100vh-1rem)] max-w-[calc(100%-1.5rem)] overflow-y-auto p-4 sm:max-h-[90vh] sm:max-w-xl sm:p-6">
+        <DialogContent className="top-4 flex h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] min-w-0 translate-y-0 flex-col gap-3 overflow-hidden p-4 sm:top-[50%] sm:h-auto sm:max-h-[90vh] sm:w-full sm:max-w-xl sm:translate-y-[-50%] sm:gap-4 sm:p-6">
           {detailLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : selected ? (
             <>
-              <DialogHeader>
+              <DialogHeader className="shrink-0">
                 <DialogTitle>Detail Member</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4">
+              <div className="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden pr-1">
                 <div className="flex items-center gap-4">
                   <div className="flex h-16 w-16 items-center justify-center rounded-full gradient-brand text-white text-2xl font-bold">
                     {selected.name.charAt(0).toUpperCase()}
@@ -424,7 +424,7 @@ export function CustomersView() {
                         {selected.role}
                       </Badge>
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
+                    <p className="mt-1 break-words text-xs text-muted-foreground">
                       Bergabung sejak {formatDate(selected.createdAt)}
                     </p>
                   </div>
@@ -583,7 +583,7 @@ function DetailRow({
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border/40 py-1.5">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span className={`text-right text-sm font-medium ${mono ? 'font-mono text-xs' : ''}`}>
+      <span className={`min-w-0 break-words text-right text-sm font-medium ${mono ? 'font-mono text-xs' : ''}`}>
         {value}
       </span>
     </div>
