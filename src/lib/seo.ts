@@ -21,9 +21,16 @@
 
 import type { Metadata } from 'next'
 
-/** Canonical site origin (no trailing slash). Always https://animacompanion.id. */
-export const SITE_URL =
-  (process.env.NEXT_PUBLIC_SITE_URL || 'https://animacompanion.id').replace(/\/$/, '')
+/** Canonical site origin (no trailing slash). Always the production domain. */
+const PRODUCTION_SITE_URL = 'https://animacompanion.id'
+const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '')
+
+// Never let a preview, localhost, or accidentally stale domain become the
+// canonical origin. Non-production deployments are controlled separately by
+// NEXT_PUBLIC_ALLOW_INDEXING and still use the production canonical URL.
+export const SITE_URL = configuredSiteUrl === PRODUCTION_SITE_URL
+  ? configuredSiteUrl
+  : PRODUCTION_SITE_URL
 
 /**
  * Whether this deployment may be indexed by search engines.
@@ -233,6 +240,16 @@ export function productJsonLd(p: ProductJsonLdInput) {
       : canonicalFor(p.image)
     : canonicalFor(BRAND.ogImage)
   const effectivePrice = p.salePrice ?? p.price
+  const availability = p.availability === 'in stock'
+    ? 'https://schema.org/InStock'
+    : p.availability === 'out of stock'
+      ? 'https://schema.org/OutOfStock'
+      : p.availability === 'preorder'
+        ? 'https://schema.org/PreOrder'
+        : p.price > 0
+          ? 'https://schema.org/InStock'
+          : 'https://schema.org/OutOfStock'
+
   return {
     '@context': 'https://schema.org',
     '@type': 'Product',
@@ -250,9 +267,7 @@ export function productJsonLd(p: ProductJsonLdInput) {
       url,
       priceCurrency: p.currency || 'IDR',
       price: effectivePrice,
-      availability:
-        p.availability ||
-        (p.price > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock'),
+      availability,
       itemCondition: 'https://schema.org/NewCondition',
     },
     aggregateRating:

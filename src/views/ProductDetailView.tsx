@@ -137,7 +137,7 @@ export function ProductDetailView({ slug }: { slug: string }) {
   const handleShare = async () => {
     if (!data?.product) return
     const product = data.product
-    const shareUrl = `${window.location.origin}/#/product/${product.slug}`
+    const shareUrl = `${window.location.origin}/produk/${product.slug}`
     const shareText = `${product.name} — ${formatRupiah(product.price)} di Anima Companion`
 
     // Try Web Share API first (mobile + desktop browsers that support it)

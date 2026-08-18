@@ -9,6 +9,7 @@ import { ShoppingCart, Check, Shield, Star, BadgeCheck, Repeat, Heart } from 'lu
 import { toast } from 'sonner'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
+import Link from 'next/link'
 
 /**
  * Compact product card — Zesty Paws / marketplace style.
@@ -203,7 +204,13 @@ export function ProductCard({ product }: { product: Product }) {
 
         {/* Name — 2 lines max */}
         <h3 className="line-clamp-2 min-h-[1.75rem] text-[11px] font-medium leading-tight text-foreground transition-colors group-hover:text-primary sm:text-xs">
-          {product.name}
+          <Link
+            href={`/produk/${product.slug}`}
+            className="rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {product.name}
+          </Link>
         </h3>
 
         {/* Rating row */}
