@@ -302,7 +302,7 @@ function CreateAdminDialog({ onCreated }: { onCreated: () => void }) {
           <Plus className="mr-2 h-4 w-4" /> Buat Admin
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[min(92vh,760px)] overflow-y-auto p-4 sm:max-w-lg sm:p-6">
+      <DialogContent className="admin-mobile-dialog max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-1rem)] overflow-y-auto p-4 top-4 translate-y-0 sm:top-[50%] sm:max-h-[90vh] sm:max-w-lg sm:translate-y-[-50%] sm:p-6">
         <DialogHeader>
           <DialogTitle>Buat Admin Baru</DialogTitle>
         </DialogHeader>
@@ -428,7 +428,7 @@ function EditAdminDialog({
           Edit
         </Button>
       </DialogTrigger>
-      <DialogContent className="p-4 sm:max-w-md sm:p-6">
+      <DialogContent className="admin-mobile-dialog max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-1rem)] overflow-y-auto p-4 top-4 translate-y-0 sm:top-[50%] sm:max-h-[90vh] sm:max-w-md sm:translate-y-[-50%] sm:p-6">
         <DialogHeader>
           <DialogTitle>Edit Admin</DialogTitle>
         </DialogHeader>
@@ -520,7 +520,7 @@ function PermissionsDialog({
           Permission
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[min(92vh,760px)] overflow-y-auto p-4 sm:max-w-lg sm:p-6">
+      <DialogContent className="admin-mobile-dialog max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-1rem)] overflow-y-auto p-4 top-4 translate-y-0 sm:top-[50%] sm:max-h-[90vh] sm:max-w-lg sm:translate-y-[-50%] sm:p-6">
         <DialogHeader>
           <DialogTitle>Permission: {admin.displayName}</DialogTitle>
         </DialogHeader>
@@ -600,7 +600,7 @@ function ResetPasswordDialog({
           <KeyRound className="mr-1 h-3.5 w-3.5" /> Reset Password
         </Button>
       </DialogTrigger>
-      <DialogContent className="p-4 sm:max-w-md sm:p-6">
+      <DialogContent className="admin-mobile-dialog max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-1rem)] overflow-y-auto p-4 top-4 translate-y-0 sm:top-[50%] sm:max-h-[90vh] sm:max-w-md sm:translate-y-[-50%] sm:p-6">
         <DialogHeader>
           <DialogTitle>Reset Password: {admin.displayName}</DialogTitle>
         </DialogHeader>

@@ -441,5 +441,13 @@ img[next-image-placeholder] {
 .admin-root .admin-content table th { font-size: 10px; letter-spacing: .08em; }
 .admin-root .admin-content input, .admin-root .admin-content textarea, .admin-root .admin-content [role="combobox"] { min-height: 40px; }
 .admin-root .admin-content [role="dialog"] { border-color: var(--border); box-shadow: 0 18px 50px rgb(24 18 14 / 16%); }
+/* Keep shorter admin dialogs reachable on mobile, including browser safe areas. */
+@media (max-width: 639px) {
+  .admin-mobile-dialog {
+    top: max(1rem, env(safe-area-inset-top));
+    max-height: calc(100dvh - max(2rem, env(safe-area-inset-top) + env(safe-area-inset-bottom)));
+    transform: translateX(-50%);
+  }
+}
 .admin-root .admin-login-page { background: radial-gradient(circle at 15% 15%, oklch(.96 .035 52), transparent 38%), radial-gradient(circle at 85% 80%, oklch(.96 .03 295), transparent 38%), var(--background); }
 .admin-root .admin-login-page .rounded-lg.border { background: color-mix(in oklch,var(--card) 75%,transparent); }

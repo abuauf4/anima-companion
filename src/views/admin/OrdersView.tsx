@@ -200,7 +200,7 @@ export function OrdersView() {
 
       {/* Detail dialog */}
       <Dialog open={!!selected} onOpenChange={(v) => !v && setSelected(null)}>
-        <DialogContent className="max-h-[calc(100vh-1rem)] max-w-[calc(100%-1.5rem)] overflow-y-auto p-4 sm:max-h-[90vh] sm:max-w-2xl sm:p-6">
+        <DialogContent className="admin-mobile-dialog max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-1rem)] overflow-y-auto p-4 top-4 translate-y-0 sm:top-[50%] sm:max-h-[90vh] sm:max-w-2xl sm:translate-y-[-50%] sm:p-6">
           {selected && (
             <>
               <DialogHeader>
