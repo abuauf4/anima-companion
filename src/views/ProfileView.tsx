@@ -77,145 +77,86 @@ export function ProfileView() {
   }
 
   return (
-    <div className="container-page py-7 pb-10 sm:py-10">
-      <div className="mx-auto max-w-4xl">
-        <div className="mb-7">
-          <p className="text-sm font-semibold text-primary">Ruang personal Anda</p>
-          <h1 className="mt-1 text-2xl font-bold md:text-3xl">Akun Saya</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Kelola pesanan dan profil hewan kesayangan dalam satu tempat.</p>
-        </div>
+    <div className="container-page min-w-0 overflow-x-hidden px-4 py-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-10 sm:pb-10">
+      <div className="mx-auto min-w-0 max-w-3xl">
+        <header className="mb-6 sm:mb-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Ruang personal Anda</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Akun</h1>
+          <p className="mt-1.5 max-w-xl text-sm leading-6 text-muted-foreground">Kelola pesanan dan kebutuhan si kecil dalam satu tempat.</p>
+        </header>
 
-        <section className="relative overflow-hidden rounded-2xl bg-card p-5 shadow-sm ring-1 ring-border/70 sm:p-7">
-          <div className="absolute -right-12 -top-16 h-40 w-40 rounded-full bg-primary/10 blur-2xl" />
-          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl gradient-brand text-2xl font-bold text-white shadow-sm">
-                {user.name.charAt(0).toUpperCase()}
-              </div>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-xl font-bold">{user.name}</h2>
-                  {user.emailVerifiedAt ? (
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-success"><CheckCircle2 className="size-3.5" /> Terverifikasi</span>
-                  ) : <ResendVerificationButton />}
-                </div>
-                <p className="mt-1 text-sm text-muted-foreground">Pelanggan Anima Companion</p>
-                <div className="mt-3 flex flex-col gap-1 text-sm text-foreground/80 sm:flex-row sm:gap-4">
-                  <span className="inline-flex items-center gap-2"><Mail className="size-3.5 text-muted-foreground" /> {user.email}</span>
-                  {user.phone && <span className="inline-flex items-center gap-2"><Phone className="size-3.5 text-muted-foreground" /> {maskPhone(user.phone)}</span>}
-                </div>
-              </div>
+        <section className="border-b border-border/70 pb-6 sm:pb-7">
+          <div className="flex min-w-0 items-start gap-3.5 sm:gap-4">
+            <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-secondary text-xl font-bold text-white shadow-sm sm:size-16 sm:text-2xl">
+              {user.name.charAt(0).toUpperCase()}
             </div>
-            <p className="text-xs text-muted-foreground sm:max-w-[10rem] sm:text-right">Data profil saat ini tersimpan aman di akun Anda.</p>
+            <div className="min-w-0 flex-1 pt-0.5">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                <h2 className="min-w-0 max-w-full break-words text-lg font-bold sm:text-xl">{user.name}</h2>
+                {user.emailVerifiedAt ? (
+                  <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-success"><CheckCircle2 className="size-3.5" /> Terverifikasi</span>
+                ) : <ResendVerificationButton />}
+              </div>
+              <p className="mt-1 break-all text-sm text-muted-foreground">{user.email}</p>
+              {user.phone && <p className="mt-1 inline-flex max-w-full items-center gap-1.5 text-xs text-muted-foreground"><Phone className="size-3.5 shrink-0" /> {maskPhone(user.phone)}</p>}
+            </div>
           </div>
         </section>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          <button onClick={() => navigate('/orders')} className="group flex items-center justify-between rounded-xl bg-accent/55 p-4 text-left transition-colors hover:bg-accent">
-            <span className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-xl bg-primary/12 text-primary"><ShoppingBag className="size-5" /></span><span><span className="block text-sm font-semibold">Pesanan</span><span className="block text-xs text-muted-foreground">Lihat riwayat belanja</span></span></span>
-            <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+        <section className="mt-5 grid grid-cols-2 gap-2.5 sm:gap-3" aria-label="Akses cepat">
+          <button onClick={() => navigate('/orders')} className="group flex min-w-0 items-center gap-2.5 rounded-xl border border-border/70 bg-card px-3.5 py-3 text-left transition-colors hover:bg-accent sm:px-4 sm:py-3.5">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><ShoppingBag className="size-[18px]" /></span>
+            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">Pesanan</span><span className="block truncate text-[11px] text-muted-foreground">Riwayat belanja</span></span>
+            <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
           </button>
-          <button onClick={() => document.getElementById('pet-profiles')?.scrollIntoView({ behavior: 'smooth' })} className="group flex items-center justify-between rounded-xl bg-accent/55 p-4 text-left transition-colors hover:bg-accent">
-            <span className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-xl bg-secondary/10 text-secondary"><PawPrint className="size-5" /></span><span><span className="block text-sm font-semibold">Hewan Saya</span><span className="block text-xs text-muted-foreground">Personalisasi kebutuhan mereka</span></span></span>
-            <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+          <button onClick={() => document.getElementById('pet-profiles')?.scrollIntoView({ behavior: 'smooth' })} className="group flex min-w-0 items-center gap-2.5 rounded-xl border border-border/70 bg-card px-3.5 py-3 text-left transition-colors hover:bg-accent sm:px-4 sm:py-3.5">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary/10 text-secondary"><PawPrint className="size-[18px]" /></span>
+            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">Hewan Saya</span><span className="block truncate text-[11px] text-muted-foreground">Profil si kecil</span></span>
+            <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
           </button>
-        </div>
+        </section>
 
-        <section id="pet-profiles" className="mt-10 scroll-mt-24">
-          <div className="mb-4 flex items-end justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Profil hewan</p>
-              <h2 className="mt-1 flex items-center gap-2 text-xl font-bold"><PawPrint className="size-5 text-primary" /> Hewan Saya</h2>
-            </div>
-            <Button size="sm" variant="outline" onClick={openAddPet} className="gap-1.5 rounded-lg"><Plus className="size-4" /> Tambah</Button>
+        <section id="pet-profiles" className="mt-9 scroll-mt-24 sm:mt-11">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Personalisasi</p><h2 className="mt-1 text-lg font-bold sm:text-xl">Hewan Saya</h2></div>
+            <Button size="sm" variant="outline" onClick={openAddPet} className="shrink-0 gap-1.5 rounded-lg"><Plus className="size-4" /> Tambah</Button>
           </div>
-
           {petProfiles.length === 0 ? (
-            <div className="flex items-center gap-4 rounded-2xl border border-dashed border-border bg-card/55 px-5 py-6">
-              <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-2xl">🐾</div>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold">Belum ada profil hewan</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">Tambahkan profil untuk membantu kami menyesuaikan pengalaman belanja.</p>
-              </div>
-              <Button size="sm" onClick={openAddPet} className="ml-auto shrink-0 gap-1"><Plus className="size-4" /> Tambah</Button>
+            <div className="flex min-w-0 items-center gap-3 rounded-xl border border-dashed border-border bg-card/45 px-3.5 py-4 sm:px-4">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xl">🐾</div>
+              <div className="min-w-0 flex-1"><p className="text-sm font-semibold">Belum ada hewan</p><p className="mt-0.5 text-xs leading-5 text-muted-foreground">Tambahkan profil agar pengalaman Anima lebih personal.</p></div>
+              <Button size="sm" onClick={openAddPet} className="shrink-0 gap-1"><Plus className="size-3.5" /> Tambah</Button>
             </div>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-2.5 sm:grid-cols-2 sm:gap-3">
               {petProfiles.map((pet) => (
-                <div key={pet.id} className="rounded-2xl bg-card p-4 ring-1 ring-border/70 transition-shadow hover:shadow-sm">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-                        <PawPrint className="h-6 w-6" />
-                      </div>
-                      <div>
-                        <p className="font-semibold">{pet.petName}</p>
-                        <Badge variant="outline" className="mt-0.5 text-[10px]">{pet.petType.name}</Badge>
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditPet(pet)}>
-                        <Pencil className="h-3 w-3" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeletePet(pet.id)}>
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
+                <div key={pet.id} className="min-w-0 rounded-xl border border-border/70 bg-card p-3.5 transition-colors hover:bg-accent/30 sm:p-4">
+                  <div className="flex min-w-0 items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2.5"><div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><PawPrint className="size-5" /></div><div className="min-w-0"><p className="truncate text-sm font-semibold">{pet.petName}</p><Badge variant="outline" className="mt-0.5 max-w-full truncate text-[10px]">{pet.petType.name}</Badge></div></div>
+                    <div className="flex shrink-0 gap-0.5"><Button variant="ghost" size="icon" className="size-8" onClick={() => openEditPet(pet)} aria-label={`Edit ${pet.petName}`}><Pencil className="size-3.5" /></Button><Button variant="ghost" size="icon" className="size-8 text-destructive" onClick={() => handleDeletePet(pet.id)} aria-label={`Hapus ${pet.petName}`}><Trash2 className="size-3.5" /></Button></div>
                   </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <p className="text-muted-foreground">Umur</p>
-                      <p className="font-medium">{pet.age || '-'}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Berat</p>
-                      <p className="font-medium">{pet.weight || '-'}</p>
-                    </div>
-                  </div>
-                  {pet.notes && (
-                    <p className="mt-2 text-xs text-muted-foreground italic">"{pet.notes}"</p>
-                  )}
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div><p className="text-muted-foreground">Umur</p><p className="font-medium">{pet.age || '-'}</p></div><div><p className="text-muted-foreground">Berat</p><p className="font-medium">{pet.weight || '-'}</p></div></div>
+                  {pet.notes && <p className="mt-2 break-words text-xs text-muted-foreground italic">“{pet.notes}”</p>}
                 </div>
               ))}
             </div>
           )}
         </section>
 
-        <section className="mt-10 border-t border-border/70 pt-7">
-          <div className="mb-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Pengaturan</p>
-            <h2 className="mt-1 text-xl font-bold">Akun & keamanan</h2>
-          </div>
-          <div className="divide-y divide-border/70 rounded-2xl bg-card px-4 ring-1 ring-border/70">
-            {user.provider === 'PASSWORD' && (
-              <button onClick={() => navigate('/forgot-password')} className="group flex min-h-14 w-full items-center gap-3 text-left">
-                <LockKeyhole className="size-4 text-muted-foreground" />
-                <span className="flex-1"><span className="block text-sm font-semibold">Ubah password</span><span className="block text-xs text-muted-foreground">Kirim kode reset ke email akun</span></span>
-                <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-              </button>
-            )}
-            <div className="flex min-h-14 items-center gap-3">
-              <CheckCircle2 className="size-4 text-success" />
-              <span className="flex-1"><span className="block text-sm font-semibold">Status email</span><span className="block text-xs text-muted-foreground">{user.emailVerifiedAt ? 'Email terverifikasi' : 'Email belum terverifikasi'}</span></span>
-            </div>
-            <button onClick={() => logout()} className="flex min-h-14 w-full items-center gap-3 text-left text-destructive">
-              <LogOut className="size-4" />
-              <span className="text-sm font-semibold">Keluar dari akun</span>
-            </button>
+        <section className="mt-9 border-t border-border/70 pt-7 sm:mt-11">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Pengaturan</p><h2 className="mt-1 text-lg font-bold sm:text-xl">Akun & keamanan</h2>
+          <div className="mt-3 divide-y divide-border/70 border-y border-border/70">
+            {user.provider === 'PASSWORD' && <button onClick={() => navigate('/forgot-password')} className="group flex min-h-14 w-full min-w-0 items-center gap-3 text-left"><LockKeyhole className="size-4 shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Ubah password</span><span className="block truncate text-xs text-muted-foreground">Kirim kode reset ke email akun</span></span><ChevronRight className="size-4 shrink-0 text-muted-foreground" /></button>}
+            <div className="flex min-h-14 min-w-0 items-center gap-3"><CheckCircle2 className="size-4 shrink-0 text-success" /><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Status email</span><span className="block truncate text-xs text-muted-foreground">{user.emailVerifiedAt ? 'Email terverifikasi' : 'Email belum terverifikasi'}</span></span></div>
           </div>
         </section>
-      </div>
 
-      <PetProfileDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        editingPet={editingPet}
-        petTypes={petTypes}
-        onSaved={loadPetProfiles}
-      />
+        <section className="mt-8 border-t border-border/70 pt-7"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Bantuan</p><button onClick={() => navigate('/kontak')} className="group mt-3 flex min-h-14 w-full min-w-0 items-center gap-3 border-y border-border/70 text-left"><Mail className="size-4 shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Hubungi Anima</span><span className="block truncate text-xs text-muted-foreground">Kami siap membantu kebutuhan Anda</span></span><ChevronRight className="size-4 shrink-0 text-muted-foreground" /></button></section>
+        <button onClick={() => logout()} className="mt-6 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-destructive/20 px-4 text-sm font-semibold text-destructive transition-colors hover:bg-destructive/5"><LogOut className="size-4" /> Keluar</button>
+      </div>
+      <PetProfileDialog open={dialogOpen} onOpenChange={setDialogOpen} editingPet={editingPet} petTypes={petTypes} onSaved={loadPetProfiles} />
     </div>
-  )
-}
+  )}
 
 function maskPhone(phone: string) {
   if (phone.length < 7) return phone
