@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Mail, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
-import { Logo } from '@/components/layout/Logo'
+import { AuthShell } from '@/components/auth/AuthShell'
 
 // Demo-credential helpers are only available when Next.js is running in
 // development mode. In production builds, `process.env.NODE_ENV === 'production'`
@@ -105,27 +105,28 @@ export function LoginView() {
   }
 
   return (
-    <div className="gradient-mesh flex min-h-[calc(100vh-9rem)] items-center py-8 sm:py-12">
-      <div className="container-page">
-        <div className="mx-auto w-full max-w-[27rem]">
-          <div className="mb-6 text-center">
-            <Logo className="mx-auto" />
-            <div className="mt-6 flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary">
-              <ShieldCheck className="size-3.5" /> Akun Anima Companion
-            </div>
-            <h1 className="mt-3 text-2xl font-bold sm:text-[1.75rem]">Masuk ke Anima Companion</h1>
-            <p className="mx-auto mt-2 max-w-xs text-sm leading-6 text-muted-foreground">
-              Simpan kebutuhan si kecil dan lanjutkan belanja dengan lebih nyaman.
-            </p>
+    <AuthShell
+      title="Masuk ke Anima Companion"
+      description="Simpan kebutuhan si kecil dan lanjutkan belanja dengan lebih nyaman."
+      footer={(
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          Belum punya akun?{' '}
+          <button onClick={() => navigate('/register')} className="font-semibold text-primary hover:underline">
+            Daftar
+          </button>
+        </p>
+      )}
+    >
+          <div className="mb-4 flex items-center justify-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
+            <ShieldCheck className="size-3.5" /> Akun Anima Companion
           </div>
 
-          <div className="rounded-2xl bg-card/90 p-5 shadow-[0_16px_50px_-24px_oklch(0.18_0.02_30_/_0.28)] ring-1 ring-border/70 backdrop-blur-sm sm:p-6">
           {/* Google Sign-In — hidden when Google OAuth is not configured
               (the GoogleSignInButton component returns null in that case).
               Uses the SAME safeInternalPath() open-redirect defense as the
-              password flow for the `?next=` parameter. */}
-          <div className="space-y-3">
-            <div className="rounded-xl bg-accent/45 p-1">
+              `?next=` parameter. */}
+          <div className="space-y-2.5">
+            <div className="rounded-xl bg-accent/40 p-0.5">
               <GoogleSignInButton label="Lanjutkan dengan Google" />
             </div>
             <div className="relative">
@@ -138,7 +139,7 @@ export function LoginView() {
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+          <form onSubmit={handleSubmit} className="mt-4 space-y-3.5">
             <div>
               <Label htmlFor="email">Email</Label>
               <div className="relative mt-1.5">
@@ -204,14 +205,6 @@ export function LoginView() {
             </Button>
           </form>
 
-          <p className="mt-4 text-center text-sm text-muted-foreground">
-            Belum punya akun?{' '}
-            <button onClick={() => navigate('/register')} className="font-semibold text-primary hover:underline">
-              Daftar
-            </button>
-          </p>
-          </div>
-
         {/* Demo credentials — DEVELOPMENT ONLY.
             Gated by process.env.NODE_ENV (inlined at build time). In production
             builds, SHOW_DEMO_CREDENTIALS is `false` and this entire block is
@@ -238,8 +231,6 @@ export function LoginView() {
             </div>
           </div>
         )}
-        </div>
-      </div>
-    </div>
+    </AuthShell>
   )
 }

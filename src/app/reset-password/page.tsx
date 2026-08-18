@@ -19,7 +19,7 @@ export const metadata: Metadata = buildMetadata({
 
 export default function ResetPasswordPage() {
   return (
-    <SiteShell>
+    <SiteShell auth>
       <ResetPasswordView />
     </SiteShell>
   );

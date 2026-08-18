@@ -16,7 +16,7 @@ export const metadata: Metadata = buildMetadata({
 
 export default function VerifyEmailPage() {
   return (
-    <SiteShell>
+    <SiteShell auth>
       <VerifyEmailView />
     </SiteShell>
   );

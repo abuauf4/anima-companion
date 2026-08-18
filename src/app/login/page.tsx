@@ -15,7 +15,7 @@ export const metadata: Metadata = buildMetadata({
 
 export default function LoginPage() {
   return (
-    <SiteShell>
+    <SiteShell auth>
       <GuestGate>
         <LoginView />
       </GuestGate>

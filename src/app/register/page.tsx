@@ -14,7 +14,7 @@ export const metadata: Metadata = buildMetadata({
 
 export default function RegisterPage() {
   return (
-    <SiteShell>
+    <SiteShell auth>
       <GuestGate>
         <RegisterView />
       </GuestGate>

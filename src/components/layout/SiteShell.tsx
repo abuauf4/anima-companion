@@ -6,9 +6,15 @@ import { Footer } from '@/components/layout/Footer'
 import { WhatsAppFloatingButton } from '@/components/layout/WhatsAppFloatingButton'
 import { MobileBottomBar } from '@/components/layout/MobileBottomBar'
 
-export function SiteShell({ children, admin = false }: { children: React.ReactNode; admin?: boolean }) {
+export function SiteShell({ children, admin = false, auth = false }: { children: React.ReactNode; admin?: boolean; auth?: boolean }) {
   if (admin) {
     return <div className="admin-root min-h-screen bg-muted/40">{children}</div>
+  }
+
+  // Auth routes intentionally omit public commerce chrome. This keeps login,
+  // registration, and recovery focused without changing the public SiteShell.
+  if (auth) {
+    return <div className="min-h-[100dvh] bg-background">{children}</div>
   }
 
   return (
