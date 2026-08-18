@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Mail, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
 import { AuthShell } from '@/components/auth/AuthShell'
@@ -106,8 +106,9 @@ export function LoginView() {
 
   return (
     <AuthShell
-      title="Masuk ke Anima Companion"
-      description="Simpan kebutuhan si kecil dan lanjutkan belanja dengan lebih nyaman."
+      title="Selamat datang kembali 👋"
+      description="Temani kebutuhan anabulmu bersama Anima Companion."
+      surface={false}
       footer={(
         <p className="mt-4 text-center text-sm text-muted-foreground">
           Belum punya akun?{' '}
@@ -117,29 +118,22 @@ export function LoginView() {
         </p>
       )}
     >
-          <div className="mb-4 flex items-center justify-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
-            <ShieldCheck className="size-3.5" /> Akun Anima Companion
-          </div>
-
-          {/* Google Sign-In — hidden when Google OAuth is not configured
-              (the GoogleSignInButton component returns null in that case).
-              Uses the SAME safeInternalPath() open-redirect defense as the
-              `?next=` parameter. */}
-          <div className="space-y-2.5">
-            <div className="rounded-xl bg-accent/40 p-0.5">
+          {/* Google remains the clearest path, while staying part of the same editorial flow. */}
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-card/75 p-1 shadow-[0_10px_30px_-24px_oklch(0.18_0.02_30_/_0.35)] ring-1 ring-primary/10 transition hover:ring-primary/25">
               <GoogleSignInButton label="Lanjutkan dengan Google" />
             </div>
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-border" />
+                <span className="w-full border-t border-border/70" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-3 text-[11px] font-medium text-muted-foreground">atau lanjut dengan email</span>
+                <span className="bg-[oklch(0.99_0.002_80)] px-3 text-[10px] font-semibold tracking-[0.16em] text-muted-foreground">atau masuk dengan email</span>
               </div>
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-4 space-y-3.5">
+          <form onSubmit={handleSubmit} className="mt-5 space-y-4">
             <div>
               <Label htmlFor="email">Email</Label>
               <div className="relative mt-1.5">
@@ -150,7 +144,7 @@ export function LoginView() {
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                   placeholder="nama@email.com"
-                  className="pl-9"
+                  className="h-12 rounded-xl border-border/80 bg-card/70 pl-10 shadow-none transition placeholder:text-muted-foreground/70 focus-visible:border-primary focus-visible:ring-primary/20"
                   autoComplete="email"
                 />
               </div>
@@ -166,13 +160,13 @@ export function LoginView() {
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
                   placeholder="Masukkan password"
-                  className="px-9"
+                  className="h-12 rounded-xl border-border/80 bg-card/70 px-10 shadow-none transition placeholder:text-muted-foreground/70 focus-visible:border-primary focus-visible:ring-primary/20"
                   autoComplete="current-password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  className="absolute right-2 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -193,7 +187,7 @@ export function LoginView() {
               </button>
             </div>
 
-            <Button type="submit" className="mt-1 h-11 w-full rounded-xl" size="lg" disabled={loading}>
+            <Button type="submit" className="mt-2 h-12 w-full rounded-xl bg-primary text-primary-foreground shadow-[0_10px_24px_-16px_var(--primary)] transition hover:bg-primary/90 hover:shadow-[0_12px_28px_-16px_var(--primary)] focus-visible:ring-primary/30" size="lg" disabled={loading}>
               {loading ? (
                 <>
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
