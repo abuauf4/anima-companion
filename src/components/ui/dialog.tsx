@@ -59,8 +59,26 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
+        // Mobile-first responsive positioning:
+        //   Mobile (< sm): top-pinned near-full-screen.
+        //     - top: 1rem (16px) from top, accounting for safe-area-inset-top
+        //     - left: 1rem (16px) — NOT translate-x, so it doesn't shift
+        //       off-center on devices with weird viewport widths
+        //     - max-width: 100vw - 2rem (16px margin each side)
+        //     - max-height: 100dvh - 2rem (16px top + bottom margin)
+        //     - overflow-y: auto (content scrolls, not the page)
+        //   Desktop (sm+): centered modal.
+        //     - top: 50%, left: 50%, translate -50%/-50% → centered in viewport
+        //     - max-width: lg (32rem) by default; callers override per use-case
+        //     - max-height: 90dvh
+        //   Why NO raw CSS `transform` override: Tailwind v4 composes transforms
+        //   via CSS variables (--tw-translate-x/y) into a single `transform`
+        //   property. A raw `transform: translateX(-50%)` rule (like the old
+        //   .admin-mobile-dialog CSS) silently overrides the composed transform,
+        //   dropping the Y translation and causing the modal to appear
+        //   off-center. Using only Tailwind utilities keeps the composition intact.
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg",
+          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed left-1/2 top-4 z-50 grid w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] -translate-x-1/2 gap-4 overflow-y-auto rounded-lg border p-4 shadow-lg duration-200 sm:left-1/2 sm:top-1/2 sm:max-h-[90dvh] sm:max-w-lg sm:-translate-y-1/2 sm:p-6",
           className
         )}
         {...props}

@@ -1,21 +1,31 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
-} from '@/components/ui/dialog'
-import { ShoppingCart, ChevronLeft, ChevronRight, MessageCircle } from 'lucide-react'
+  ShoppingCart, ChevronLeft, ChevronRight, Download, RotateCcw,
+} from 'lucide-react'
 import { formatRupiah, formatDateTime, ORDER_STATUS } from '@/lib/format'
-import { whatsappAdminUrl } from '@/lib/config'
 import { toast } from 'sonner'
-import { AdminActionMenu, AdminEmptyState, AdminPageHeader, AdminStatusBadge } from '@/components/admin/AdminListPrimitives'
+import {
+  AdminActionMenu, AdminEmptyState, AdminPageHeader, AdminStatusBadge,
+} from '@/components/admin/AdminListPrimitives'
+import { OrderDetailModal } from '@/components/admin/OrderDetailModal'
+import { exportOrdersCsv, type ReceiptOrder } from '@/lib/order-receipt'
+
+interface OrderItem {
+  id: string
+  productName: string
+  productSku: string
+  price: number
+  quantity: number
+  subtotal: number
+  variantId?: string | null
+  variantName?: string | null
+}
 
 interface Order {
   id: string
@@ -30,17 +40,13 @@ interface Order {
   total: number
   voucherCode: string | null
   createdAt: string
-  items: Array<{
+  items: OrderItem[]
+  user?: {
     id: string
-    productName: string
-    productSku: string
-    price: number
-    quantity: number
-    subtotal: number
-    // Variant snapshot (Phase: Variants)
-    variantId?: string | null
-    variantName?: string | null
-  }>
+    name: string | null
+    email: string | null
+    phone: string | null
+  } | null
 }
 
 const STATUS_FLOW = ['PENDING', 'CONFIRMED', 'PROCESSED', 'COMPLETED', 'CANCELLED']
@@ -49,20 +55,31 @@ export function OrdersView() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('ALL')
+  const [fromDate, setFromDate] = useState('') // YYYY-MM-DD, WIB
+  const [toDate, setToDate] = useState('') // YYYY-MM-DD, WIB
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [selected, setSelected] = useState<Order | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   const load = async () => {
     setLoading(true)
-    const res = await fetch(`/api/admin/orders?status=${statusFilter}&page=${page}`)
+    const params = new URLSearchParams()
+    if (statusFilter && statusFilter !== 'ALL') params.set('status', statusFilter)
+    if (fromDate) params.set('from', fromDate)
+    if (toDate) params.set('to', toDate)
+    params.set('page', String(page))
+    const res = await fetch(`/api/admin/orders?${params.toString()}`)
     const data = await res.json()
     setOrders(data.orders || [])
     setTotalPages(data.pagination?.totalPages || 1)
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [statusFilter, page])
+  useEffect(() => { load() }, [statusFilter, fromDate, toDate, page])
+
+  // Reset to page 1 when any filter changes
+  useEffect(() => { setPage(1) }, [statusFilter, fromDate, toDate])
 
   const updateStatus = async (id: string, status: string) => {
     const res = await fetch(`/api/admin/orders/${id}`, {
@@ -76,7 +93,8 @@ export function OrdersView() {
       // Update local state with the server's authoritative version of the
       // order (includes refreshed items + status).
       setOrders(orders.map((o) => o.id === id ? { ...o, ...updatedOrder } : o))
-      if (selected?.id === id) setSelected({ ...selected, ...updatedOrder })
+      if (selected?.id === id) setSelected({ ...selected, ...updatedOrder } as Order)
+      toast.success(`Status pesanan diperbarui ke "${ORDER_STATUS[status]?.label || status}"`)
     } else {
       // Server rejected the transition (e.g. CANCELLED → PENDING is forbidden,
       // or unknown status value). Show the error message and reload so the
@@ -87,29 +105,146 @@ export function OrdersView() {
     }
   }
 
+  /**
+   * Export CSV — fetch ALL orders matching the current filter (ignoring
+   * pagination), then trigger a CSV download with one row per order-item.
+   *
+   * Uses a separate fetch (not the paginated `orders` state) because the
+   * current page might only show 20 of, say, 350 matching orders.
+   */
+  const handleExportCsv = async () => {
+    setExporting(true)
+    try {
+      const params = new URLSearchParams()
+      if (statusFilter && statusFilter !== 'ALL') params.set('status', statusFilter)
+      if (fromDate) params.set('from', fromDate)
+      if (toDate) params.set('to', toDate)
+      params.set('page', '1')
+      params.set('limit', '1000') // generous cap; most admin exports fit
+
+      const res = await fetch(`/api/admin/orders?${params.toString()}`)
+      if (!res.ok) throw new Error('Gagal memuat data untuk export')
+      const data = await res.json()
+      const exportOrders: ReceiptOrder[] = (data.orders || []).map((o: Order) => ({
+        orderNumber: o.orderNumber,
+        status: o.status,
+        customerName: o.customerName,
+        customerPhone: o.customerPhone,
+        customerEmail: o.user?.email || null,
+        address: o.address,
+        notes: o.notes,
+        voucherCode: o.voucherCode,
+        subtotal: o.subtotal,
+        discount: o.discount,
+        total: o.total,
+        createdAt: o.createdAt,
+        items: o.items.map((i) => ({
+          productName: i.productName,
+          variantName: i.variantName,
+          quantity: i.quantity,
+          price: i.price,
+          subtotal: i.subtotal,
+        })),
+      }))
+
+      if (exportOrders.length === 0) {
+        toast.info('Tidak ada pesanan untuk diexport dengan filter saat ini')
+        return
+      }
+
+      exportOrdersCsv(exportOrders, fromDate || undefined, toDate || undefined)
+      toast.success(`Exported ${exportOrders.length} pesanan ke CSV`)
+    } catch (e: any) {
+      toast.error('Gagal export CSV: ' + (e?.message || e))
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const resetFilters = () => {
+    setStatusFilter('ALL')
+    setFromDate('')
+    setToDate('')
+  }
+
+  const hasActiveFilters = statusFilter !== 'ALL' || fromDate !== '' || toDate !== ''
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <AdminPageHeader title="Pesanan" description="Kelola pesanan pelanggan" />
 
-      {/* Filter */}
-      <div className="flex flex-wrap gap-2">
-        {['ALL', ...STATUS_FLOW].map((s) => {
-          const label = s === 'ALL' ? 'Semua' : ORDER_STATUS[s]?.label
-          const isActive = statusFilter === s
-          return (
+      {/* Filter row: status + date range + actions */}
+      <div className="space-y-3">
+        {/* Status filter chips */}
+        <div className="flex flex-wrap gap-2">
+          {['ALL', ...STATUS_FLOW].map((s) => {
+            const label = s === 'ALL' ? 'Semua' : ORDER_STATUS[s]?.label
+            const isActive = statusFilter === s
+            return (
+              <Button
+                key={s}
+                variant={isActive ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => { setStatusFilter(s) }}
+              >
+                {label}
+              </Button>
+            )
+          })}
+        </div>
+
+        {/* Date range + actions */}
+        <div className="flex flex-wrap items-end gap-2">
+          <div>
+            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Dari Tanggal
+            </label>
+            <Input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              max={toDate || undefined}
+              className="h-9 w-[150px] text-xs"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Sampai Tanggal
+            </label>
+            <Input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              min={fromDate || undefined}
+              className="h-9 w-[150px] text-xs"
+            />
+          </div>
+          {hasActiveFilters && (
             <Button
-              key={s}
-              variant={isActive ? 'default' : 'outline'}
+              variant="ghost"
               size="sm"
-              onClick={() => { setStatusFilter(s); setPage(1) }}
+              onClick={resetFilters}
+              className="gap-1.5 text-muted-foreground"
             >
-              {label}
+              <RotateCcw className="h-3.5 w-3.5" /> Reset
             </Button>
-          )
-        })}
+          )}
+          <div className="ml-auto">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportCsv}
+              disabled={exporting}
+              className="gap-1.5"
+            >
+              <Download className="h-3.5 w-3.5" />
+              {exporting ? 'Mengexport...' : 'Export CSV'}
+            </Button>
+          </div>
+        </div>
       </div>
 
-      {/* Table */}
+      {/* Desktop table */}
       <Card className="overflow-hidden rounded-xl shadow-none">
         {loading ? (
           <div className="space-y-2 p-4">
@@ -133,13 +268,15 @@ export function OrdersView() {
               </thead>
               <tbody>
                 {orders.map((o) => {
-                  const status = ORDER_STATUS[o.status] || { label: o.status, color: 'gray' }
+                  const status = ORDER_STATUS[o.status] || { label: o.status }
                   return (
-                    <tr key={o.id} className="border-t border-border/70 transition-colors hover:bg-muted/40">
+                    <tr
+                      key={o.id}
+                      className="cursor-pointer border-t border-border/70 transition-colors hover:bg-muted/40"
+                      onClick={() => setSelected(o)}
+                    >
                       <td className="px-4 py-3 font-mono text-xs font-medium">
-                        <button onClick={() => setSelected(o)} className="hover:text-primary hover:underline">
-                          {o.orderNumber}
-                        </button>
+                        {o.orderNumber}
                       </td>
                       <td className="px-4 py-3">
                         <p className="font-medium">{o.customerName}</p>
@@ -149,24 +286,16 @@ export function OrdersView() {
                       <td className="px-4 py-3">{o.items.length} item</td>
                       <td className="px-4 py-3 font-semibold">{formatRupiah(o.total)}</td>
                       <td className="px-4 py-3">
-                        <AdminStatusBadge tone={o.status === 'COMPLETED' ? 'success' : o.status === 'CANCELLED' ? 'danger' : o.status === 'PENDING' ? 'warning' : 'info'}>{status.label}</AdminStatusBadge>
+                        <AdminStatusBadge tone={o.status === 'COMPLETED' ? 'success' : o.status === 'CANCELLED' ? 'danger' : o.status === 'PENDING' ? 'warning' : 'info'}>
+                          {status.label}
+                        </AdminStatusBadge>
                       </td>
-                      <td className="px-4 py-3">
-                        <Select
-                          value={o.status}
-                          onValueChange={(v) => updateStatus(o.id, v)}
-                        >
-                          <SelectTrigger className="h-8 w-32 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {STATUS_FLOW.map((s) => (
-                              <SelectItem key={s} value={s} className="text-xs">
-                                {ORDER_STATUS[s].label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                      <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                        <AdminActionMenu
+                          items={[
+                            { label: 'Lihat detail', onSelect: () => setSelected(o) },
+                          ]}
+                        />
                       </td>
                     </tr>
                   )
@@ -177,16 +306,37 @@ export function OrdersView() {
         )}
       </Card>
 
-      {!loading && orders.length > 0 && <div className="space-y-2 md:hidden">
-        {orders.map((o) => {
-          const status = ORDER_STATUS[o.status] || { label: o.status }
-          return <Card key={`mobile-${o.id}`} className="rounded-xl p-3 shadow-none">
-            <div className="flex items-start justify-between gap-2"><button onClick={() => setSelected(o)} className="font-mono text-xs font-semibold text-primary">{o.orderNumber}</button><AdminActionMenu items={[{ label: 'Lihat detail', onSelect: () => setSelected(o) }]} /></div>
-            <div className="mt-2 flex items-end justify-between gap-3"><div><p className="text-sm font-medium">{o.customerName}</p><p className="text-[11px] text-muted-foreground">{formatDateTime(o.createdAt)} · {o.items.length} item</p></div><p className="text-sm font-semibold">{formatRupiah(o.total)}</p></div>
-            <div className="mt-2 flex items-center justify-between gap-2"><AdminStatusBadge tone={o.status === 'COMPLETED' ? 'success' : o.status === 'CANCELLED' ? 'danger' : o.status === 'PENDING' ? 'warning' : 'info'}>{status.label}</AdminStatusBadge><Select value={o.status} onValueChange={(v) => updateStatus(o.id, v)}><SelectTrigger className="h-7 w-28 text-[11px]"><SelectValue /></SelectTrigger><SelectContent>{STATUS_FLOW.map((s) => <SelectItem key={s} value={s} className="text-xs">{ORDER_STATUS[s].label}</SelectItem>)}</SelectContent></Select></div>
-          </Card>
-        })}
-      </div>}
+      {/* Mobile cards */}
+      {!loading && orders.length > 0 && (
+        <div className="space-y-2 md:hidden">
+          {orders.map((o) => {
+            const status = ORDER_STATUS[o.status] || { label: o.status }
+            return (
+              <Card
+                key={`mobile-${o.id}`}
+                className="cursor-pointer rounded-xl p-3 shadow-none active:bg-muted/40"
+                onClick={() => setSelected(o)}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-mono text-xs font-semibold text-primary">{o.orderNumber}</span>
+                  <AdminStatusBadge tone={o.status === 'COMPLETED' ? 'success' : o.status === 'CANCELLED' ? 'danger' : o.status === 'PENDING' ? 'warning' : 'info'}>
+                    {status.label}
+                  </AdminStatusBadge>
+                </div>
+                <div className="mt-2 flex items-end justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{o.customerName}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {formatDateTime(o.createdAt)} · {o.items.length} item
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-sm font-semibold">{formatRupiah(o.total)}</p>
+                </div>
+              </Card>
+            )
+          })}
+        </div>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (
@@ -201,96 +351,12 @@ export function OrdersView() {
         </div>
       )}
 
-      {/* Detail dialog */}
-      <Dialog open={!!selected} onOpenChange={(v) => !v && setSelected(null)}>
-        <DialogContent className="admin-mobile-dialog max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-1rem)] overflow-y-auto p-4 top-4 translate-y-0 sm:top-[50%] sm:max-h-[90vh] sm:max-w-2xl sm:translate-y-[-50%] sm:p-6">
-          {selected && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="font-mono">{selected.orderNumber}</DialogTitle>
-                <DialogDescription>
-                  {formatDateTime(selected.createdAt)}
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-4">
-                {/* Status */}
-                <div>
-                  <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">Status</p>
-                  <Select value={selected.status} onValueChange={(v) => updateStatus(selected.id, v)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {STATUS_FLOW.map((s) => (
-                        <SelectItem key={s} value={s}>{ORDER_STATUS[s].label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Customer */}
-                <div className="rounded-lg border border-border bg-accent/30 p-4">
-                  <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">Data Pengiriman</p>
-                  <p className="font-medium">{selected.customerName}</p>
-                  <p className="text-sm">{selected.customerPhone}</p>
-                  <p className="text-sm text-muted-foreground">{selected.address}</p>
-                  {selected.notes && <p className="mt-2 text-xs italic">Catatan: {selected.notes}</p>}
-                </div>
-
-                {/* Items */}
-                <div>
-                  <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">Item Pesanan</p>
-                  <div className="space-y-2">
-                    {selected.items.map((item) => (
-                      <div key={item.id} className="flex justify-between text-sm border-b border-border/60 pb-2 last:border-0">
-                        <div>
-                          <p className="font-medium">{item.productName}</p>
-                          {item.variantName && (
-                            <p className="text-xs text-primary font-medium">
-                              Varian: {item.variantName}
-                            </p>
-                          )}
-                          <p className="text-xs text-muted-foreground">
-                            {item.quantity} × {formatRupiah(item.price)}
-                          </p>
-                        </div>
-                        <p className="font-medium">{formatRupiah(item.subtotal)}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Totals */}
-                <div className="space-y-1 border-t border-border pt-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Subtotal</span>
-                    <span>{formatRupiah(selected.subtotal)}</span>
-                  </div>
-                  {selected.discount > 0 && (
-                    <div className="flex justify-between text-success">
-                      <span>Diskon {selected.voucherCode ? `(${selected.voucherCode})` : ''}</span>
-                      <span>-{formatRupiah(selected.discount)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-base font-bold">
-                    <span>Total</span>
-                    <span className="text-primary">{formatRupiah(selected.total)}</span>
-                  </div>
-                </div>
-
-                <a
-                  href={whatsappAdminUrl(`Halo ${selected.customerName}, terkait pesanan ${selected.orderNumber} di Anima Companion 🐾`)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Button variant="outline" className="w-full gap-2 border-success text-success hover:bg-success hover:text-success-foreground">
-                    <MessageCircle className="h-4 w-4" /> Hubungi Pelanggan via WhatsApp
-                  </Button>
-                </a>
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Detail modal */}
+      <OrderDetailModal
+        order={selected}
+        onClose={() => setSelected(null)}
+        onStatusChange={updateStatus}
+      />
     </div>
   )
 }
