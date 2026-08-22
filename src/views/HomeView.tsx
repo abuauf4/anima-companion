@@ -433,43 +433,45 @@ function HeroMedia({
         */}
 
         {/* Mobile CTA — visible below md.
-            Tuned values (mobile-only, not shared with desktop):
-              left:    8%  — aligned under "untuk Produk Anima!" left edge
-              bottom:  14% — slightly higher than before (was 15%) to clear
-                              the bottom sponsor/info strip
-              width:   53% of banner, max-w 320px — smaller than before
-              padding: px-3.5 py-1.5 — slightly tighter
-              font:    text-[13px] — slightly smaller (was text-xs = 12px)
+            Tuned values (mobile-only, NOT shared with desktop):
+              left:    8%   — aligned under "untuk Produk Anima!" left edge
+              bottom:  19%  — moved up from 14% to give clear breathing room
+                              above the purple footer/info strip
+              width:   46%  — reduced from 53%, target 45-48% of banner
+              max-w:   280px — cap for very wide mobile screens
+              height:  ~42px via py-2 — target 40-44px
+              font:    text-[14px] — target 14-15px
+              Visual hierarchy: [untuk Produk Anima!] → gap → [CTA] → gap → [footer]
         */}
-        <div className="pointer-events-none absolute bottom-[14%] left-[8%] z-10 w-[53%] max-w-[320px] md:hidden">
+        <div className="pointer-events-none absolute bottom-[19%] left-[8%] z-10 w-[46%] max-w-[280px] md:hidden">
           <span
             role="button"
             tabIndex={-1}
-            className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-[13px] font-bold text-white shadow-lg ring-1 ring-white/25 transition-colors duration-200 group-hover:bg-primary/90 active:scale-95"
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-primary px-3 py-2 text-[14px] font-bold text-white shadow-lg ring-1 ring-white/25 transition-colors duration-200 group-hover:bg-primary/90 active:scale-95"
           >
             Gabung Anima Club
-            <ArrowRight className="h-3 w-3" />
+            <ArrowRight className="h-3.5 w-3.5" />
           </span>
         </div>
 
         {/* Desktop CTA — visible at md+.
-            Tuned values (desktop-only, not shared with mobile):
-              left:    10% — aligned under "untuk Produk Anima!" left edge
-              bottom:  16% — slightly higher than before (was 18%) to sit
-                              clearly below the promo text, not on the edge
-              min-w:   180px — ensures readability at 1280-1440px
-              padding: px-5 py-2.5 — balanced (was px-6 py-3, slightly smaller)
-              font:    text-[13px] — slightly smaller than text-sm (14px)
-                              for a more refined look at desktop scale
+            Tuned values (desktop-only, NOT shared with mobile):
+              left:    9%   — aligned under "untuk Produk Anima!" left edge
+              bottom:  18%  — moved up from 16% to sit clearly below promo text
+              width:   31%  — target 30-33% of image width
+              min-w:   200px — ensures readability at 1280-1440px
+              height:  ~44px via py-2.5 — proportionally stronger
+              font:    text-[14px] — readable at desktop scale
+              Visual hierarchy: [untuk Produk Anima!] → gap → [CTA - strong] → gap → [footer]
         */}
-        <div className="pointer-events-none absolute bottom-[16%] left-[10%] z-10 hidden md:block">
+        <div className="pointer-events-none absolute bottom-[18%] left-[9%] z-10 hidden md:block">
           <span
             role="button"
             tabIndex={-1}
-            className="inline-flex min-w-[180px] items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-[13px] font-bold text-white shadow-lg ring-1 ring-white/25 transition-colors duration-200 group-hover:bg-primary/90 active:scale-95"
+            className="inline-flex min-w-[200px] items-center justify-center gap-2 rounded-full bg-primary px-6 py-2.5 text-[14px] font-bold text-white shadow-lg ring-1 ring-white/25 transition-colors duration-200 group-hover:bg-primary/90 active:scale-95"
           >
             Gabung Anima Club
-            <ArrowRight className="h-3.5 w-3.5" />
+            <ArrowRight className="h-4 w-4" />
           </span>
         </div>
       </button>
