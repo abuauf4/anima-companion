@@ -205,7 +205,20 @@ export function Footer() {
         </div>
 
         <div className="mt-6 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row">
-          <p>© 2026 PT Sutan Vet Medika — Anima Companion. All rights reserved.</p>
+          <p className="text-center sm:text-left">
+            © 2026 PT Sutan Vet Medika — Anima Companion. All rights reserved •{' '}
+            <span className="whitespace-nowrap">
+              Designed &amp; Developed by{' '}
+              <a
+                href="https://motion.nauka.id"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-secondary transition-colors hover:text-secondary/80 hover:underline"
+              >
+                Nauka Motion
+              </a>
+            </span>
+          </p>
           <div className="flex items-center gap-4">
             <button className="hover:text-primary">Kebijakan Privasi</button>
             <button className="hover:text-primary">Syarat & Ketentuan</button>
