@@ -21,7 +21,6 @@ export function CheckoutView() {
   const { navigate } = useHashRouter()
   const { user } = useAuth()
   const items = useCartStore((s) => s.items)
-  const voucherCode = useCartStore((s) => s.voucherCode)
   const clear = useCartStore((s) => s.clear)
 
   const [form, setForm] = useState({
@@ -111,7 +110,12 @@ export function CheckoutView() {
           customerPhone: form.customerPhone,
           address: form.address,
           notes: form.notes,
-          voucherCode,
+          // Voucher feature has been removed from the customer cart/checkout
+          // UI. We deliberately DO NOT send `voucherCode` here — the server
+          // resolves any falsy voucherCode as "no voucher" → zero discount.
+          // The customer pays exactly the cart subtotal; discounts may still
+          // be granted out-of-band by the admin via WhatsApp after the
+          // order is submitted.
         }),
       })
       const data = await res.json()
@@ -138,6 +142,10 @@ export function CheckoutView() {
       }
 
       // Generate WhatsApp message
+      // NOTE: `voucherCode` field on the WA message payload is intentionally
+      // omitted — the voucher feature has been removed from the customer
+      // cart/checkout UI. generateWhatsAppMessage accepts an optional
+      // voucherCode; passing nothing renders the message without a voucher line.
       const waMessage = generateWhatsAppMessage({
         orderNumber: data.order.orderNumber,
         customerName: form.customerName,
@@ -153,7 +161,6 @@ export function CheckoutView() {
         subtotal: data.order.subtotal,
         discount: data.order.discount,
         total: data.order.total,
-        voucherCode: data.order.voucherCode,
       })
 
       const waUrl = buildWhatsAppUrl(SITE_CONFIG.whatsappNumber, waMessage)
@@ -321,14 +328,9 @@ export function CheckoutView() {
               })}
             </div>
 
-            {/* Voucher badge */}
-            {voucherCode && (
-              <div className="mb-3 flex items-center justify-between rounded-lg border border-success/30 bg-success/5 px-3 py-1.5">
-                <span className="flex items-center gap-1.5 text-xs text-success">
-                  <Check className="h-3 w-3" /> Voucher {voucherCode}
-                </span>
-              </div>
-            )}
+            {/* Voucher badge was removed when the voucher feature was hidden
+                from the customer cart/checkout UI. The order summary now
+                shows: Subtotal, Ongkir (Dihitung admin), Total = Subtotal. */}
 
             <div className="space-y-2 border-t border-border pt-4">
               <div className="flex justify-between text-sm">
