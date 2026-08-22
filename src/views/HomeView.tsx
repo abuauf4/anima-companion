@@ -301,18 +301,18 @@ const PET_CARDS: PetCardConfig[] = [
  *        desktop image)
  *     3. /banner-mobile.webp (local default, native 1523x765 ~2:1)
  *
- * Aspect ratio: BOTH desktop and mobile hero images are LANDSCAPE (16:9).
- * The mobile version is a separate upload only so its composition can
- * be optimized for small screens — the container shape is the same as
- * desktop (aspect-video). Never portrait.
+ * Aspect ratio guidance: BOTH desktop and mobile hero images are
+ * LANDSCAPE (16:9 recommended). The mobile version is a separate
+ * upload only so its composition can be optimized for small screens.
  *
  * Rendering mode:
- *   - Local /public paths (known dims): intrinsic width/height +
- *     h-auto w-full object-contain → no CLS, no crop, no distortion.
- *   - Cloudinary URLs (dims unknown at render time): fill mode inside
- *     a fixed 16:9 aspect-ratio container + object-cover. Since admin
- *     is instructed to upload 16:9 images, object-cover fills the
- *     container without distortion.
+ *   - Desktop: INTRINSIC aspect ratio. Renders with `w-full h-auto`
+ *     (display:block, width:100%, height:auto). NO aspect-video, NO fill,
+ *     NO object-cover. This ensures the ENTIRE uploaded image is visible
+ *     with no cropping — top title, DISKON 50%, animals, bottom logos/footer
+ *     all remain visible. The button wrapper provides clipping/border/shadow.
+ *   - Mobile: aspect-video (16:9) + object-cover. Mobile layout is
+ *     intentionally more constrained (full-width banner).
  *
  * Single clipping wrapper owns the rounded radius. The entire card is
  * clickable → /login. No overlays, no floating badges.
@@ -380,19 +380,26 @@ function HeroMedia({
           />
         )}
 
-        {/* Desktop banner — visible at md+. */}
+        {/* Desktop banner — visible at md+.
+            DESKTOP ONLY: render with intrinsic aspect ratio — NO aspect-video,
+            NO fill, NO object-cover. This ensures the ENTIRE uploaded image
+            is visible (no cropping) regardless of its native dimensions.
+            The button wrapper provides clipping/border/shadow; the image
+            itself controls the height via its natural aspect ratio. */}
         {desktopIsCloudinary ? (
-          // Cloudinary URL — unknown native dims → use fill + 16:9 aspect-ratio container.
-          <div className="relative hidden aspect-video w-full md:block">
-            <OptImage
-              src={desktopSrc}
-              alt="Anima Companion — Elevating Animal Health"
-              fill
-              priority
-              sizes="(min-width: 768px) 50vw, 0px"
-              className="object-cover"
-            />
-          </div>
+          // Cloudinary URL — pass arbitrary placeholder dims (1600x900) so
+          // next/image generates a proper srcset. The width/height attributes
+          // on the <img> are visually overridden by `w-full h-auto` CSS, so
+          // the browser uses the image's intrinsic aspect ratio for layout.
+          <OptImage
+            src={desktopSrc}
+            alt="Anima Companion — Elevating Animal Health"
+            width={1600}
+            height={900}
+            priority
+            sizes="(min-width: 768px) 50vw, 0px"
+            className="hidden h-auto w-full md:block"
+          />
         ) : (
           // Local /public path — native 1672x941 (~16:9).
           <OptImage
@@ -402,7 +409,7 @@ function HeroMedia({
             height={941}
             priority
             sizes="(min-width: 768px) 50vw, 0px"
-            className="hidden h-auto w-full object-contain md:block"
+            className="hidden h-auto w-full md:block"
           />
         )}
       </button>
