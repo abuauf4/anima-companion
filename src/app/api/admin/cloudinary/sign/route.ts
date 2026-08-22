@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requirePermission, requireAdminSessionActive, handleAuthError } from '@/lib/admin-auth'
+import { requirePermission, handleAuthError } from '@/lib/admin-auth'
 import {
   buildSignatureResponse,
   getCloudinaryConfig,
@@ -17,16 +17,15 @@ import {
  * (product create/update, or site settings PUT).
  *
  * Permission model:
- *   - Any authenticated admin with EITHER `products.manage` OR
- *     `settings.manage` may request a signature. The signature itself
- *     is the same regardless of which permission gated the request —
- *     it grants upload access to the `anima/products/` folder only.
- *   - This was relaxed from products.manage-only to also accept
- *     settings.manage so the Site Settings page (Admin > Pengaturan)
- *     can upload Hero Images without needing a separate sign endpoint.
+ *   - Accepts EITHER `products.manage` OR `settings.manage`. This lets
+ *     both the Products page and the Settings page use the SAME uploader
+ *     component (CloudinaryUploader) without a separate sign endpoint.
+ *   - The check is simple: try `products.manage` first. If that throws
+ *     FORBIDDEN, try `settings.manage`. If both throw, the FORBIDDEN error
+ *     propagates and gets converted to a 403 response by handleAuthError.
  *
  * Security:
- *   - requireAdminSessionActive() enforces server-side admin role.
+ *   - requirePermission() enforces server-side admin role + permission check.
  *   - CLOUDINARY_API_SECRET is NEVER returned to the browser. Only the
  *     derived signature (valid only for the params it was computed over),
  *     the public api_key, cloud name, and folder are returned.
@@ -38,23 +37,20 @@ import {
  *
  * Response 503 (Cloudinary not configured on the server):
  *   { error: 'CLOUDINARY_NOT_CONFIGURED' }
- *   The admin UI should show a "Cloudinary belum dikonfigurasi" message
- *   and disable the upload button, but allow manual URL paste as a fallback.
  */
 export async function GET() {
+  // Check permission — accept either products.manage or settings.manage.
+  // This is intentionally simple and linear: try products.manage first
+  // (the historical guard), and if FORBIDDEN, try settings.manage.
+  // If both throw, the second error propagates.
   try {
-    // Auth check — must be an authenticated, non-must-change-password admin.
-    // Then check that the admin has at least one of the upload-granting
-    // permissions. We use requirePermission('products.manage') first
-    // (the historical guard), and if that throws FORBIDDEN, fall through
-    // to requirePermission('settings.manage'). If both throw, the error
-    // propagates up and gets converted to a 403 by handleAuthError.
-    const admin = await requireAdminSessionActive()
-    const hasProductsManage = admin.permissions.includes('products.manage')
-    const hasSettingsManage = admin.permissions.includes('settings.manage')
-    if (admin.systemRole !== 'DEVELOPER' && !hasProductsManage && !hasSettingsManage) {
-      // Throw FORBIDDEN via the standard path so handleAuthError can map it.
-      try { await requirePermission('products.manage') } catch (e) { /* fall through to handleAuthError below */ throw e }
+    try {
+      await requirePermission('products.manage')
+    } catch (e: any) {
+      // If products.manage failed with FORBIDDEN, try settings.manage
+      // before giving up. This allows admin users with only settings
+      // permission to upload hero images.
+      await requirePermission('settings.manage')
     }
   } catch (e: any) {
     const authRes = handleAuthError(e)

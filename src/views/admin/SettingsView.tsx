@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -216,7 +216,7 @@ export function SettingsView() {
       </Card>
 
       {/* HERO IMAGES — admin-uploadable per-breakpoint */}
-      <HeroImagesCard form={form} setForm={setForm} />
+      <HeroImagesCard form={form} setForm={setForm} saving={saving} />
 
       {/* TRUST BADGES */}
       <Card className="space-y-4 p-4 sm:p-6">
@@ -356,22 +356,59 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
  * (see /api/admin/cloudinary/sign route for the relaxed permission
  * model).
  *
- * Each image slot has:
- *   - Preview (OptImage, fallback to a "no image" placeholder)
- *   - Upload button (CloudinaryUploader)
- *   - Hapus button (sets the field to null)
- *
- * On Save, the parent form's heroImageDesktop / heroImageMobile fields
- * (string | null) are sent to PUT /api/admin/settings, which normalizes
- * empty strings to null and validates URL/path format.
+ * IMPORTANT — mirrors the working Product upload pattern:
+ *   - `onUploaded` uses STABLE callback references (useCallback), NOT inline
+ *     arrow functions. Inline arrows create a new closure every render,
+ *     which causes CloudinaryUploader's internal `uploadOne` useCallback
+ *     to be recreated on every render, which can lead to stale state
+ *     captures and race conditions.
+ *   - State updates use FUNCTIONAL setState `setForm((prev) => ...)`
+ *     instead of direct object spread `setForm({ ...form, ... })`.
+ *     Functional updates always operate on the latest state, eliminating
+ *     stale-closure bugs when multiple state updates are in flight.
+ *   - `disabled={saving}` is passed to CloudinaryUploader (same as products).
+ *   - `multiple={false}` restricts to single-file selection (hero slots
+ *     only accept 1 image each, unlike product images which can bulk-upload).
+ *   - All buttons have `type="button"` to prevent accidental form submission.
  */
 function HeroImagesCard({
   form,
   setForm,
+  saving,
 }: {
   form: SiteSetting
-  setForm: (f: SiteSetting) => void
+  setForm: React.Dispatch<React.SetStateAction<SiteSetting>>
+  saving: boolean
 }) {
+  // Stable callbacks — same pattern as ProductsView's `addImageUrl`.
+  // These are referentially stable across re-renders, so CloudinaryUploader's
+  // internal useCallback for `uploadOne` won't be invalidated unnecessarily.
+  const handleDesktopUploaded = useCallback(
+    (url: string) => {
+      if (!url) return
+      setForm((prev) => ({ ...prev, heroImageDesktop: url }))
+      toast.success('Gambar desktop diunggah — klik Simpan untuk menerapkan')
+    },
+    [setForm]
+  )
+
+  const handleMobileUploaded = useCallback(
+    (url: string) => {
+      if (!url) return
+      setForm((prev) => ({ ...prev, heroImageMobile: url }))
+      toast.success('Gambar mobile diunggah — klik Simpan untuk menerapkan')
+    },
+    [setForm]
+  )
+
+  const handleRemoveDesktop = useCallback(() => {
+    setForm((prev) => ({ ...prev, heroImageDesktop: null }))
+  }, [setForm])
+
+  const handleRemoveMobile = useCallback(() => {
+    setForm((prev) => ({ ...prev, heroImageMobile: null }))
+  }, [setForm])
+
   return (
     <Card className="space-y-4 p-4 sm:p-6">
       <div>
@@ -388,10 +425,11 @@ function HeroImagesCard({
             <Label className="text-xs">Desktop Hero Image</Label>
             {form.heroImageDesktop && (
               <Button
+                type="button"
                 variant="ghost"
                 size="sm"
                 className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-destructive"
-                onClick={() => setForm({ ...form, heroImageDesktop: null })}
+                onClick={handleRemoveDesktop}
               >
                 <X className="h-3 w-3" /> Hapus
               </Button>
@@ -419,10 +457,9 @@ function HeroImagesCard({
           </p>
           <CloudinaryUploader
             compact
-            onUploaded={(url) => {
-              setForm({ ...form, heroImageDesktop: url })
-              toast.success('Gambar desktop diunggah — klik Simpan untuk menerapkan')
-            }}
+            multiple={false}
+            onUploaded={handleDesktopUploaded}
+            disabled={saving}
           />
         </div>
 
@@ -432,10 +469,11 @@ function HeroImagesCard({
             <Label className="text-xs">Mobile Hero Image</Label>
             {form.heroImageMobile && (
               <Button
+                type="button"
                 variant="ghost"
                 size="sm"
                 className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-destructive"
-                onClick={() => setForm({ ...form, heroImageMobile: null })}
+                onClick={handleRemoveMobile}
               >
                 <X className="h-3 w-3" /> Hapus
               </Button>
@@ -463,10 +501,9 @@ function HeroImagesCard({
           </p>
           <CloudinaryUploader
             compact
-            onUploaded={(url) => {
-              setForm({ ...form, heroImageMobile: url })
-              toast.success('Gambar mobile diunggah — klik Simpan untuk menerapkan')
-            }}
+            multiple={false}
+            onUploaded={handleMobileUploaded}
+            disabled={saving}
           />
         </div>
       </div>

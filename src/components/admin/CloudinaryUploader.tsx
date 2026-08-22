@@ -41,6 +41,12 @@ interface CloudinaryUploaderProps {
   disabled?: boolean
   /** Compact variant used inside dense forms. */
   compact?: boolean
+  /**
+   * Allow multiple file selection. Default: true (backward-compatible with
+   * product image uploads where admin may select several images at once).
+   * Set to false for single-image slots (e.g. hero image uploaders).
+   */
+  multiple?: boolean
 }
 
 interface UploadJob {
@@ -62,7 +68,7 @@ const ACCEPT_ATTR = 'image/*'
 const ACCEPTED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif', 'image/heic', 'image/heif']
 const MAX_FILE_SIZE = 8 * 1024 * 1024 // 8 MB per file
 
-export function CloudinaryUploader({ onUploaded, disabled, compact }: CloudinaryUploaderProps) {
+export function CloudinaryUploader({ onUploaded, disabled, compact, multiple = true }: CloudinaryUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [jobs, setJobs] = useState<UploadJob[]>([])
   const [cloudNotConfigured, setCloudNotConfigured] = useState(false)
@@ -196,7 +202,7 @@ export function CloudinaryUploader({ onUploaded, disabled, compact }: Cloudinary
         ref={inputRef}
         type="file"
         accept={ACCEPT_ATTR}
-        multiple
+        multiple={multiple}
         className="hidden"
         onChange={(e) => {
           if (e.target.files?.length) handleFiles(e.target.files)
@@ -226,7 +232,7 @@ export function CloudinaryUploader({ onUploaded, disabled, compact }: Cloudinary
           <UploadCloud className="size-4" /> Upload Foto
         </Button>
         <p className="text-[10px] text-muted-foreground">
-          JPG, PNG, WebP, GIF, AVIF, HEIC · Maks 8 MB
+          JPG, PNG, WebP, GIF, AVIF, HEIC · Maks 8 MB{multiple ? '' : ' · 1 file'}
         </p>
       </div>
 
