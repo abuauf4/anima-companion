@@ -8,19 +8,20 @@ export const SITE_CONFIG = {
   // Display form (local prefix, grouped 4-4-4): "0822 1084 6408".
   // tel: form: "+6282210846408".
   whatsappNumber: '6282210846408',
-  email: 'hello@animacompanion.id',
+  email: 'sutanvetmedika@gmail.com',
   // Verified real social channels
   instagram: '@anima.companion',
   instagramUrl: 'https://instagram.com/anima.companion',
   shopeeUrl: 'https://shopee.co.id/anima.companion',
   tiktok: '@anima.companion',
   // TODO: verify TikTok Shop URL with PT Sutan Vet Medika
-  // Real company location — PT Sutan Vet Medika is based in Bogor
-  address: 'Bogor, Jawa Barat, Indonesia',
+  // Real company location — PT Sutan Vet Medika is based at Gedung STP - IPB,
+  // Bogor, Jawa Barat.
+  address: 'Gedung STP - IPB lt 1, Bogor, Jawa Barat',
   hours: 'Senin–Sabtu, 09.00–18.00 WIB',
   freeShippingThreshold: 150000,
-  // Distribution: available in 515+ veterinary clinics across Indonesia
-  clinicCount: '515+',
+  // Distribution: available in 400+ veterinary clinics across Indonesia
+  clinicCount: '400+',
 }
 
 /**

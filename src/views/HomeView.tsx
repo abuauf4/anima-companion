@@ -76,7 +76,7 @@ export function HomeView() {
             </h1>
 
             <p className="max-w-md text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
-              {settings?.heroDescription || 'Suplemen & vitamin hewan peliharaan premium dari Anima Companion — PT Sutan Vet Medika. Tersedia di 515+ klinik seluruh Indonesia.'}
+              {settings?.heroDescription || 'Suplemen & vitamin hewan peliharaan premium dari Anima Companion — PT Sutan Vet Medika. Tersedia di 400+ klinik seluruh Indonesia.'}
             </p>
 
             {/* Hook text before CTAs — same typography as H1 */}

@@ -8,7 +8,7 @@ import { buildMetadata } from "@/lib/seo";
 export const metadata: Metadata = buildMetadata({
   title: "Produk",
   description:
-    "Belanja suplemen & vitamin hewan peliharaan premium dari Anima Companion. Filter berdasarkan kategori, manfaat, jenis hewan, dan brand. Felcover+, Sioren, Forevet — tersedia di 515+ klinik seluruh Indonesia.",
+    "Belanja suplemen & vitamin hewan peliharaan premium dari Anima Companion. Filter berdasarkan kategori, manfaat, jenis hewan, dan brand. Felcover+, Sioren, Forevet — tersedia di 400+ klinik seluruh Indonesia.",
   path: "/produk",
   keywords: [
     "beli suplemen kucing",

@@ -76,7 +76,7 @@ async function bootstrapDeveloperAdmin(): Promise<void> {
 // Brand: Anima Companion (PT Sutan Vet Medika, Bogor, Jawa Barat, Indonesia)
 // Tagline: "Elevating Animal Health"
 // Hashtag: #PawrentHebatAnabulSehat
-// Distribution: 515+ klinik hewan seluruh Indonesia
+// Distribution: 400+ klinik hewan seluruh Indonesia
 // Marketplace: Shopee, Tokopedia, TikTok Shop
 // ============================================================================
 // NOTE: All BPOM numbers below are PLACEHOLDERS that need to be verified
@@ -573,7 +573,7 @@ async function main() {
       stock: 70,
       weight: '200 gram',
       description:
-        'Sioren Pet Odor X adalah serbuk anti-bau untuk litterbox dan area kandang hewan. Mengandung active charcoal dan natural absorbent yang menyerap bau ammonia dan kelembaban. Tersedia di 515+ klinik seluruh Indonesia.',
+        'Sioren Pet Odor X adalah serbuk anti-bau untuk litterbox dan area kandang hewan. Mengandung active charcoal dan natural absorbent yang menyerap bau ammonia dan kelembaban. Tersedia di 400+ klinik seluruh Indonesia.',
       benefit:
         'Menghilangkan bau litterbox hingga 24 jam, menyerap kelembaban, mencegah bakteri, aman dipakai sehari-hari.',
       usage:
@@ -871,7 +871,7 @@ async function main() {
     db.banner.create({
       data: {
         title: 'Elevating Animal Health',
-        subtitle: 'Suplemen hewan peliharaan premium dari Anima Companion. Tersedia di 515+ klinik seluruh Indonesia.',
+        subtitle: 'Suplemen hewan peliharaan premium dari Anima Companion. Tersedia di 400+ klinik seluruh Indonesia.',
         imageUrl: 'https://placehold.co/1400x500/3B82F6/ffffff?text=Anima+Companion+%E2%80%94+Elevating+Animal+Health',
         link: '#/shop',
         position: 'HOME',
@@ -1005,7 +1005,7 @@ async function main() {
     db.fAQ.create({
       data: {
         question: 'Apakah tersedia konsultasi gratis?',
-        answer: 'Ya! Tim kami siap membantu via WhatsApp untuk konsultasi seputar kesehatan hewan peliharaan dan pemilihan produk yang tepat. Produk kami tersedia di 515+ klinik seluruh Indonesia.',
+        answer: 'Ya! Tim kami siap membantu via WhatsApp untuk konsultasi seputar kesehatan hewan peliharaan dan pemilihan produk yang tepat. Produk kami tersedia di 400+ klinik seluruh Indonesia.',
         order: 2,
         isActive: true,
       },

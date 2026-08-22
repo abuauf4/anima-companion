@@ -16,7 +16,7 @@ export function Footer() {
           {[
             { icon: '🛡️', title: 'BPOM Terdaftar', desc: 'Produk resmi & aman' },
             { icon: '✅', title: '100% Asli', desc: 'Dijamin original' },
-            { icon: '🏥', title: '515+ Klinik', desc: 'Distributor resmi' },
+            { icon: '🏥', title: '400+ Klinik', desc: 'Distributor resmi' },
             { icon: '💬', title: 'Fast Response', desc: 'via WhatsApp' },
           ].map((b, i) => (
             <div key={i} className="flex items-center gap-3">
@@ -36,7 +36,7 @@ export function Footer() {
           <div className="col-span-2 lg:col-span-2">
             <Logo showTagline />
             <p className="mt-4 max-w-sm text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground">Elevating Animal Health</span> — Vitamin & suplemen hewan peliharaan premium dari PT Sutan Vet Medika, tersedia di 515+ klinik seluruh Indonesia.
+              <span className="font-semibold text-foreground">Elevating Animal Health</span> — Vitamin & suplemen hewan peliharaan premium dari PT Sutan Vet Medika, tersedia di 400+ klinik seluruh Indonesia.
             </p>
             {/* Company info */}
             <div className="mt-4 space-y-1.5 text-sm text-muted-foreground">
@@ -46,7 +46,7 @@ export function Footer() {
               </p>
               <p className="flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-primary" />
-                <span>Bogor, Jawa Barat, Indonesia</span>
+                <span>Gedung STP - IPB lt 1, Bogor, Jawa Barat</span>
               </p>
               <p className="flex items-center gap-2">
                 <Hash className="h-4 w-4 text-primary" />
@@ -138,7 +138,7 @@ export function Footer() {
             <ul className="space-y-3 text-sm text-muted-foreground">
               <li className="flex items-start gap-2">
                 <Mail className="mt-0.5 h-4 w-4 text-primary" />
-                <span>hello@animacompanion.id</span>
+                <span>sutanvetmedika@gmail.com</span>
               </li>
               <li className="flex items-start gap-2">
                 <Phone className="mt-0.5 h-4 w-4 text-primary" />
@@ -152,7 +152,7 @@ export function Footer() {
               </li>
               <li className="flex items-start gap-2">
                 <MapPin className="mt-0.5 h-4 w-4 text-primary" />
-                <span>Bogor, Jawa Barat, Indonesia</span>
+                <span>Gedung STP - IPB lt 1, Bogor, Jawa Barat</span>
               </li>
               <li className="flex items-start gap-2">
                 <Clock className="mt-0.5 h-4 w-4 text-primary" />

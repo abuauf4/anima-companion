@@ -75,7 +75,7 @@ draw.text((text_x, 420), 'untuk kucing & anjing.', font=font_tagline, fill=GRAY)
 
 # Trust badges
 badge_y = 500
-badges = ['515+ Klinik Resmi', 'BPOM Terdaftar', '4.9★ Rating']
+badges = ['400+ Klinik Resmi', 'BPOM Terdaftar', '4.9★ Rating']
 badge_x = text_x
 for badge in badges:
     # Draw pill background

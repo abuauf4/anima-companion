@@ -12,9 +12,9 @@ import { Building2, MapPin, Mail, Phone, Clock, Shield, Heart, PawPrint, Message
 // - Marketing prose invented during the Phase 1 refactor has been REMOVED.
 //   Only fact-style contact/identity information already present elsewhere in
 //   the codebase (Footer / SITE_CONFIG) remains.
-// - The remaining contact/identity values (PT Sutan Vet Medika, Bogor address,
-//   hello@animacompanion.id, 0822 1084 6408, Senin–Sabtu 09.00–18.00 WIB,
-//   515+ klinik, BPOM Terdaftar, #PawrentHebatAnabulSehat) are NOT verified —
+// - The remaining contact/identity values (PT Sutan Vet Medika, Gedung STP - IPB
+//   address, sutanvetmedika@gmail.com, 0822 1084 6408, Senin–Sabtu 09.00–18.00 WIB,
+//   400+ klinik, BPOM Terdaftar, #PawrentHebatAnabulSehat) are NOT verified —
 //   they are inherited from existing repo content pending a separate content
 //   audit. Do not treat them as authoritative until that audit is complete.
 // - No new marketing copy has been added. When official Anima "Tentang Kami"
@@ -23,7 +23,7 @@ import { Building2, MapPin, Mail, Phone, Clock, Shield, Heart, PawPrint, Message
 export const metadata: Metadata = buildMetadata({
   title: "Tentang Kami",
   description:
-    "Anima Companion — PT Sutan Vet Medika. Brand suplemen & vitamin hewan peliharaan. Tersedia di 515+ klinik seluruh Indonesia. Misi: Elevating Animal Health.",
+    "Anima Companion — PT Sutan Vet Medika. Brand suplemen & vitamin hewan peliharaan. Tersedia di 400+ klinik seluruh Indonesia. Misi: Elevating Animal Health.",
   path: "/tentang",
   // Always noindex regardless of deployment env, until official Anima content
   // is provided. buildMetadata() also force-noindexes on staging, but this
@@ -34,7 +34,7 @@ export const metadata: Metadata = buildMetadata({
     "PT Sutan Vet Medika",
     "brand suplemen hewan",
     "suplemen hewan peliharaan",
-    "515 klinik hewan Indonesia",
+    "400 klinik hewan Indonesia",
   ],
 });
 
@@ -70,7 +70,7 @@ export default function TentangPage() {
           {[
             { icon: Shield, title: "BPOM Terdaftar", desc: "Produk resmi & aman" },
             { icon: Heart, title: "100% Asli", desc: "Dijamin original" },
-            { icon: PawPrint, title: "515+ Klinik", desc: "Distributor resmi" },
+            { icon: PawPrint, title: "400+ Klinik", desc: "Distributor resmi" },
             { icon: MessageCircle, title: "Fast Response", desc: "via WhatsApp" },
           ].map((b) => {
             const Icon = b.icon
@@ -104,14 +104,14 @@ export default function TentangPage() {
               <MapPin className="mt-0.5 h-4 w-4 text-primary" />
               <span>
                 <span className="font-semibold text-foreground">Lokasi:</span>{" "}
-                Bogor, Jawa Barat, Indonesia
+                Gedung STP - IPB lt 1, Bogor, Jawa Barat
               </span>
             </li>
             <li className="flex items-start gap-2">
               <Mail className="mt-0.5 h-4 w-4 text-primary" />
               <span>
                 <span className="font-semibold text-foreground">Email:</span>{" "}
-                hello@animacompanion.id
+                sutanvetmedika@gmail.com
               </span>
             </li>
             <li className="flex items-start gap-2">

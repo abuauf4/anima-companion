@@ -39,7 +39,7 @@ const PRODUCT_LINES = [
 ];
 
 const STATS = [
-  { value: '515+', label: 'Klinik Resmi', icon: Stethoscope },
+  { value: '400+', label: 'Klinik Resmi', icon: Stethoscope },
   { value: '100%', label: 'BPOM Terdaftar', icon: Heart },
   { value: '8', label: 'Produk Resmi', icon: Award },
   { value: '4.9★', label: 'Rating Pelanggan', icon: Star },
@@ -56,7 +56,7 @@ export function VetSection() {
         <SectionHeader
           eyebrow="Kredibilitas Brand"
           title={<>Dipercaya & <span className="gradient-brand-text">Terdistribusi</span></>}
-          subtitle="Suplemen & vitamin hewan peliharaan premium dari Anima Companion — PT Sutan Vet Medika. Tersedia di 515+ klinik hewan seluruh Indonesia sebagai distributor resmi."
+          subtitle="Suplemen & vitamin hewan peliharaan premium dari Anima Companion — PT Sutan Vet Medika. Tersedia di 400+ klinik hewan seluruh Indonesia sebagai distributor resmi."
           align="center"
         />
 
@@ -158,7 +158,7 @@ export function VetSection() {
                   <Stethoscope className="size-5 text-white" />
                 </div>
                 <div className="text-left">
-                  <div className="text-sm font-semibold">515+ Klinik Hewan</div>
+                  <div className="text-sm font-semibold">400+ Klinik Hewan</div>
                   <div className="text-xs text-muted-foreground">Distributor resmi seluruh Indonesia</div>
                 </div>
               </div>

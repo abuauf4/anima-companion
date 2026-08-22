@@ -248,7 +248,7 @@ export function SettingsView() {
             <Input value={form.whatsappNumber} onChange={(e) => setForm({ ...form, whatsappNumber: e.target.value })} placeholder="6282210846408" />
           </Field>
           <Field label="Email">
-            <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="hello@animacompanion.id" />
+            <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="sutanvetmedika@gmail.com" />
           </Field>
           <Field label="Instagram (handle)">
             <Input value={form.instagram} onChange={(e) => setForm({ ...form, instagram: e.target.value })} placeholder="@anima.companion" />
