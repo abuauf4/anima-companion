@@ -13,6 +13,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog'
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { Plus, Pencil, Search, Trash2, Package, Star, ArrowLeft, ArrowRight, Link2 } from 'lucide-react'
@@ -59,6 +62,13 @@ export function ProductsView() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<AdminProduct | null>(null)
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null)
+  // Permanent-delete confirmation modal state.
+  // `permanentDeleteTarget` holds the product row the admin is about to
+  // hard-delete. The AlertDialog is open iff this is non-null.
+  // `permanentDeleting` blocks double-clicks + prevents closing the dialog
+  // while the DELETE request is in-flight.
+  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<AdminProduct | null>(null)
+  const [permanentDeleting, setPermanentDeleting] = useState(false)
 
   const load = async (q = '') => {
     setLoading(true)
@@ -116,6 +126,52 @@ export function ProductsView() {
       toast.error(e.message || 'Gagal menduplikat produk')
     } finally {
       setDuplicatingId(null)
+    }
+  }
+
+  // ---- Permanent delete action ----------------------------------------
+  // Triggered by the 'Hapus permanen' menu item (only shown for inactive
+  // products). Opens a confirmation AlertDialog. The actual DELETE request
+  // is sent only after the admin confirms.
+  //
+  // The server route (/api/admin/products/[id]/permanent) will refuse with
+  // HTTP 409 if the product has any OrderItem or Review — those represent
+  // historical/transactional data that must be preserved. We surface the
+  // server's error message verbatim via toast so the admin understands why
+  // the delete was blocked.
+  const handlePermanentDeleteConfirm = async () => {
+    if (!permanentDeleteTarget) return
+    if (permanentDeleting) return
+    setPermanentDeleting(true)
+    try {
+      const res = await fetch(`/api/admin/products/${permanentDeleteTarget.id}/permanent`, {
+        method: 'DELETE',
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        // 409 = blocked by historical data (OrderItem / Review).
+        // Server returns a friendly `error` string in Indonesian.
+        throw new Error(data.error || 'Gagal menghapus permanen produk')
+      }
+      toast.success(`Produk "${permanentDeleteTarget.name}" dihapus permanen`)
+      const targetId = permanentDeleteTarget.id
+      setPermanentDeleteTarget(null)
+      // If the deleted product was on the current page, reload to reflect
+      // its absence. We pass the current search so the admin keeps their
+      // filter context.
+      await load(search)
+      // Sanity: if targetId is still in the list after reload, something
+      // went wrong server-side — surface a soft warning.
+      setProducts((prev) => {
+        if (prev.some((p) => p.id === targetId)) {
+          toast.error('Produk masih terlihat di daftar setelah penghapusan. Muat ulang halaman.')
+        }
+        return prev
+      })
+    } catch (e: any) {
+      toast.error(e.message || 'Gagal menghapus permanen produk')
+    } finally {
+      setPermanentDeleting(false)
     }
   }
 
@@ -212,6 +268,13 @@ export function ProductsView() {
                             toast.success('Produk dinonaktifkan')
                             load(search)
                           }},
+                        // Permanent hard-delete is ONLY offered on inactive
+                        // products. Active products must be deactivated first
+                        // — this prevents accidental hard-deletes of live
+                        // catalog items.
+                        ...(!p.isActive
+                          ? [{ label: 'Hapus permanen', destructive: true, onSelect: () => { setPermanentDeleteTarget(p) } }]
+                          : []),
                       ]} />
                     </td>
                   </tr>
@@ -231,6 +294,9 @@ export function ProductsView() {
                 { label: 'Edit produk', onSelect: () => { setEditing(p); setDialogOpen(true) } },
                 { label: duplicatingId === p.id ? 'Menduplikat...' : 'Duplikat produk', onSelect: () => { handleDuplicate(p) } },
                 { label: 'Nonaktifkan', destructive: true, onSelect: async () => { if (!confirm(`Nonaktifkan produk "${p.name}"?`)) return; await fetch(`/api/admin/products/${p.id}`, { method: 'DELETE' }); toast.success('Produk dinonaktifkan'); load(search) } },
+                ...(!p.isActive
+                  ? [{ label: 'Hapus permanen', destructive: true, onSelect: () => { setPermanentDeleteTarget(p) } }]
+                  : []),
               ]} /></div>
               <div className="mt-2 flex items-center justify-between gap-2"><span className="text-sm font-semibold">{formatRupiah(p.salePrice || p.price)}</span><span className={p.stock <= 5 ? 'text-xs font-semibold text-destructive' : 'text-xs text-muted-foreground'}>Stok {p.stock}</span></div>
               <div className="mt-2 flex flex-wrap gap-1.5">{p.isActive ? <AdminStatusBadge tone="success">Aktif</AdminStatusBadge> : <AdminStatusBadge>Nonaktif</AdminStatusBadge>}<AdminStatusBadge>{p.category.name}</AdminStatusBadge></div>
@@ -246,6 +312,58 @@ export function ProductsView() {
         categories={categories}
         onSaved={() => { load(search); loadCategories() }}
       />
+
+      {/*
+        Permanent-delete confirmation modal.
+        Open iff `permanentDeleteTarget` is non-null.
+        While `permanentDeleting` is true, the dialog cannot be dismissed
+        (Cancel button disabled, onOpenChange ignored) — this prevents the
+        admin from closing mid-request and double-triggering.
+      */}
+      <AlertDialog
+        open={permanentDeleteTarget !== null}
+        onOpenChange={(open) => {
+          if (permanentDeleting) return // don't allow close while in-flight
+          if (!open) setPermanentDeleteTarget(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus permanen produk?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <span className="block">
+                Tindakan ini <strong className="text-foreground">tidak dapat dibatalkan</strong>.
+                Produk{' '}
+                <span className="font-medium text-foreground">&quot;{permanentDeleteTarget?.name}&quot;</span>{' '}
+                akan dihapus beserta data gambar, relasi kategori, dan relasi masalah/kategori hewan dari database.
+                <br /><br />
+                File gambar fisik di Cloudinary / <code>/public/products/</code>{' '}
+                <strong>tidak akan dihapus</strong> karena produk hasil duplikasi mungkin menggunakan URL gambar yang sama.
+                <br /><br />
+                Jika produk ini sudah pernah masuk pesanan (OrderItem) atau memiliki review, penghapusan akan{' '}
+                <strong>ditolak otomatis</strong> oleh server — silakan nonaktifkan produk saja untuk mempertahankan riwayat.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={permanentDeleting}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              // Prevent the dialog from auto-closing on click — we
+              // close it manually inside handlePermanentDeleteConfirm
+              // only after the DELETE succeeds. This keeps the dialog
+              // open (with a loading state) while the request is running.
+              onClick={(e) => {
+                e.preventDefault()
+                handlePermanentDeleteConfirm()
+              }}
+              disabled={permanentDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {permanentDeleting ? 'Menghapus...' : 'Hapus permanen'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
