@@ -116,7 +116,7 @@ export function HomeView() {
           >
             <div className="relative h-full w-full overflow-hidden rounded-3xl shadow-2xl ring-4 ring-white/60">
               <OptImage
-                src="/hero-pets.webp"
+                src="/poster.webp"
                 alt="Anima Companion — Elevating Animal Health"
                 fill
                 priority
@@ -271,35 +271,6 @@ export function HomeView() {
 
       {/* ==================== VET SECTION ==================== */}
       <VetSection />
-
-      {/* ==================== ANIMA CLUB ==================== */}
-      <section className="container-page pt-4 pb-12 md:pt-6 md:pb-14">
-        <SectionHeader
-          eyebrow="Anima Club"
-          eyebrowIcon={<Sparkles className="size-3 text-amber-500" />}
-          title={<>Bergabung dengan <span className="gradient-brand-text">Anima Club</span></>}
-          subtitle="Dapatkan berbagai keuntungan khusus member dan nikmati pengalaman bersama Anima Companion yang lebih istimewa."
-          align="center"
-          className="mb-7 md:mb-8"
-        />
-
-        <button
-          type="button"
-          onClick={() => navigate('/login')}
-          aria-label="Bergabung dengan Anima Club — buka halaman login"
-          className="group block w-full overflow-hidden rounded-2xl border border-border/60 shadow-sm transition-all hover:shadow-md hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-        >
-          <OptImage
-            src="/poster.webp"
-            alt="Anima Club — daftar sekarang"
-            width={1600}
-            height={846}
-            priority={false}
-            sizes="(max-width: 768px) 100vw, 1024px"
-            className="h-auto w-full transition-transform duration-500 group-hover:scale-[1.01]"
-          />
-        </button>
-      </section>
     </div>
   )
 }
