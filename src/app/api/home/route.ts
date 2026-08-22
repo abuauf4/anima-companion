@@ -25,8 +25,15 @@ const PRODUCT_INCLUDE = {
  * GET /api/home
  * Single bundled endpoint for homepage — returns all data needed
  * (banners, bestSellers, newProducts, problems,
- *  testimonials, petTypes, saleCountdown, settings, faqs)
+ *  testimonials, petTypes, settings, faqs)
  * in ONE round trip to the database instead of many.
+ *
+ * The promo campaign (configurable countdown bar above navbar) lives
+ * inside `settings.promoActive / promoStartAt / promoEndAt / promoCountdown /
+ * promoTextBefore / promoTextDuring / promoTitle / promoLink`. The state
+ * machine (before/during/after) + live countdown are computed client-side
+ * in AnnouncementBar from the absolute UTC timestamps — the server does NOT
+ * pre-compute "now" because the cached response may be 60s stale.
  *
  * Cached for 60s to absorb traffic spikes and reduce pool usage.
  */
@@ -101,11 +108,15 @@ export async function GET() {
         }),
       ])
 
-      // Sale countdown: 3 days from now (recomputed each cache miss — ~60s drift acceptable)
-      const saleCountdown = {
-        endsAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-      }
-
+      // Sale countdown has been replaced by the configurable promo campaign
+      // fields on SiteSetting (promoActive / promoStartAt / promoEndAt /
+      // promoCountdown / promoTextBefore / promoTextDuring / promoTitle /
+      // promoLink). The state machine (before/during/after) and the live
+      // countdown are computed client-side in AnnouncementBar from the
+      // absolute UTC timestamps — see src/components/layout/AnnouncementBar.tsx.
+      //
+      // `settingsRow` already contains all 8 promo* fields (it's the full
+      // SiteSetting row), so no extra projection is needed here.
       return {
         banners,
         bestSellers,
@@ -115,7 +126,6 @@ export async function GET() {
         petTypes,
         faqs,
         settings: settingsRow,
-        saleCountdown,
       }
     })
 

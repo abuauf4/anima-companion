@@ -4,6 +4,30 @@ import { requirePermission, handleAuthError } from '@/lib/admin-auth'
 import { invalidate } from '@/lib/cache'
 
 /**
+ * Parse a promo datetime value from the admin payload.
+ *
+ * Accepts:
+ *   - ISO 8601 string with explicit timezone (e.g. "2026-08-23T00:00:00+07:00"
+ *     or "2026-08-22T17:00:00Z") — used as-is, Prisma stores as UTC.
+ *   - null / undefined / '' — returns null (no datetime set).
+ *
+ * The admin UI (SettingsView) constructs the ISO string with an explicit
+ * +07:00 offset (Asia/Jakarta), so the server doesn't need to know the
+ * admin's timezone — the offset is baked into the string.
+ *
+ * Returns Date | null. Invalid date strings (e.g. "not a date") fall back
+ * to null rather than throwing — the start<end validation downstream will
+ * surface the problem as a 400.
+ */
+function parsePromoDt(v: unknown): Date | null {
+  if (v === null || v === undefined || v === '') return null
+  const s = String(v).trim()
+  if (!s) return null
+  const d = new Date(s)
+  return isNaN(d.getTime()) ? null : d
+}
+
+/**
  * GET /api/admin/settings
  * Returns the singleton SiteSetting row. If none exists, creates one with defaults.
  */
@@ -59,6 +83,38 @@ export async function PUT(req: NextRequest) {
       announcement3: String(body.announcement3 ?? '').slice(0, 200),
       announcement4: String(body.announcement4 ?? '').slice(0, 200),
       freeShippingThreshold: Number(body.freeShippingThreshold) || 0,
+      // ---- Promo / Announcement campaign ----
+      // See schema.prisma for the full state-machine semantics.
+      // Datetimes are stored as UTC; admin input is interpreted as Asia/Jakarta
+      // (WIB, UTC+7) — the WIB→UTC conversion is done client-side in
+      // SettingsView so the server stays tz-agnostic and testable.
+      promoActive: Boolean(body.promoActive),
+      promoTitle: String(body.promoTitle ?? '').slice(0, 120),
+      promoStartAt: parsePromoDt(body.promoStartAt),
+      promoEndAt: parsePromoDt(body.promoEndAt),
+      promoCountdown: Boolean(body.promoCountdown),
+      promoTextBefore: String(body.promoTextBefore ?? '').slice(0, 200),
+      promoTextDuring: String(body.promoTextDuring ?? '').slice(0, 200),
+      promoLink: String(body.promoLink ?? '').slice(0, 300),
+    }
+
+    // Validate: if both datetimes are present, start must be strictly
+    // before end. We reject (400) instead of silently swapping so the admin
+    // sees the error and fixes their input.
+    if (data.promoStartAt && data.promoEndAt && data.promoStartAt >= data.promoEndAt) {
+      return NextResponse.json(
+        { error: 'Tanggal & jam mulai harus lebih awal dari tanggal & jam selesai' },
+        { status: 400 }
+      )
+    }
+    // If only one of the two is set, reject — a promo campaign needs both
+    // bounds to be well-defined (otherwise the state machine can't decide
+    // before/during/after).
+    if (data.promoActive && (!data.promoStartAt || !data.promoEndAt)) {
+      return NextResponse.json(
+        { error: 'Promo aktif memerlukan tanggal & jam mulai dan selesai' },
+        { status: 400 }
+      )
     }
 
     const settings = await db.siteSetting.upsert({

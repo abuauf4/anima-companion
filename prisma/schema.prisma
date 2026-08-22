@@ -827,5 +827,36 @@ model SiteSetting {
   announcement4       String   @default("🩺 Konsultasi vet gratis 24/7 via WhatsApp")
   // Misc
   freeShippingThreshold Int     @default(150000)
+  // Promo / Announcement campaign — configurable countdown bar above navbar.
+  // All optional / defaulted so existing singleton rows migrate cleanly
+  // (ADD COLUMN ... DEFAULT ... is non-blocking on a one-row table).
+  //
+  // Semantics:
+  //   - When `promoActive = true` AND now is within [promoStartAt, promoEndAt]:
+  //     the bar shows the "during" promo campaign (priority over rotating
+  //     announcement1–4). Countdown ticks toward `promoEndAt`.
+  //   - When `promoActive = true` AND now is before `promoStartAt`:
+  //     the bar shows the "before" promo campaign. Countdown ticks toward
+  //     `promoStartAt`.
+  //   - When `promoActive = true` AND now is after `promoEndAt`:
+  //     promo is over — bar AUTOMATICALLY falls back to rotating
+  //     announcement1–4 behavior. No manual "end the promo" action needed.
+  //   - When `promoActive = false`: bar shows rotating announcement1–4.
+  //
+  // Datetimes:
+  //   - Admin input is interpreted as Asia/Jakarta (WIB, UTC+7) in the UI.
+  //   - Stored as UTC DateTime in the DB (standard Prisma behavior).
+  //   - Countdown math uses the absolute UTC milliseconds — no server or
+  //     device timezone assumptions leak into the comparison.
+  //   - Validation: promoStartAt must be < promoEndAt (enforced in the
+  //     PUT /api/admin/settings route, not at the DB layer).
+  promoActive         Boolean   @default(false)
+  promoTitle           String    @default("")    // e.g. "Promo 50%"
+  promoStartAt         DateTime?                  // UTC; input UI = Asia/Jakarta
+  promoEndAt           DateTime?                  // UTC; input UI = Asia/Jakarta
+  promoCountdown       Boolean   @default(true)   // show live countdown?
+  promoTextBefore      String    @default("")    // "Promo 50% mulai dalam"
+  promoTextDuring      String    @default("")    // "🔥 Promo 50% khusus hari ini"
+  promoLink            String    @default("")    // optional CTA link
   updatedAt           DateTime @updatedAt
 }

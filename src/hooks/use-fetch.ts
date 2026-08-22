@@ -137,8 +137,30 @@ export interface Voucher {
   description: string | null
 }
 
-export interface SaleCountdown {
-  endsAt: string
+/**
+ * Promo campaign — configurable countdown bar above the navbar.
+ *
+ * State machine (computed client-side in AnnouncementBar from absolute
+ * UTC timestamps):
+ *   - promoActive=false  → rotating announcement1–4
+ *   - promoActive=true, now < promoStartAt  → "before" promo, count to start
+ *   - promoActive=true, start ≤ now ≤ end   → "during" promo, count to end
+ *   - promoActive=true, now > promoEndAt    → promo ended, fall back to
+ *                                            rotating announcement1–4
+ *
+ * Datetimes are ISO strings (UTC) — Prisma returns DateTime as ISO when
+ * serialized via NextResponse.json. The frontend compares against
+ * Date.now() (also UTC ms) — no timezone assumptions leak.
+ */
+export interface PromoCampaign {
+  promoActive: boolean
+  promoTitle: string
+  promoStartAt: string | null
+  promoEndAt: string | null
+  promoCountdown: boolean
+  promoTextBefore: string
+  promoTextDuring: string
+  promoLink: string
 }
 
 export interface HomeData {
@@ -150,7 +172,6 @@ export interface HomeData {
   testimonials: Testimonial[]
   sellers: Seller[]
   petTypes: PetType[]
-  saleCountdown: SaleCountdown
 }
 
 /** Generic fetch hook */

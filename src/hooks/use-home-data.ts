@@ -36,6 +36,16 @@ export interface SiteSetting {
   announcement4: string
   // Misc
   freeShippingThreshold: number
+  // Promo campaign — configurable countdown bar above the navbar.
+  // See PromoCampaign in use-fetch.ts for the state-machine semantics.
+  promoActive: boolean
+  promoTitle: string
+  promoStartAt: string | null
+  promoEndAt: string | null
+  promoCountdown: boolean
+  promoTextBefore: string
+  promoTextDuring: string
+  promoLink: string
   updatedAt: string
 }
 
@@ -48,7 +58,6 @@ export interface HomeData {
   petTypes: PetType[]
   faqs: Faq[]
   settings: SiteSetting | null
-  saleCountdown?: { endsAt: string }
 }
 
 const STORAGE_KEY = 'anima-home-cache-v1'
@@ -182,6 +191,5 @@ export function useHomeData() {
     petTypes: data?.petTypes || [],
     faqs: data?.faqs || [],
     settings: data?.settings || null,
-    saleCountdown: data?.saleCountdown,
   }
 }
