@@ -58,6 +58,7 @@ export function ProductsView() {
   const [search, setSearch] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<AdminProduct | null>(null)
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null)
 
   const load = async (q = '') => {
     setLoading(true)
@@ -81,6 +82,41 @@ export function ProductsView() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     load(search)
+  }
+
+  // ---- Duplicate action ------------------------------------------------
+  // Shared handler for both desktop table row and mobile card menus.
+  // Calls POST /api/admin/products/[id]/duplicate, which creates a NEW
+  // inactive draft copy of the source product (source is never modified).
+  // After success, reloads the list so the new draft appears at the top
+  // (newest products sort first by createdAt desc).
+  const handleDuplicate = async (product: AdminProduct) => {
+    if (duplicatingId) return // prevent double-clicks
+    if (
+      !confirm(
+        `Duplikat produk "${product.name}"?\n\n` +
+          'Hasil duplikat akan dibuat sebagai nonaktif (draft). ' +
+          'Produk sumber tidak akan diubah.'
+      )
+    ) {
+      return
+    }
+    setDuplicatingId(product.id)
+    try {
+      const res = await fetch(`/api/admin/products/${product.id}/duplicate`, {
+        method: 'POST',
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Gagal menduplikat produk')
+      }
+      toast.success('Duplikat dibuat sebagai draft nonaktif')
+      await load(search)
+    } catch (e: any) {
+      toast.error(e.message || 'Gagal menduplikat produk')
+    } finally {
+      setDuplicatingId(null)
+    }
   }
 
   return (
@@ -167,12 +203,16 @@ export function ProductsView() {
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{p._count.orderItems}</td>
                     <td className="px-4 py-3 text-right">
-                      <AdminActionMenu items={[{ label: 'Edit produk', onSelect: () => { setEditing(p); setDialogOpen(true) } }, { label: 'Nonaktifkan', destructive: true, onSelect: async () => {
+                      <AdminActionMenu items={[
+                        { label: 'Edit produk', onSelect: () => { setEditing(p); setDialogOpen(true) } },
+                        { label: duplicatingId === p.id ? 'Menduplikat...' : 'Duplikat produk', onSelect: () => { handleDuplicate(p) } },
+                        { label: 'Nonaktifkan', destructive: true, onSelect: async () => {
                             if (!confirm(`Nonaktifkan produk "${p.name}"?`)) return
                             await fetch(`/api/admin/products/${p.id}`, { method: 'DELETE' })
                             toast.success('Produk dinonaktifkan')
                             load(search)
-                          }}]} />
+                          }},
+                      ]} />
                     </td>
                   </tr>
                 ))}
@@ -187,7 +227,11 @@ export function ProductsView() {
           <div className="flex items-start gap-3">
             <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">{p.images[0] && <img src={p.images[0].url} alt="" className="h-full w-full object-cover" />}</div>
             <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-sm font-medium">{p.name}</p><p className="truncate text-[11px] text-muted-foreground">{p.brand} · {p.sku}</p></div><AdminActionMenu items={[{ label: 'Edit produk', onSelect: () => { setEditing(p); setDialogOpen(true) } }, { label: 'Nonaktifkan', destructive: true, onSelect: async () => { if (!confirm(`Nonaktifkan produk "${p.name}"?`)) return; await fetch(`/api/admin/products/${p.id}`, { method: 'DELETE' }); toast.success('Produk dinonaktifkan'); load(search) } }]} /></div>
+              <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-sm font-medium">{p.name}</p><p className="truncate text-[11px] text-muted-foreground">{p.brand} · {p.sku}</p></div><AdminActionMenu items={[
+                { label: 'Edit produk', onSelect: () => { setEditing(p); setDialogOpen(true) } },
+                { label: duplicatingId === p.id ? 'Menduplikat...' : 'Duplikat produk', onSelect: () => { handleDuplicate(p) } },
+                { label: 'Nonaktifkan', destructive: true, onSelect: async () => { if (!confirm(`Nonaktifkan produk "${p.name}"?`)) return; await fetch(`/api/admin/products/${p.id}`, { method: 'DELETE' }); toast.success('Produk dinonaktifkan'); load(search) } },
+              ]} /></div>
               <div className="mt-2 flex items-center justify-between gap-2"><span className="text-sm font-semibold">{formatRupiah(p.salePrice || p.price)}</span><span className={p.stock <= 5 ? 'text-xs font-semibold text-destructive' : 'text-xs text-muted-foreground'}>Stok {p.stock}</span></div>
               <div className="mt-2 flex flex-wrap gap-1.5">{p.isActive ? <AdminStatusBadge tone="success">Aktif</AdminStatusBadge> : <AdminStatusBadge>Nonaktif</AdminStatusBadge>}<AdminStatusBadge>{p.category.name}</AdminStatusBadge></div>
             </div>
