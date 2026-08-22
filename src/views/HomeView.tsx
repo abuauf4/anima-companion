@@ -8,7 +8,7 @@ import { SectionHeader } from '@/components/common/SectionHeader'
 import { Reveal, Stagger, StaggerItem } from '@/components/common/Reveal'
 import {
   Shield, Utensils, Sparkles, Bone, Activity, Eye, Heart, Sun,
-  ArrowRight, MessageCircle, Star, ChevronRight, ChevronLeft,
+  ArrowRight, Star, ChevronRight, ChevronLeft,
   PawPrint,
 } from 'lucide-react'
 import {
@@ -107,69 +107,46 @@ export function HomeView() {
             </div>
           </motion.div>
 
-          {/* IMAGE: top on mobile, RIGHT on desktop */}
+          {/* IMAGE: top on mobile, RIGHT on desktop.
+              Clickable → /login. Two art-directed banner images:
+              mobile (banner-mobile.webp) and desktop (banner-desktop.webp).
+              Floating badges (rating / BPOM / vet) removed per spec. */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6, delay: 0.1 }}
             className="relative order-first h-44 sm:h-80 md:order-last md:h-96"
           >
-            <div className="relative h-full w-full overflow-hidden rounded-3xl shadow-2xl ring-4 ring-white/60">
-              <OptImage
-                src="/poster.webp"
-                alt="Anima Companion — Elevating Animal Health"
-                fill
-                priority
-                sizes="(max-width: 768px) 100vw, 50vw"
-                className="object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-tr from-primary/10 via-transparent to-secondary/10" />
-            </div>
-
-            {/* Floating card — top-right: rating (desktop only) */}
-            <motion.div
-              animate={{ y: [0, -8, 0] }}
-              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-              className="absolute -right-2 top-4 hidden items-center gap-2 rounded-2xl bg-card/95 p-2.5 shadow-xl ring-1 ring-border/30 backdrop-blur-sm sm:flex sm:-right-4 sm:top-6"
+            <button
+              type="button"
+              onClick={() => navigate('/login')}
+              aria-label="Daftar / Masuk — buka halaman login"
+              className="group block h-full w-full overflow-hidden rounded-3xl shadow-2xl ring-4 ring-white/60 transition-all hover:shadow-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             >
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100">
-                <Star className="size-5 fill-amber-400 text-amber-400" />
+              {/* Mobile banner (visible below md) */}
+              <div className="absolute inset-0 block md:hidden">
+                <OptImage
+                  src="/banner-mobile.webp"
+                  alt="Anima Companion — Elevating Animal Health"
+                  fill
+                  priority
+                  sizes="(max-width: 767px) 100vw, 0px"
+                  className="object-cover transition-transform duration-500 group-hover:scale-[1.01]"
+                />
               </div>
-              <div>
-                <p className="text-xs font-bold text-foreground">4.9★ 12rb+ ulasan</p>
-                <p className="text-[10px] text-muted-foreground">Rating pelanggan</p>
+              {/* Desktop banner (visible at md+) */}
+              <div className="absolute inset-0 hidden md:block">
+                <OptImage
+                  src="/banner-desktop.webp"
+                  alt="Anima Companion — Elevating Animal Health"
+                  fill
+                  priority
+                  sizes="(min-width: 768px) 50vw, 0px"
+                  className="object-cover transition-transform duration-500 group-hover:scale-[1.01]"
+                />
               </div>
-            </motion.div>
-
-            {/* Floating card — bottom-left: BPOM (desktop only) */}
-            <motion.div
-              animate={{ y: [0, 8, 0] }}
-              transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
-              className="absolute -left-2 bottom-4 hidden items-center gap-2 rounded-2xl bg-card/95 p-2.5 shadow-xl ring-1 ring-border/30 backdrop-blur-sm sm:flex sm:-left-4 sm:bottom-8"
-            >
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100">
-                <Shield className="size-5 text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-foreground">BPOM Terdaftar</p>
-                <p className="text-[10px] text-muted-foreground">100% Original</p>
-              </div>
-            </motion.div>
-
-            {/* Floating card — top-left small: vet */}
-            <motion.div
-              animate={{ y: [0, -6, 0] }}
-              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
-              className="absolute left-4 top-4 hidden items-center gap-2 rounded-2xl bg-card/95 p-2.5 shadow-xl ring-1 ring-border/30 backdrop-blur-sm sm:flex"
-            >
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/10">
-                <MessageCircle className="size-5 text-secondary" />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-foreground">Gratis Konsul Vet</p>
-                <p className="text-[10px] text-muted-foreground">Chat WhatsApp</p>
-              </div>
-            </motion.div>
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-primary/10 via-transparent to-secondary/10" />
+            </button>
           </motion.div>
         </div>
       </section>
