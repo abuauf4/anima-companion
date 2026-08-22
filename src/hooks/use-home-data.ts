@@ -12,6 +12,10 @@ export interface SiteSetting {
   heroDescription: string
   heroHookTitle1: string
   heroHookTitle2: string
+  // Hero images — admin-uploaded Cloudinary URLs OR local /public paths.
+  // Nullable. Storefront applies a fallback chain when null.
+  heroImageDesktop: string | null
+  heroImageMobile: string | null
   // Trust badges
   trustBadge1Value: string
   trustBadge1Label: string

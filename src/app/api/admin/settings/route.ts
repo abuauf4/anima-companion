@@ -28,6 +28,32 @@ function parsePromoDt(v: unknown): Date | null {
 }
 
 /**
+ * Normalize a hero image value sent from the admin UI.
+ *
+ * Accepts:
+ *   - Cloudinary secure URL (https://res.cloudinary.com/...)
+ *   - Local /public path (e.g. /banner-desktop.webp)
+ *   - null / undefined / '' — returns null (no image set; storefront will
+ *     fall back to the default).
+ *
+ * Trims whitespace. Caps at 500 chars (defensive — Cloudinary URLs are
+ * typically ~120 chars). Anything that doesn't look like a URL or local
+ * path falls back to null.
+ *
+ * Stored as String? on the SiteSetting row.
+ */
+function normalizeHeroImage(v: unknown): string | null {
+  if (v === null || v === undefined) return null
+  const s = String(v).trim()
+  if (!s) return null
+  if (s.length > 500) return null
+  // Allow http(s) URLs OR local /public paths (leading slash + non-empty).
+  if (/^https?:\/\//.test(s)) return s
+  if (/^\/[^/].*/.test(s)) return s
+  return null
+}
+
+/**
  * GET /api/admin/settings
  * Returns the singleton SiteSetting row. If none exists, creates one with defaults.
  */
@@ -63,6 +89,11 @@ export async function PUT(req: NextRequest) {
       heroDescription: String(body.heroDescription ?? '').slice(0, 1000),
       heroHookTitle1: String(body.heroHookTitle1 ?? '').slice(0, 100),
       heroHookTitle2: String(body.heroHookTitle2 ?? '').slice(0, 100),
+      // Hero images — admin-uploaded Cloudinary URLs OR local /public paths.
+      // Both nullable. Empty string sent from the client is normalized to null
+      // so the storefront fallback chain works correctly.
+      heroImageDesktop: normalizeHeroImage(body.heroImageDesktop),
+      heroImageMobile: normalizeHeroImage(body.heroImageMobile),
       trustBadge1Value: String(body.trustBadge1Value ?? '').slice(0, 50),
       trustBadge1Label: String(body.trustBadge1Label ?? '').slice(0, 50),
       trustBadge2Value: String(body.trustBadge2Value ?? '').slice(0, 50),

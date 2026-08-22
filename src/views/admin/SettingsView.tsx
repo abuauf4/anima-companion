@@ -8,7 +8,9 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Save, RotateCcw } from 'lucide-react'
+import { Image as OptImage } from '@/components/common/Image'
+import { CloudinaryUploader } from '@/components/admin/CloudinaryUploader'
+import { Save, RotateCcw, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { utcIsoToWibLocalInput, wibLocalInputToUtcIso } from '@/lib/tz'
 
@@ -21,6 +23,10 @@ interface SiteSetting {
   heroDescription: string
   heroHookTitle1: string
   heroHookTitle2: string
+  // Hero images — admin-uploaded Cloudinary URLs OR local /public paths.
+  // Nullable. Empty string in the form is normalized to null on save.
+  heroImageDesktop: string | null
+  heroImageMobile: string | null
   // Trust badges
   trustBadge1Value: string
   trustBadge1Label: string
@@ -64,6 +70,7 @@ const EMPTY_FORM: SiteSetting = {
   id: 'singleton',
   heroEyebrow: '', heroTitle1: '', heroTitle2: '', heroDescription: '',
   heroHookTitle1: '', heroHookTitle2: '',
+  heroImageDesktop: null, heroImageMobile: null,
   trustBadge1Value: '', trustBadge1Label: '',
   trustBadge2Value: '', trustBadge2Label: '',
   trustBadge3Value: '', trustBadge3Label: '',
@@ -208,6 +215,9 @@ export function SettingsView() {
         </div>
       </Card>
 
+      {/* HERO IMAGES — admin-uploadable per-breakpoint */}
+      <HeroImagesCard form={form} setForm={setForm} />
+
       {/* TRUST BADGES */}
       <Card className="space-y-4 p-4 sm:p-6">
         <div>
@@ -334,6 +344,142 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <Label className="text-xs">{label}</Label>
       <div className="mt-1.5">{children}</div>
     </div>
+  )
+}
+
+/**
+ * Hero Images card — admin-uploadable per-breakpoint hero images.
+ *
+ * Uses the existing CloudinaryUploader (same component as product image
+ * uploads) — no new media system. Permission to request a Cloudinary
+ * signature is granted via `settings.manage` OR `products.manage`
+ * (see /api/admin/cloudinary/sign route for the relaxed permission
+ * model).
+ *
+ * Each image slot has:
+ *   - Preview (OptImage, fallback to a "no image" placeholder)
+ *   - Upload button (CloudinaryUploader)
+ *   - Hapus button (sets the field to null)
+ *
+ * On Save, the parent form's heroImageDesktop / heroImageMobile fields
+ * (string | null) are sent to PUT /api/admin/settings, which normalizes
+ * empty strings to null and validates URL/path format.
+ */
+function HeroImagesCard({
+  form,
+  setForm,
+}: {
+  form: SiteSetting
+  setForm: (f: SiteSetting) => void
+}) {
+  return (
+    <Card className="space-y-4 p-4 sm:p-6">
+      <div>
+        <h2 className="text-lg font-semibold">Hero Images</h2>
+        <p className="text-xs text-muted-foreground">
+          Gambar utama di homepage. Upload terpisah untuk desktop & mobile.
+        </p>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Desktop */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Desktop Hero Image</Label>
+            {form.heroImageDesktop && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-destructive"
+                onClick={() => setForm({ ...form, heroImageDesktop: null })}
+              >
+                <X className="h-3 w-3" /> Hapus
+              </Button>
+            )}
+          </div>
+          {/* Preview — 16:9 aspect ratio box to mirror the storefront */}
+          <div className="relative aspect-video overflow-hidden rounded-lg border border-border/60 bg-muted/30">
+            {form.heroImageDesktop ? (
+              <OptImage
+                src={form.heroImageDesktop}
+                alt="Desktop hero preview"
+                fill
+                sizes="(max-width: 768px) 100vw, 400px"
+                className="object-cover"
+                showPlaceholder={false}
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+                Belum ada gambar
+              </div>
+            )}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Rekomendasi rasio 16:9 (landscape). JPG/PNG/WebP, maks 8 MB.
+          </p>
+          <CloudinaryUploader
+            compact
+            onUploaded={(url) => {
+              setForm({ ...form, heroImageDesktop: url })
+              toast.success('Gambar desktop diunggah — klik Simpan untuk menerapkan')
+            }}
+          />
+        </div>
+
+        {/* Mobile */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Mobile Hero Image</Label>
+            {form.heroImageMobile && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-destructive"
+                onClick={() => setForm({ ...form, heroImageMobile: null })}
+              >
+                <X className="h-3 w-3" /> Hapus
+              </Button>
+            )}
+          </div>
+          {/* Preview — 9:16 aspect ratio box (portrait phone) */}
+          <div className="relative mx-auto aspect-[9/16] w-full max-w-[220px] overflow-hidden rounded-lg border border-border/60 bg-muted/30">
+            {form.heroImageMobile ? (
+              <OptImage
+                src={form.heroImageMobile}
+                alt="Mobile hero preview"
+                fill
+                sizes="220px"
+                className="object-cover"
+                showPlaceholder={false}
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-center text-xs text-muted-foreground">
+                Belum ada gambar
+              </div>
+            )}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Rekomendasi rasio 4:5 atau 9:16 (portrait). JPG/PNG/WebP, maks 8 MB.
+          </p>
+          <CloudinaryUploader
+            compact
+            onUploaded={(url) => {
+              setForm({ ...form, heroImageMobile: url })
+              toast.success('Gambar mobile diunggah — klik Simpan untuk menerapkan')
+            }}
+          />
+        </div>
+      </div>
+
+      <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+        <strong>Fallback:</strong> jika gambar mobile kosong, otomatis pakai
+        gambar desktop. Jika keduanya kosong, homepage memakai
+        <code className="mx-1 rounded bg-muted px-1">/banner-desktop.webp</code>
+        dan
+        <code className="mx-1 rounded bg-muted px-1">/banner-mobile.webp</code>
+        default.
+      </p>
+    </Card>
   )
 }
 

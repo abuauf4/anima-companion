@@ -803,6 +803,17 @@ model SiteSetting {
   heroDescription     String   @default("Suplemen & vitamin hewan peliharaan premium dari Anima Companion — PT Sutan Vet Medika. Tersedia di 400+ klinik seluruh Indonesia.")
   heroHookTitle1      String   @default("Belanja sesuai")
   heroHookTitle2      String   @default("hewan peliharaanmu")
+  // Hero images — admin-configurable per-breakpoint. Both nullable.
+  //   heroImageDesktop — shown at md+ breakpoint. Recommended ~16:9.
+  //   heroImageMobile  — shown below md. Recommended ~4:5 or 9:16.
+  // Stored as either a Cloudinary secure_url OR a local /public path
+  // (same convention as ProductImage.url — Image component handles both).
+  // Fallback chain on the storefront:
+  //   1. If mobile image empty → use desktop image
+  //   2. If desktop image empty → use existing /banner-desktop.webp /
+  //      /banner-mobile.webp local defaults (so the hero is never empty).
+  heroImageDesktop    String?
+  heroImageMobile     String?
   // Trust badges
   trustBadge1Value    String   @default("50rb+")
   trustBadge1Label    String   @default("Pelanggan")

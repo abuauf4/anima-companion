@@ -19,6 +19,7 @@ import { VetSection } from '@/components/home/VetSection'
 import { IngredientsReveal } from '@/components/home/IngredientsReveal'
 import { motion, useMotionValue, useTransform } from 'framer-motion'
 import { formatRupiah } from '@/lib/format'
+import { isCloudinaryUrl } from '@/lib/cloudinary'
 
 const PROBLEM_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   imunitas: Shield,
@@ -108,51 +109,30 @@ export function HomeView() {
           </motion.div>
 
           {/* IMAGE: top on mobile, RIGHT on desktop.
-              Clickable → /login. Two art-directed banner images:
-              mobile (banner-mobile.webp, 1523x765 ~2:1 landscape) and
-              desktop (banner-desktop.webp, 1672x941 ~16:9 landscape).
-              Intrinsic aspect-ratio rendering — no fill, no fixed height,
-              no object-cover crop, no overlays. Single clipping wrapper
-              owns the rounded radius; the <img> inside uses object-contain
-              with width:100% height:auto so the banner is never stretched. */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
-            className="order-first md:order-last"
-          >
-            <button
-              type="button"
-              onClick={() => navigate('/login')}
-              aria-label="Daftar / Masuk — buka halaman login"
-              className="group block w-full overflow-hidden rounded-[20px] border border-border/60 shadow-sm transition-all hover:shadow-md hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 md:rounded-[24px]"
-            >
-              {/* Mobile banner — visible below md.
-                  width/height = native (1523x765) so next/image renders
-                  an <img> with intrinsic aspect ratio → no CLS, no crop. */}
-              <OptImage
-                src="/banner-mobile.webp"
-                alt="Anima Companion — Elevating Animal Health"
-                width={1523}
-                height={765}
-                priority
-                sizes="(max-width: 767px) 100vw, 0px"
-                className="block h-auto w-full object-contain md:hidden"
-              />
-              {/* Desktop banner — visible at md+.
-                  Native 1672x941 (~16:9 landscape). Renders its own
-                  aspect ratio at 100% column width. */}
-              <OptImage
-                src="/banner-desktop.webp"
-                alt="Anima Companion — Elevating Animal Health"
-                width={1672}
-                height={941}
-                priority
-                sizes="(min-width: 768px) 50vw, 0px"
-                className="hidden h-auto w-full object-contain md:block"
-              />
-            </button>
-          </motion.div>
+              Clickable → /login. Two art-directed banner images per
+              breakpoint. Sources (with fallback chain):
+                Desktop (md+): settings.heroImageDesktop || /banner-desktop.webp
+                Mobile (<md):  settings.heroImageMobile  || settings.heroImageDesktop
+                                                                  || /banner-mobile.webp
+              (Admin-uploaded Cloudinary URLs take precedence; if only the
+              desktop image is set, it's reused on mobile too — better than
+              showing the local fallback when the admin has explicitly
+              customized the desktop image.)
+
+              Rendering mode:
+                - Local /public paths (known dims): intrinsic width/height,
+                  h-auto w-full object-contain. No fill, no crop, no CLS.
+                - Cloudinary URLs (unknown dims at render time): fill mode
+                  inside a fixed aspect-ratio container (16:9 desktop, 9:16
+                  mobile), object-contain. Letterboxing may appear if the
+                  admin uploads an off-ratio image — this is the trade-off
+                  for preserving aspect ratio without knowing the image's
+                  native dimensions client-side.
+
+              Single clipping wrapper owns the rounded radius; the <img>
+              inside ends visually at the wrapper's border. No overlays.
+              No floating badges (removed per earlier spec). */}
+          <HeroMedia settings={settings} navigate={navigate} />
         </div>
       </section>
 
@@ -306,6 +286,122 @@ const PET_CARDS: PetCardConfig[] = [
     emojiBadgeClass: '',
   },
 ]
+
+/**
+ * HeroMedia — renders the homepage hero banner images.
+ *
+ * Source resolution (with fallback chain):
+ *   Desktop (md+):
+ *     1. settings.heroImageDesktop (admin-uploaded Cloudinary URL)
+ *     2. /banner-desktop.webp (local default, native 1672x941 ~16:9)
+ *   Mobile (<md):
+ *     1. settings.heroImageMobile (admin-uploaded Cloudinary URL)
+ *     2. settings.heroImageDesktop (reuse desktop image — better than
+ *        the local default when the admin has explicitly customized the
+ *        desktop image)
+ *     3. /banner-mobile.webp (local default, native 1523x765 ~2:1)
+ *
+ * Rendering mode:
+ *   - Local /public paths (known dims): intrinsic width/height +
+ *     h-auto w-full object-contain → no CLS, no crop, no distortion.
+ *   - Cloudinary URLs (dims unknown at render time): fill mode inside
+ *     a fixed aspect-ratio container (16:9 desktop, 9:16 mobile) +
+ *     object-contain → preserves aspect ratio; may letterbox if the
+ *     admin uploads an off-ratio image. Acceptable trade-off for not
+ *     knowing the image's native dimensions client-side.
+ *
+ * Single clipping wrapper owns the rounded radius. The entire card is
+ * clickable → /login. No overlays, no floating badges.
+ */
+function HeroMedia({
+  settings,
+  navigate,
+}: {
+  settings: {
+    heroImageDesktop?: string | null
+    heroImageMobile?: string | null
+  } | null
+  navigate: (path: string) => void
+}) {
+  // Resolve sources with the fallback chain described above.
+  const desktopSrc = settings?.heroImageDesktop || '/banner-desktop.webp'
+  const mobileSrc = settings?.heroImageMobile || settings?.heroImageDesktop || '/banner-mobile.webp'
+
+  // Distinguish Cloudinary URLs from local /public paths so we can pick
+  // the right rendering mode (intrinsic vs fill+aspect-ratio).
+  const desktopIsCloudinary = isCloudinaryUrl(desktopSrc)
+  const mobileIsCloudinary = isCloudinaryUrl(mobileSrc)
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.6, delay: 0.1 }}
+      className="order-first md:order-last"
+    >
+      <button
+        type="button"
+        onClick={() => navigate('/login')}
+        aria-label="Daftar / Masuk — buka halaman login"
+        className="group block w-full overflow-hidden rounded-[20px] border border-border/60 shadow-sm transition-all hover:shadow-md hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 md:rounded-[24px]"
+      >
+        {/* Mobile banner — visible below md. */}
+        {mobileIsCloudinary ? (
+          // Cloudinary URL — unknown native dims → use fill + aspect-ratio container.
+          // 9:16 portrait mirrors the recommended mobile ratio.
+          <div className="relative aspect-[9/16] w-full md:hidden">
+            <OptImage
+              src={mobileSrc}
+              alt="Anima Companion — Elevating Animal Health"
+              fill
+              priority
+              sizes="(max-width: 767px) 100vw, 0px"
+              className="object-contain"
+            />
+          </div>
+        ) : (
+          // Local /public path — known native dims (1523x765 ~2:1 landscape).
+          // Intrinsic width/height → no CLS, no crop, no distortion.
+          <OptImage
+            src={mobileSrc}
+            alt="Anima Companion — Elevating Animal Health"
+            width={1523}
+            height={765}
+            priority
+            sizes="(max-width: 767px) 100vw, 0px"
+            className="block h-auto w-full object-contain md:hidden"
+          />
+        )}
+
+        {/* Desktop banner — visible at md+. */}
+        {desktopIsCloudinary ? (
+          // Cloudinary URL — unknown native dims → use fill + 16:9 aspect-ratio container.
+          <div className="relative hidden aspect-video w-full md:block">
+            <OptImage
+              src={desktopSrc}
+              alt="Anima Companion — Elevating Animal Health"
+              fill
+              priority
+              sizes="(min-width: 768px) 50vw, 0px"
+              className="object-contain"
+            />
+          </div>
+        ) : (
+          // Local /public path — native 1672x941 (~16:9).
+          <OptImage
+            src={desktopSrc}
+            alt="Anima Companion — Elevating Animal Health"
+            width={1672}
+            height={941}
+            priority
+            sizes="(min-width: 768px) 50vw, 0px"
+            className="hidden h-auto w-full object-contain md:block"
+          />
+        )}
+      </button>
+    </motion.div>
+  )
+}
 
 /**
  * Pet Type card with a subtle 3D tilt on hover (desktop only — touch devices
