@@ -415,7 +415,7 @@ export function ProductDetailView({ slug }: { slug: string }) {
                 Mulai dari
               </p>
             )}
-            {displaySalePrice ? (
+            {displaySalePrice && discount > 0 ? (
               <div className="flex flex-wrap items-end gap-2 md:gap-3">
                 <span className="text-2xl font-bold text-primary md:text-4xl">{formatRupiah(displaySalePrice)}</span>
                 <span className="mb-1.5 text-sm md:text-base text-muted-foreground line-through">{formatRupiah(displayRegularPrice)}</span>

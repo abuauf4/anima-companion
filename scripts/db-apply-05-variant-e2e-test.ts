@@ -276,11 +276,15 @@ async function main() {
     where: { id: product.id },
     include: { variants: { orderBy: { sortOrder: 'asc' } } },
   })
-  // Lowest effective: variant1 salePrice 45000 < variant2 price 110000 → winner = variant1
-  // Parent cache: price=45000, salePrice=45000, stock=8+4=12
+  // Lowest effective: variant1 effective (45000 via salePrice) < variant2 price 110000 → winner = variant1.
+  // Parent cache: price = winner NORMAL price (60000, NOT effective 45000),
+  //               salePrice = winner salePrice (45000, active),
+  //               stock = 8 + 4 = 12.
+  // (Previous buggy behavior stored `price = 45000` = effective, causing
+  //  `price === salePrice` → "Hemat 0%" on the storefront. Fixed.)
   check('after PUT: variant3 (60 kapsul) hard-deleted', productUpdated?.variants.length === 2, `got ${productUpdated?.variants.length}`)
-  check('after PUT: parent.price = 45000 (variant1 salePrice, lowest effective)', productUpdated?.price === 45000, `got ${productUpdated?.price}`)
-  check('after PUT: parent.salePrice = 45000 (winner has active sale)', productUpdated?.salePrice === 45000, `got ${productUpdated?.salePrice}`)
+  check('after PUT: parent.price = 60000 (winner NORMAL price, NOT effective)', productUpdated?.price === 60000, `got ${productUpdated?.price}`)
+  check('after PUT: parent.salePrice = 45000 (winner active salePrice)', productUpdated?.salePrice === 45000, `got ${productUpdated?.salePrice}`)
   check('after PUT: parent.stock = 12 (8 + 4)', productUpdated?.stock === 12, `got ${productUpdated?.stock}`)
 
   // ============ V9. Multi-product multi-variant checkout ============

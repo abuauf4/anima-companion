@@ -195,16 +195,19 @@ check(
   { price: 50000, salePrice: null, stock: 10 }
 )
 
-// Multiple variants — parent price = lowest effective
+// Multiple variants — parent price = winner's NORMAL price (NOT effective).
+// Winner = variant with lowest effective selling price.
+// Here winner is variant 2 (effective 40000 via salePrice). Its NORMAL
+// price is 50000, so parent.price = 50000 (NOT 40000), parent.salePrice
+// = 40000, parent.stock = 5+10+3 = 18.
 check(
-  'multiple variants — lowest wins',
+  'multiple variants — lowest effective wins; parent.price = winner NORMAL',
   deriveParentCacheFromVariants([
     { price: 100000, salePrice: null, stock: 5, isActive: true, sortOrder: 0 },
     { price: 50000, salePrice: 40000, stock: 10, isActive: true, sortOrder: 1 },
     { price: 80000, salePrice: null, stock: 3, isActive: true, sortOrder: 2 },
   ]),
-  // lowest effective = 40000 (variant 2's salePrice), stock = sum = 18
-  { price: 40000, salePrice: 40000, stock: 18 }
+  { price: 50000, salePrice: 40000, stock: 18 }
 )
 
 // Inactive variants excluded from price but stock sum is of ACTIVE only
@@ -227,15 +230,34 @@ check(
   { price: 0, salePrice: null, stock: 0 }
 )
 
-// Tie-break: same effective price, lower sortOrder wins
+// Tie-break: same effective price, lower sortOrder wins.
+// Both variants have effective price 50000 (variant1: 50000 flat,
+// variant2: 60000 normal with 50000 salePrice). Tie → sortOrder 1 wins.
+// Winner = variant2: NORMAL price 60000, salePrice 50000, stock 5+3=8.
+// parent.price = 60000 (winner NORMAL), parent.salePrice = 50000 (winner sale).
 check(
   'tie-break by sortOrder',
   deriveParentCacheFromVariants([
     { price: 50000, salePrice: null, stock: 5, isActive: true, sortOrder: 5 },
     { price: 60000, salePrice: 50000, stock: 3, isActive: true, sortOrder: 1 },
   ]),
-  // Both have effective price 50000. sortOrder 1 wins. salePrice = 50000 (in effect).
-  { price: 50000, salePrice: 50000, stock: 8 }
+  { price: 60000, salePrice: 50000, stock: 8 }
+)
+
+// Variant with salePrice >= price — sale is NOT active, so winner's
+// effective price = its normal price. salePrice should be null on the
+// parent (no active discount). parent.price = winner NORMAL price.
+check(
+  'winner with stale salePrice (>= price) → parent.salePrice = null',
+  deriveParentCacheFromVariants([
+    { price: 50000, salePrice: 60000, stock: 10, isActive: true, sortOrder: 0 },
+    { price: 80000, salePrice: null, stock: 5, isActive: true, sortOrder: 1 },
+  ]),
+  // variant1 effective = 50000 (salePrice ignored since 60000 >= 50000),
+  // variant2 effective = 80000. Winner = variant1. parent.price = 50000
+  // (variant1 normal), parent.salePrice = null (no active sale),
+  // parent.stock = 10 + 5 = 15.
+  { price: 50000, salePrice: null, stock: 15 }
 )
 
 console.log()

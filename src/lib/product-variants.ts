@@ -19,15 +19,22 @@
  *     authoritative and these helpers are NOT called.
  *   - When `Product.hasVariants = true`, parent price/salePrice/stock are
  *     a derived cache. The derivation rules are:
- *       * `price`     = min(effectivePrice(variant.price, variant.salePrice))
- *                       across ACTIVE variants. If multiple variants have the
- *                       same effective price, the one with the lowest
- *                       `sortOrder` wins (deterministic).
- *       * `salePrice` = the variant.salePrice that produced the winning
- *                       `price` above (so discount display logic continues
- *                       to work). May be null if the winning variant has no
- *                       salePrice.
- *       * `stock`     = sum of variant.stock across ACTIVE variants.
+ *       * Winner variant = the ACTIVE variant with the LOWEST effective
+ *                         selling price (salePrice if set & < price, else
+ *                         price). Ties broken by lowest `sortOrder` for
+ *                         determinism. The winner is what the storefront
+ *                         shows as the "Mulai Rp..." price.
+ *       * `price`     = the WINNER's NORMAL `price` (NOT its effective /
+ *                       discounted price). This is critical: the parent
+ *                       `price` must always be the un-discounted regular
+ *                       price of the winning variant so the storefront's
+ *                       strikethrough + discount % math works.
+ *       * `salePrice` = the WINNER's `salePrice` (may be null if the winner
+ *                       has no active discount). This pairs with `price`
+ *                       above so `discountPercent(price, salePrice)` returns
+ *                       the correct discount %.
+ *       * `stock`     = sum of variant.stock across ALL ACTIVE variants
+ *                       (regardless of which variant won the price race).
  *   - If a product has `hasVariants = true` but ZERO active variants
  *     (edge case — admin deactivated all), the parent cache is set to
  *     `price = 0, salePrice = null, stock = 0`. The product will appear
@@ -85,11 +92,10 @@ export function deriveParentCacheFromVariants(
   // has the lowest price).
   const stock = active.reduce((sum, v) => sum + (v.stock || 0), 0)
 
-  // Price = the LOWEST effective selling price across active variants.
-  // Tie-break by lowest sortOrder for determinism.
-  // salePrice = the salePrice of the variant that won the price comparison
-  // (so the parent's salePrice cache reflects the actual discount on the
-  // cheapest variant — discount display logic continues to work).
+  // Pick the winner: ACTIVE variant with the LOWEST effective selling price
+  // (salePrice if set & < price, else price). Ties broken by lowest sortOrder
+  // for determinism. The winner defines what the storefront shows as the
+  // "Mulai Rp..." price.
   const sorted = [...active].sort((a, b) => {
     const pa = variantEffectivePrice(a)
     const pb = variantEffectivePrice(b)
@@ -97,22 +103,23 @@ export function deriveParentCacheFromVariants(
     return a.sortOrder - b.sortOrder
   })
   const winner = sorted[0]
-  const winnerEffective = variantEffectivePrice(winner)
 
+  // CRITICAL: parent.price = winner's NORMAL price (not its effective /
+  // discounted price). The parent `salePrice` carries the discount.
+  // If we stored the effective price in `price`, then `price === salePrice`
+  // for discounted winners, which makes `discountPercent(price, salePrice)`
+  // return 0 and the UI shows "Hemat 0%" — the exact bug we're fixing.
+  //
   // If the winner has a salePrice that is in effect (i.e. < its price),
-  // parent.salePrice = winner.salePrice so discount badge shows correctly.
-  // Otherwise (winner's salePrice is null OR >= price), parent has no
-  // active sale — set salePrice to null.
+  // parent.salePrice = winner.salePrice so the discount badge + strikethrough
+  // show correctly. Otherwise (winner's salePrice is null OR >= price),
+  // the parent has no active sale — set salePrice to null.
   const salePrice =
     winner.salePrice && winner.salePrice < winner.price
       ? winner.salePrice
       : null
 
-  // Edge case: if winnerEffective is 0 (free variant — shouldn't happen
-  // because validation requires price > 0, but be defensive), still set
-  // parent price to 0 so the product shows "Mulai Rp 0" rather than
-  // crashing.
-  return { price: winnerEffective, salePrice, stock }
+  return { price: winner.price, salePrice, stock }
 }
 
 // =====================================================

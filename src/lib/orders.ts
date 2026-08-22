@@ -750,6 +750,17 @@ export async function createOrder(input: CreateOrderInput): Promise<any> {
         // We do this for EVERY variant product touched by this order, even
         // if only one variant's stock changed. The derivation is cheap
         // (single query per product) and keeps the cache consistent.
+        //
+        // Derivation rules (must mirror `deriveParentCacheFromVariants` in
+        // src/lib/product-variants.ts exactly):
+        //   - winner = ACTIVE variant with lowest effective selling price
+        //     (salePrice if set & < price, else price); ties broken by
+        //     lowest sortOrder.
+        //   - parent.price     = winner.price          (NORMAL price, NOT effective)
+        //   - parent.salePrice = winner.salePrice if active, else null
+        //   - parent.stock     = sum of variant.stock across ALL active variants
+        // Storing the winner's effective price in `price` was a previous bug
+        // that produced `price === salePrice` → "Hemat 0%" on the storefront.
         for (const productId of variantProductIds) {
           const variants = await tx.productVariant.findMany({
             where: { productId },
@@ -774,15 +785,14 @@ export async function createOrder(input: CreateOrderInput): Promise<any> {
             return a.sortOrder - b.sortOrder
           })
           const winner = sorted[0]
-          const winnerEffective = winner.salePrice && winner.salePrice < winner.price
-            ? winner.salePrice
-            : winner.price
           const salePrice = winner.salePrice && winner.salePrice < winner.price
             ? winner.salePrice
             : null
+          // parent.price = winner's NORMAL price (NOT effective price).
+          // See comment above.
           await tx.product.update({
             where: { id: productId },
-            data: { price: winnerEffective, salePrice, stock },
+            data: { price: winner.price, salePrice, stock },
           })
         }
 
@@ -924,7 +934,10 @@ export async function cancelOrderAndRestoreStock(orderId: string): Promise<{
     }
 
     // Recompute parent cache for variant products whose variant stock changed.
-    // Same inline derivation as in createOrder.
+    // Same inline derivation as in createOrder. See the derivation-rules
+    // comment in createOrder for the full explanation — parent.price MUST be
+    // the winner's NORMAL price (not effective) so the storefront's
+    // strikethrough + discount % math works.
     for (const productId of variantProductsToRecompute) {
       const variants = await tx.productVariant.findMany({
         where: { productId },
@@ -946,15 +959,12 @@ export async function cancelOrderAndRestoreStock(orderId: string): Promise<{
         return a.sortOrder - b.sortOrder
       })
       const winner = sorted[0]
-      const winnerEffective = winner.salePrice && winner.salePrice < winner.price
-        ? winner.salePrice
-        : winner.price
       const salePrice = winner.salePrice && winner.salePrice < winner.price
         ? winner.salePrice
         : null
       await tx.product.update({
         where: { id: productId },
-        data: { price: winnerEffective, salePrice, stock },
+        data: { price: winner.price, salePrice, stock },
       })
     }
 
