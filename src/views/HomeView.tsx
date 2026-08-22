@@ -1,8 +1,7 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useHashRouter } from '@/lib/router'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { ProductCard } from '@/components/product/ProductCard'
 import { Image as OptImage } from '@/components/common/Image'
 import { SectionHeader } from '@/components/common/SectionHeader'
@@ -11,7 +10,6 @@ import {
   Shield, Utensils, Sparkles, Bone, Activity, Eye, Heart, Sun,
   ArrowRight, MessageCircle, Star, ChevronRight, ChevronLeft,
   PawPrint,
-  Mail, Gift,
 } from 'lucide-react'
 import {
   Product, PetType,
@@ -20,7 +18,6 @@ import { useHomeData } from '@/hooks/use-home-data'
 import { VetSection } from '@/components/home/VetSection'
 import { IngredientsReveal } from '@/components/home/IngredientsReveal'
 import { motion, useMotionValue, useTransform } from 'framer-motion'
-import { toast } from 'sonner'
 import { formatRupiah } from '@/lib/format'
 
 const PROBLEM_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -49,17 +46,6 @@ export function HomeView() {
     petTypes,
     settings,
   } = useHomeData()
-
-  const [emailValue, setEmailValue] = useState('')
-
-  const handleNewsletter = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!emailValue) return
-    toast.success('Berhasil daftar newsletter! 🎁', {
-      description: 'Voucher Rp 25.000 akan dikirim ke email Anda.',
-    })
-    setEmailValue('')
-  }
 
   // Only Kucing & Anjing — Anima Companion only sells cat & dog supplements
   const mainPetTypes = petTypes.filter((p) => ['kucing', 'anjing'].includes(p.slug))
@@ -327,43 +313,24 @@ export function HomeView() {
         </Stagger>
       </section>
 
-      {/* ==================== NEWSLETTER CTA ==================== */}
+      {/* ==================== POSTER CTA ==================== */}
       <section className="container-page pb-12 md:pb-16">
-        <div className="relative overflow-hidden rounded-3xl gradient-brand p-6 text-center text-white shadow-xl sm:p-10">
-          <div className="pointer-events-none absolute -right-12 -top-12 size-64 rounded-full bg-white/10 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-12 -left-12 size-64 rounded-full bg-amber-300/20 blur-3xl" />
-
-          <div className="relative mx-auto max-w-xl space-y-3">
-            <Gift className="mx-auto size-10 text-amber-200" />
-            <h2 className="text-balance text-2xl font-extrabold sm:text-3xl">
-              Daftar & Dapat Voucher Rp 25.000
-            </h2>
-            <p className="text-sm text-white/90 sm:text-base">
-              Berlangganan newsletter kami untuk info promo, tips kesehatan hewan, dan voucher
-              spesial. Voucher Rp 25.000 langsung dikirim ke email Anda.
-            </p>
-            <form onSubmit={handleNewsletter} className="mx-auto mt-4 flex max-w-md flex-col gap-2 sm:flex-row">
-              <Input
-                type="email"
-                required
-                placeholder="email@kamu.com"
-                value={emailValue}
-                onChange={(e) => setEmailValue(e.target.value)}
-                className="border-white/30 bg-white/95 text-foreground placeholder:text-muted-foreground"
-              />
-              <Button
-                type="submit"
-                variant="secondary"
-                className="gap-1.5 bg-white text-primary hover:bg-white/90"
-              >
-                <Mail className="size-4" /> Klaim Voucher
-              </Button>
-            </form>
-            <p className="text-[11px] text-white/70">
-              Dengan mendaftar, Anda menyetujui kebijakan privasi kami.
-            </p>
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={() => navigate('/login')}
+          aria-label="Daftar / Masuk — buka halaman login"
+          className="group block w-full overflow-hidden rounded-2xl border border-border/60 shadow-sm transition-all hover:shadow-md hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+        >
+          <OptImage
+            src="/poster.webp"
+            alt="Promo Anima Companion — daftar sekarang"
+            width={1600}
+            height={846}
+            priority={false}
+            sizes="(max-width: 768px) 100vw, 1024px"
+            className="h-auto w-full transition-transform duration-500 group-hover:scale-[1.01]"
+          />
+        </button>
       </section>
     </div>
   )
