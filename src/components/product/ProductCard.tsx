@@ -11,6 +11,32 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 
+interface ProductCardProps {
+  product: Product
+  /**
+   * When true, suppresses ALL image-overlay badges/ribbons:
+   *   - Best Seller ribbon (top-left)
+   *   - "Baru" / New ribbon (top-left, fallback)
+   *   - Discount % badge (top-right)
+   *   - Subscribe & Save "Save 15%" image badge (top-right, under discount)
+   *   - BPOM badge (bottom-left)
+   *
+   * Kept regardless of this flag:
+   *   - Product image itself
+   *   - Heart wishlist toggle (top-right middle)
+   *   - Floating cart button (bottom-right)
+   *   - Out-of-stock overlay (critical UX signal — without it the cart
+   *     button is disabled but the customer can't tell why)
+   *   - All body content (seller, name, rating, sold count, price,
+   *     "Mulai", "N varian tersedia", Subscribe price hint)
+   *
+   * Used by ShopView (catalog page) to keep the catalog grid visually
+   * clean. Homepage, recommendation rails, related-products, and all
+   * other call-sites default to `false` (full badge surface).
+   */
+  hideBadges?: boolean
+}
+
 /**
  * Compact product card — Zesty Paws / marketplace style.
  *
@@ -23,7 +49,7 @@ import Link from 'next/link'
  * - Brand + seller (clickable) under product name
  * - Star rating + review count row
  */
-export function ProductCard({ product }: { product: Product }) {
+export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
   const { navigate } = useHashRouter()
   const addItem = useCartStore((s) => s.addItem)
   const toggleWishlist = useWishlistStore((s) => s.toggleItem)
@@ -125,30 +151,32 @@ export function ProductCard({ product }: { product: Product }) {
         )}
 
         {/* Top ribbon: Best Seller / Baru */}
-        {product.isBestSeller && (
+        {!hideBadges && product.isBestSeller && (
           <span className="absolute left-0 top-0 bg-gradient-to-r from-amber-500 to-orange-500 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white shadow-sm">
             ⭐ Best Seller
           </span>
         )}
-        {!product.isBestSeller && product.isNew && (
+        {!hideBadges && !product.isBestSeller && product.isNew && (
           <span className="absolute left-0 top-0 bg-gradient-to-r from-violet-500 to-fuchsia-500 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white shadow-sm">
             Baru
           </span>
         )}
 
         {/* Discount badge + Subscribe badge — top-right column */}
-        <div className="absolute right-0 top-0 flex flex-col items-end gap-0.5">
-          {discount > 0 && (
-            <span className="bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
-              -{discount}%
-            </span>
-          )}
-          {product.isSubscribeEligible && (
-            <span className="flex items-center gap-0.5 bg-emerald-500 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide text-white shadow-sm">
-              <Repeat className="size-2.5" /> Save 15%
-            </span>
-          )}
-        </div>
+        {!hideBadges && (
+          <div className="absolute right-0 top-0 flex flex-col items-end gap-0.5">
+            {discount > 0 && (
+              <span className="bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                -{discount}%
+              </span>
+            )}
+            {product.isSubscribeEligible && (
+              <span className="flex items-center gap-0.5 bg-emerald-500 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide text-white shadow-sm">
+                <Repeat className="size-2.5" /> Save 15%
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Heart wishlist toggle — bottom-right of image (separate from cart button) */}
         <button
@@ -170,7 +198,7 @@ export function ProductCard({ product }: { product: Product }) {
         </button>
 
         {/* BPOM mini badge — bottom-left of image */}
-        {product.bpomNumber && (
+        {!hideBadges && product.bpomNumber && (
           <span className="absolute bottom-1.5 left-1.5 inline-flex items-center gap-0.5 rounded-md bg-emerald-500/95 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-white shadow-sm backdrop-blur-sm">
             <Shield className="size-2.5" /> BPOM
           </span>
