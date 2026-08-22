@@ -272,58 +272,26 @@ export function HomeView() {
       {/* ==================== VET SECTION ==================== */}
       <VetSection />
 
-      {/* ==================== TESTIMONIALS ==================== */}
-      <section className="container-page py-10 md:py-14">
+      {/* ==================== ANIMA CLUB ==================== */}
+      <section className="container-page pt-4 pb-12 md:pt-6 md:pb-14">
         <SectionHeader
-          eyebrow="Kata Pelanggan"
-          eyebrowIcon={<Heart className="size-3 text-rose-500" />}
-          title={<>Apa Kata <span className="gradient-brand-text">Pelanggan</span> Kami</>}
-          subtitle="Ribuan pelanggan telah mempercayakan kesehatan hewan peliharaan mereka pada kami."
+          eyebrow="Anima Club"
+          eyebrowIcon={<Sparkles className="size-3 text-amber-500" />}
+          title={<>Bergabung dengan <span className="gradient-brand-text">Anima Club</span></>}
+          subtitle="Dapatkan berbagai keuntungan khusus member dan nikmati pengalaman bersama Anima Companion yang lebih istimewa."
           align="center"
-          className="mb-10"
+          className="mb-7 md:mb-8"
         />
 
-        <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {testimonials.map((t) => (
-            <StaggerItem key={t.id}>
-              <div className="flex h-full flex-col gap-3 rounded-2xl border border-border/60 bg-card p-5">
-                <div className="flex items-center gap-0.5">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Star
-                      key={i}
-                      className={`size-3.5 ${i < t.rating ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/30'}`}
-                    />
-                  ))}
-                </div>
-                <p className="flex-1 text-sm leading-relaxed text-foreground/90">
-                  &ldquo;{t.message}&rdquo;
-                </p>
-                <div className="flex items-center gap-2 border-t border-border/60 pt-3">
-                  <div className="flex size-9 items-center justify-center rounded-full gradient-brand text-xs font-bold text-white">
-                    {t.name.charAt(0)}
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-foreground">{t.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{t.petName} · {t.petType}</p>
-                  </div>
-                </div>
-              </div>
-            </StaggerItem>
-          ))}
-        </Stagger>
-      </section>
-
-      {/* ==================== POSTER CTA ==================== */}
-      <section className="container-page pb-12 md:pb-16">
         <button
           type="button"
           onClick={() => navigate('/login')}
-          aria-label="Daftar / Masuk — buka halaman login"
+          aria-label="Bergabung dengan Anima Club — buka halaman login"
           className="group block w-full overflow-hidden rounded-2xl border border-border/60 shadow-sm transition-all hover:shadow-md hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         >
           <OptImage
             src="/poster.webp"
-            alt="Promo Anima Companion — daftar sekarang"
+            alt="Anima Club — daftar sekarang"
             width={1600}
             height={846}
             priority={false}
