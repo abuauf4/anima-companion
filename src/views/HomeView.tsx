@@ -412,6 +412,54 @@ function HeroMedia({
             className="hidden h-auto w-full md:block"
           />
         )}
+
+        {/* ==================== CTA OVERLAY — "Gabung Anima Club" ====================
+            A real HTML pill button overlaid INSIDE the hero banner frame,
+            below the banner image's baked-in "untuk Produk Anima!" text.
+
+            Implementation notes:
+            - The outer <button> already navigates to /login on click. The CTA
+              is a <span role="button"> (NOT a nested <button>, which would be
+              invalid HTML). Clicking the CTA bubbles up to the outer button →
+              same /login navigation. No separate handler needed.
+            - Two separate overlays: mobile (md:hidden) + desktop (hidden md:block).
+              Each has its OWN positioning tuned per breakpoint.
+            - Percentage-based positioning so the CTA scales with the banner.
+            - The outer button has overflow-hidden + rounded-[20px] md:rounded-[24px]
+              → both image AND overlay are clipped to the same rounded radius.
+            - z-10 ensures the CTA renders on top of the image.
+            - group-hover / group-active hooks into the outer button's group →
+              hover brightens the CTA, press scales it slightly.
+        */}
+
+        {/* Mobile CTA — visible below md. Lower-left safe zone, below the
+            banner's "untuk Produk Anima!" text. left-6% bottom-14% avoids
+            edge-kissing and stays clear of bottom logos/legal text. */}
+        <div className="pointer-events-none absolute bottom-[14%] left-[6%] z-10 md:hidden">
+          <span
+            role="button"
+            tabIndex={-1}
+            className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-bold text-white shadow-lg ring-1 ring-white/25 transition-colors duration-200 group-hover:bg-primary/90 active:scale-95"
+          >
+            Gabung Anima Club
+            <ArrowRight className="h-3 w-3" />
+          </span>
+        </div>
+
+        {/* Desktop CTA — visible at md+. Lower-left safe zone, below the
+            banner's "untuk Produk Anima!" text. left-8% bottom-18% gives
+            comfortable spacing from the bottom edge while staying aligned
+            with the left typography block. */}
+        <div className="pointer-events-none absolute bottom-[18%] left-[8%] z-10 hidden md:block">
+          <span
+            role="button"
+            tabIndex={-1}
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-bold text-white shadow-lg ring-1 ring-white/25 transition-colors duration-200 group-hover:bg-primary/90 active:scale-95"
+          >
+            Gabung Anima Club
+            <ArrowRight className="h-4 w-4" />
+          </span>
+        </div>
       </button>
     </motion.div>
   )
