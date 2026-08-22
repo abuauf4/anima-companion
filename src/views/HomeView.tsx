@@ -301,14 +301,18 @@ const PET_CARDS: PetCardConfig[] = [
  *        desktop image)
  *     3. /banner-mobile.webp (local default, native 1523x765 ~2:1)
  *
+ * Aspect ratio: BOTH desktop and mobile hero images are LANDSCAPE (16:9).
+ * The mobile version is a separate upload only so its composition can
+ * be optimized for small screens — the container shape is the same as
+ * desktop (aspect-video). Never portrait.
+ *
  * Rendering mode:
  *   - Local /public paths (known dims): intrinsic width/height +
  *     h-auto w-full object-contain → no CLS, no crop, no distortion.
  *   - Cloudinary URLs (dims unknown at render time): fill mode inside
- *     a fixed aspect-ratio container (16:9 desktop, 9:16 mobile) +
- *     object-contain → preserves aspect ratio; may letterbox if the
- *     admin uploads an off-ratio image. Acceptable trade-off for not
- *     knowing the image's native dimensions client-side.
+ *     a fixed 16:9 aspect-ratio container + object-cover. Since admin
+ *     is instructed to upload 16:9 images, object-cover fills the
+ *     container without distortion.
  *
  * Single clipping wrapper owns the rounded radius. The entire card is
  * clickable → /login. No overlays, no floating badges.
@@ -345,18 +349,21 @@ function HeroMedia({
         aria-label="Daftar / Masuk — buka halaman login"
         className="group block w-full overflow-hidden rounded-[20px] border border-border/60 shadow-sm transition-all hover:shadow-md hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 md:rounded-[24px]"
       >
-        {/* Mobile banner — visible below md. */}
+        {/* Mobile banner — visible below md.
+            Mobile hero is ALSO a landscape asset (16:9), NOT portrait.
+            The mobile version is a separate upload only so its composition
+            can be optimized for small screens — the container shape is the
+            same as desktop. */}
         {mobileIsCloudinary ? (
-          // Cloudinary URL — unknown native dims → use fill + aspect-ratio container.
-          // 9:16 portrait mirrors the recommended mobile ratio.
-          <div className="relative aspect-[9/16] w-full md:hidden">
+          // Cloudinary URL — unknown native dims → fill + 16:9 aspect-ratio container.
+          <div className="relative aspect-video w-full md:hidden">
             <OptImage
               src={mobileSrc}
               alt="Anima Companion — Elevating Animal Health"
               fill
               priority
               sizes="(max-width: 767px) 100vw, 0px"
-              className="object-contain"
+              className="object-cover"
             />
           </div>
         ) : (
@@ -383,7 +390,7 @@ function HeroMedia({
               fill
               priority
               sizes="(min-width: 768px) 50vw, 0px"
-              className="object-contain"
+              className="object-cover"
             />
           </div>
         ) : (

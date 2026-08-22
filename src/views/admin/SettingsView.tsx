@@ -479,25 +479,27 @@ function HeroImagesCard({
               </Button>
             )}
           </div>
-          {/* Preview — 9:16 aspect ratio box (portrait phone) */}
-          <div className="relative mx-auto aspect-[9/16] w-full max-w-[220px] overflow-hidden rounded-lg border border-border/60 bg-muted/30">
+          {/* Preview — 16:9 landscape box (same as desktop — mobile hero
+              is also landscape, just a separate asset optimized for
+              small screens). */}
+          <div className="relative aspect-video overflow-hidden rounded-lg border border-border/60 bg-muted/30">
             {form.heroImageMobile ? (
               <OptImage
                 src={form.heroImageMobile}
                 alt="Mobile hero preview"
                 fill
-                sizes="220px"
+                sizes="(max-width: 768px) 100vw, 400px"
                 className="object-cover"
                 showPlaceholder={false}
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center text-center text-xs text-muted-foreground">
+              <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
                 Belum ada gambar
               </div>
             )}
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Rekomendasi rasio 4:5 atau 9:16 (portrait). JPG/PNG/WebP, maks 8 MB.
+            Rekomendasi rasio 16:9 (landscape), dengan komposisi yang tetap terbaca di layar kecil. JPG/PNG/WebP, maks 8 MB.
           </p>
           <CloudinaryUploader
             compact
