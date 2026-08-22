@@ -109,43 +109,48 @@ export function HomeView() {
 
           {/* IMAGE: top on mobile, RIGHT on desktop.
               Clickable → /login. Two art-directed banner images:
-              mobile (banner-mobile.webp) and desktop (banner-desktop.webp).
-              Floating badges (rating / BPOM / vet) removed per spec. */}
+              mobile (banner-mobile.webp, 1523x765 ~2:1 landscape) and
+              desktop (banner-desktop.webp, 1672x941 ~16:9 landscape).
+              Intrinsic aspect-ratio rendering — no fill, no fixed height,
+              no object-cover crop, no overlays. Single clipping wrapper
+              owns the rounded radius; the <img> inside uses object-contain
+              with width:100% height:auto so the banner is never stretched. */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6, delay: 0.1 }}
-            className="relative order-first h-44 sm:h-80 md:order-last md:h-96"
+            className="order-first md:order-last"
           >
             <button
               type="button"
               onClick={() => navigate('/login')}
               aria-label="Daftar / Masuk — buka halaman login"
-              className="group block h-full w-full overflow-hidden rounded-3xl shadow-2xl ring-4 ring-white/60 transition-all hover:shadow-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+              className="group block w-full overflow-hidden rounded-[20px] border border-border/60 shadow-sm transition-all hover:shadow-md hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 md:rounded-[24px]"
             >
-              {/* Mobile banner (visible below md) */}
-              <div className="absolute inset-0 block md:hidden">
-                <OptImage
-                  src="/banner-mobile.webp"
-                  alt="Anima Companion — Elevating Animal Health"
-                  fill
-                  priority
-                  sizes="(max-width: 767px) 100vw, 0px"
-                  className="object-cover transition-transform duration-500 group-hover:scale-[1.01]"
-                />
-              </div>
-              {/* Desktop banner (visible at md+) */}
-              <div className="absolute inset-0 hidden md:block">
-                <OptImage
-                  src="/banner-desktop.webp"
-                  alt="Anima Companion — Elevating Animal Health"
-                  fill
-                  priority
-                  sizes="(min-width: 768px) 50vw, 0px"
-                  className="object-cover transition-transform duration-500 group-hover:scale-[1.01]"
-                />
-              </div>
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-primary/10 via-transparent to-secondary/10" />
+              {/* Mobile banner — visible below md.
+                  width/height = native (1523x765) so next/image renders
+                  an <img> with intrinsic aspect ratio → no CLS, no crop. */}
+              <OptImage
+                src="/banner-mobile.webp"
+                alt="Anima Companion — Elevating Animal Health"
+                width={1523}
+                height={765}
+                priority
+                sizes="(max-width: 767px) 100vw, 0px"
+                className="block h-auto w-full object-contain md:hidden"
+              />
+              {/* Desktop banner — visible at md+.
+                  Native 1672x941 (~16:9 landscape). Renders its own
+                  aspect ratio at 100% column width. */}
+              <OptImage
+                src="/banner-desktop.webp"
+                alt="Anima Companion — Elevating Animal Health"
+                width={1672}
+                height={941}
+                priority
+                sizes="(min-width: 768px) 50vw, 0px"
+                className="hidden h-auto w-full object-contain md:block"
+              />
             </button>
           </motion.div>
         </div>
