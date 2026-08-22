@@ -347,7 +347,7 @@ function HeroMedia({
         type="button"
         onClick={() => navigate('/login')}
         aria-label="Daftar / Masuk — buka halaman login"
-        className="group block w-full overflow-hidden rounded-[20px] border border-border/60 shadow-sm transition-all hover:shadow-md hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 md:rounded-[24px]"
+        className="group relative block w-full overflow-hidden rounded-[20px] border border-border/60 shadow-sm transition-all hover:shadow-md hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 md:rounded-[24px]"
       >
         {/* Mobile banner — visible below md.
             Mobile hero is ALSO a landscape asset (16:9), NOT portrait.
@@ -433,9 +433,9 @@ function HeroMedia({
         */}
 
         {/* Mobile CTA — visible below md. Lower-left safe zone, below the
-            banner's "untuk Produk Anima!" text. left-6% bottom-14% avoids
+            banner's "untuk Produk Anima!" text. left-8% bottom-15% avoids
             edge-kissing and stays clear of bottom logos/legal text. */}
-        <div className="pointer-events-none absolute bottom-[14%] left-[6%] z-10 md:hidden">
+        <div className="pointer-events-none absolute bottom-[15%] left-[8%] z-10 md:hidden">
           <span
             role="button"
             tabIndex={-1}
