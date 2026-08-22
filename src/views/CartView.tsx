@@ -117,8 +117,12 @@ export function CartView() {
           {items.map((item) => {
             const itemPrice = effectivePrice(item.price, item.salePrice)
             const itemSubtotal = itemPrice * item.quantity
+            // Stable React key: composite of productId + variantId (or null).
+            // Different variants of the same product are separate cart lines,
+            // so productId alone is no longer unique within the cart.
+            const lineKey = `${item.productId}::${item.variantId || ''}`
             return (
-              <Card key={item.productId} className="flex gap-4 p-4">
+              <Card key={lineKey} className="flex gap-4 p-4">
                 {/* Image */}
                 <button
                   onClick={() => navigate(`/produk/${item.slug}`)}
@@ -145,7 +149,14 @@ export function CartView() {
                       >
                         {item.name}
                       </button>
-                      {item.weight && (
+                      {/* Variant name (Phase: Variants) — shown if the cart
+                          line is for a specific variant. */}
+                      {item.variantName && (
+                        <p className="mt-0.5 inline-flex items-center gap-1 rounded-md bg-primary/5 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                          {item.variantName}
+                        </p>
+                      )}
+                      {item.weight && !item.variantName && (
                         <p className="mt-0.5 text-xs text-muted-foreground">{item.weight}</p>
                       )}
                       {item.salePrice && (
@@ -158,7 +169,9 @@ export function CartView() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => removeItem(item.productId)}
+                      // Remove by composite key — pass variantId so the right
+                      // cart line is removed (not all lines of the product).
+                      onClick={() => removeItem(item.productId, item.variantId)}
                       className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
                       aria-label="Hapus"
                     >
@@ -172,7 +185,9 @@ export function CartView() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => updateQuantity(item.productId, item.quantity - 1)}
+                        // Update by composite key — pass variantId so the
+                        // right cart line is updated.
+                        onClick={() => updateQuantity(item.productId, item.quantity - 1, item.variantId)}
                         className="h-8 w-8 rounded-r-none"
                       >
                         <Minus className="h-3 w-3" />
@@ -181,7 +196,7 @@ export function CartView() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => updateQuantity(item.productId, item.quantity + 1)}
+                        onClick={() => updateQuantity(item.productId, item.quantity + 1, item.variantId)}
                         className="h-8 w-8 rounded-l-none"
                       >
                         <Plus className="h-3 w-3" />

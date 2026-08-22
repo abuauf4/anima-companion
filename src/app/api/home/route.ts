@@ -8,6 +8,17 @@ const PRODUCT_INCLUDE = {
   problems: { include: { problem: true } },
   petTypes: { include: { petType: true } },
   seller: { select: { id: true, name: true, slug: true, isVerified: true } },
+  // Variants — only active variants, only the price-relevant fields.
+  // The homepage card needs to know if a product has variants (to show
+  // "Mulai Rp..." prefix) but doesn't need the full variant selector
+  // data — that's loaded on the detail page. Keeping this lean avoids
+  // bloating the home bundle (which is cached for 60s and serves all
+  // homepage visitors).
+  variants: {
+    where: { isActive: true },
+    orderBy: { sortOrder: 'asc' },
+    select: { id: true, name: true, price: true, salePrice: true, stock: true, sortOrder: true },
+  },
 } as const
 
 /**

@@ -34,6 +34,12 @@ export async function POST(
         images: { orderBy: { order: 'asc' } },
         petTypes: true,
         problems: true,
+        // Variants — copy ALL variants (active + inactive) so the duplicate
+        // has the same variant structure as the source. The duplicate's
+        // parent `isActive` is forced to false (so it doesn't appear on the
+        // public site until edited), but individual variant `isActive` is
+        // preserved so the admin doesn't have to re-activate every variant.
+        variants: { orderBy: { sortOrder: 'asc' } },
       },
     })
 
@@ -126,6 +132,10 @@ export async function POST(
         isBestSeller: source.isBestSeller,
         isNew: source.isNew,
         isSubscribeEligible: source.isSubscribeEligible,
+        // hasVariants flag is copied so the duplicate is also a variant product
+        // (with its own variant rows below). If source had no variants, this
+        // is false and the `variants: ...` create below is a no-op.
+        hasVariants: source.hasVariants,
 
         // Rating/reviewCount are NOT copied — duplicate starts at default
         // (5.0 / 0) so it doesn't inherit fake social proof. The schema's
@@ -160,12 +170,29 @@ export async function POST(
               create: source.problems.map((pp) => ({ problemId: pp.problemId })),
             }
           : undefined,
+        // Variants — clone each variant row with a NEW id (Prisma auto-generates
+        // cuid). The duplicate's variants start with the same name/price/stock
+        // as the source — admin can edit them in the duplicate without
+        // affecting the source.
+        variants: source.variants.length
+          ? {
+              create: source.variants.map((v) => ({
+                name: v.name,
+                price: v.price,
+                salePrice: v.salePrice,
+                stock: v.stock,
+                isActive: v.isActive,
+                sortOrder: v.sortOrder,
+              })),
+            }
+          : undefined,
       },
       include: {
         category: true,
         images: true,
         petTypes: true,
         problems: true,
+        variants: { orderBy: { sortOrder: 'asc' } },
       },
     })
 

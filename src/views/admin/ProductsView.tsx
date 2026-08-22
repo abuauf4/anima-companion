@@ -24,6 +24,17 @@ import { toast } from 'sonner'
 import { CloudinaryUploader } from '@/components/admin/CloudinaryUploader'
 import { AdminActionMenu, AdminEmptyState, AdminPageHeader, AdminStatusBadge } from '@/components/admin/AdminListPrimitives'
 
+interface AdminProductVariant {
+  id: string
+  productId: string
+  name: string
+  price: number
+  salePrice: number | null
+  stock: number
+  isActive: boolean
+  sortOrder: number
+}
+
 interface AdminProduct {
   id: string
   name: string
@@ -42,9 +53,11 @@ interface AdminProduct {
   isBestSeller: boolean
   isNew: boolean
   isActive: boolean
+  hasVariants: boolean
   categoryId: string
   category: { id: string; name: string; slug: string }
   images: Array<{ id: string; url: string }>
+  variants: AdminProductVariant[]
   _count: { orderItems: number }
 }
 
@@ -238,7 +251,16 @@ export function ProductsView() {
                       <Badge variant="outline">{p.category.name}</Badge>
                     </td>
                     <td className="px-4 py-3">
-                      {p.salePrice ? (
+                      {p.hasVariants ? (
+                        <div>
+                          <p className="font-medium text-primary">
+                            Mulai {formatRupiah(p.salePrice || p.price)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {p.variants?.length || 0} varian
+                          </p>
+                        </div>
+                      ) : p.salePrice ? (
                         <div>
                           <p className="font-medium text-primary">{formatRupiah(p.salePrice)}</p>
                           <p className="text-xs text-muted-foreground line-through">{formatRupiah(p.price)}</p>
@@ -298,8 +320,21 @@ export function ProductsView() {
                   ? [{ label: 'Hapus permanen', destructive: true, onSelect: () => { setPermanentDeleteTarget(p) } }]
                   : []),
               ]} /></div>
-              <div className="mt-2 flex items-center justify-between gap-2"><span className="text-sm font-semibold">{formatRupiah(p.salePrice || p.price)}</span><span className={p.stock <= 5 ? 'text-xs font-semibold text-destructive' : 'text-xs text-muted-foreground'}>Stok {p.stock}</span></div>
-              <div className="mt-2 flex flex-wrap gap-1.5">{p.isActive ? <AdminStatusBadge tone="success">Aktif</AdminStatusBadge> : <AdminStatusBadge>Nonaktif</AdminStatusBadge>}<AdminStatusBadge>{p.category.name}</AdminStatusBadge></div>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold">
+                  {p.hasVariants
+                    ? `Mulai ${formatRupiah(p.salePrice || p.price)}`
+                    : formatRupiah(p.salePrice || p.price)}
+                </span>
+                <span className={p.stock <= 5 ? 'text-xs font-semibold text-destructive' : 'text-xs text-muted-foreground'}>
+                  Stok {p.stock}
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {p.isActive ? <AdminStatusBadge tone="success">Aktif</AdminStatusBadge> : <AdminStatusBadge>Nonaktif</AdminStatusBadge>}
+                <AdminStatusBadge>{p.category.name}</AdminStatusBadge>
+                {p.hasVariants && <AdminStatusBadge tone="info">{p.variants?.length || 0} varian</AdminStatusBadge>}
+              </div>
             </div>
           </div>
         </Card>)}
@@ -377,12 +412,33 @@ function ProductDialog({
   categories: Category[]
   onSaved: () => void
 }) {
+  // Variant editor row shape (Phase: Variants).
+  // `id` is present for existing variants (loaded from DB), absent for
+  // newly-added rows in this editing session. The server uses the id to
+  // decide UPDATE vs CREATE, and to detect removed variants.
+  interface VariantRow {
+    id?: string
+    name: string
+    price: string
+    salePrice: string
+    stock: string
+    isActive: boolean
+  }
+
   const [form, setForm] = useState({
     name: '', sku: '', brand: 'Anima', price: '', salePrice: '', stock: '',
     weight: '', description: '', benefit: '', usage: '', ingredients: '',
     bpomNumber: '', isBestSeller: false, isNew: false, isActive: true,
     categoryId: '', imageUrls: [] as string[],
+    // Variant support (Phase: Variants)
+    hasVariants: false,
   })
+  // Variants are kept in a separate state array (not inside `form`) so we
+  // can mutate rows independently without re-rendering the whole form on
+  // each keystroke. The `hasVariants` flag in `form` controls whether the
+  // variant editor is shown and whether the parent price/stock fields are
+  // editable.
+  const [variantRows, setVariantRows] = useState<VariantRow[]>([])
   const [saving, setSaving] = useState(false)
   const [showManualUrl, setShowManualUrl] = useState(false)
   const [manualUrl, setManualUrl] = useState('')
@@ -407,18 +463,73 @@ function ProductDialog({
         isActive: editing.isActive,
         categoryId: editing.categoryId,
         imageUrls: editing.images?.map((img) => img.url) || [],
+        hasVariants: editing.hasVariants ?? false,
       })
+      // Load existing variants into the editor. Include ALL variants
+      // (active + inactive) so the admin can re-activate deactivated ones.
+      setVariantRows(
+        (editing.variants || []).map((v) => ({
+          id: v.id,
+          name: v.name,
+          price: String(v.price),
+          salePrice: v.salePrice ? String(v.salePrice) : '',
+          stock: String(v.stock),
+          isActive: v.isActive,
+        }))
+      )
     } else {
       setForm({
         name: '', sku: '', brand: 'Anima', price: '', salePrice: '', stock: '',
         weight: '', description: '', benefit: '', usage: '', ingredients: '',
         bpomNumber: '', isBestSeller: false, isNew: false, isActive: true,
         categoryId: categories[0]?.id || '', imageUrls: [],
+        hasVariants: false,
       })
+      setVariantRows([])
     }
     setShowManualUrl(false)
     setManualUrl('')
   }, [editing, open, categories])
+
+  // ---- Variant row mutations ----
+  const addVariantRow = () => {
+    setVariantRows((prev) => [
+      ...prev,
+      // Default values for a new variant row. Admin fills in the rest.
+      { name: '', price: '', salePrice: '', stock: '0', isActive: true },
+    ])
+  }
+  const removeVariantRow = (idx: number) => {
+    setVariantRows((prev) => prev.filter((_, i) => i !== idx))
+  }
+  const updateVariantRow = (idx: number, patch: Partial<VariantRow>) => {
+    setVariantRows((prev) =>
+      prev.map((row, i) => (i === idx ? { ...row, ...patch } : row))
+    )
+  }
+  const moveVariantRow = (idx: number, dir: -1 | 1) => {
+    setVariantRows((prev) => {
+      const newIdx = idx + dir
+      if (newIdx < 0 || newIdx >= prev.length) return prev
+      const next = [...prev]
+      ;[next[idx], next[newIdx]] = [next[newIdx], next[idx]]
+      return next
+    })
+  }
+
+  // ---- Toggle hasVariants ----
+  // When turning ON: if there are no variant rows yet, seed one empty row
+  // so the admin has a starting point. The parent price/stock fields
+  // become read-only (display only) and show the derived values.
+  // When turning OFF: variant rows are kept in state (so turning it back
+  // ON doesn't lose them), but on save the server will soft-delete all
+  // variants (because `hasVariants=false` in the payload).
+  const toggleHasVariants = (next: boolean) => {
+    setForm((prev) => ({ ...prev, hasVariants: next }))
+    if (next && variantRows.length === 0) {
+      setVariantRows([{ name: '', price: '', salePrice: '', stock: '0', isActive: true }])
+    }
+  }
 
   const addImageUrl = (url: string) => {
     if (!url) return
@@ -453,19 +564,63 @@ function ProductDialog({
   }
 
   const handleSave = async () => {
-    if (!form.name || !form.sku || !form.price || !form.categoryId) {
-      toast.error('Nama, SKU, harga, dan kategori wajib diisi')
+    // ---- Variant-aware client-side validation ----
+    // We do a quick sanity check here for better UX (instant feedback),
+    // but the SERVER is the authoritative validator — it re-checks and
+    // returns a 400 with a friendly message if anything is wrong. Never
+    // trust the client.
+    if (!form.name || !form.sku || !form.categoryId) {
+      toast.error('Nama, SKU, dan kategori wajib diisi')
       return
     }
+    if (!form.hasVariants && !form.price) {
+      toast.error('Harga wajib diisi')
+      return
+    }
+    if (form.hasVariants && variantRows.length === 0) {
+      toast.error('Produk varian harus memiliki minimal 1 varian')
+      return
+    }
+
     setSaving(true)
     try {
-      const body = {
-        ...form,
-        price: parseInt(form.price),
-        salePrice: form.salePrice ? parseInt(form.salePrice) : null,
-        stock: parseInt(form.stock) || 0,
+      // Build the request body. When hasVariants=true, we send the variants
+      // array (with id for existing rows) and DO NOT send parent price/stock
+      // — the server derives them. When hasVariants=false, we send parent
+      // price/stock as before (backward compatible).
+      const body: Record<string, unknown> = {
+        name: form.name,
+        sku: form.sku,
+        brand: form.brand,
+        weight: form.weight,
+        description: form.description,
+        benefit: form.benefit,
+        usage: form.usage,
+        ingredients: form.ingredients,
+        bpomNumber: form.bpomNumber,
+        isBestSeller: form.isBestSeller,
+        isNew: form.isNew,
+        isActive: form.isActive,
+        categoryId: form.categoryId,
         images: form.imageUrls.filter(Boolean),
+        hasVariants: form.hasVariants,
       }
+      if (form.hasVariants) {
+        body.variants = variantRows.map((v, i) => ({
+          id: v.id || undefined,
+          name: v.name,
+          price: v.price,
+          salePrice: v.salePrice || null,
+          stock: v.stock,
+          isActive: v.isActive,
+          sortOrder: i,
+        }))
+      } else {
+        body.price = parseInt(form.price)
+        body.salePrice = form.salePrice ? parseInt(form.salePrice) : null
+        body.stock = parseInt(form.stock) || 0
+      }
+
       const url = editing ? `/api/admin/products/${editing.id}` : '/api/admin/products'
       const method = editing ? 'PUT' : 'POST'
       const res = await fetch(url, {
@@ -528,18 +683,63 @@ function ProductDialog({
               <Label>Berat/Isi</Label>
               <Input value={form.weight} onChange={(e) => setForm({ ...form, weight: e.target.value })} placeholder="Mis. 60 tablet" className="mt-1.5" />
             </div>
-            <div>
-              <Label>Harga (Rp) <span className="text-destructive">*</span></Label>
-              <Input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="mt-1.5" />
-            </div>
-            <div>
-              <Label>Harga Sale (opsional)</Label>
-              <Input type="number" value={form.salePrice} onChange={(e) => setForm({ ...form, salePrice: e.target.value })} className="mt-1.5" />
-            </div>
-            <div>
-              <Label>Stok</Label>
-              <Input type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} className="mt-1.5" />
-            </div>
+            {/* ---- Price / stock fields ----
+              When hasVariants=true, these become READ-ONLY displays of the
+              derived parent cache (lowest effective price + sum stock). The
+              admin edits variants in the Variant Editor section below.
+              When hasVariants=false, these are the normal editable fields
+              (backward compatible). */}
+            {!form.hasVariants ? (
+              <>
+                <div>
+                  <Label>Harga (Rp) <span className="text-destructive">*</span></Label>
+                  <Input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="mt-1.5" />
+                </div>
+                <div>
+                  <Label>Harga Sale (opsional)</Label>
+                  <Input type="number" value={form.salePrice} onChange={(e) => setForm({ ...form, salePrice: e.target.value })} className="mt-1.5" />
+                </div>
+                <div>
+                  <Label>Stok</Label>
+                  <Input type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} className="mt-1.5" />
+                </div>
+              </>
+            ) : (
+              <div className="col-span-1 sm:col-span-2">
+                <div className="rounded-md border border-border/70 bg-muted/30 p-3 text-xs text-muted-foreground">
+                  <p className="font-medium text-foreground">Harga & stok produk ini diatur per varian.</p>
+                  <p className="mt-1">
+                    Harga tampil di katalog = harga termurah dari varian aktif. Stok total = jumlah stok semua varian aktif. Kedua nilai dihitung otomatis dari tabel varian di bawah.
+                  </p>
+                  {/* Show the derived values for transparency, but read-only. */}
+                  <div className="mt-2 flex flex-wrap gap-3">
+                    <span>
+                      Harga tampil:{' '}
+                      <strong className="text-foreground">
+                        {(() => {
+                          const active = variantRows.filter((v) => v.isActive && v.price)
+                          if (active.length === 0) return '—'
+                          const effs = active.map((v) => {
+                            const p = parseInt(v.price) || 0
+                            const sp = v.salePrice ? parseInt(v.salePrice) : null
+                            return sp && sp < p ? sp : p
+                          })
+                          return formatRupiah(Math.min(...effs))
+                        })()}
+                      </strong>
+                    </span>
+                    <span>
+                      Stok total:{' '}
+                      <strong className="text-foreground">
+                        {variantRows
+                          .filter((v) => v.isActive)
+                          .reduce((sum, v) => sum + (parseInt(v.stock) || 0), 0)}
+                      </strong>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="border-b border-border/70 pb-2 pt-2">
               <h3 className="text-sm font-semibold">Media & Deskripsi</h3>
@@ -730,6 +930,167 @@ function ProductDialog({
               <Switch checked={form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: v })} />
               Aktif
             </label>
+          </div>
+
+          {/* ============ Variant Editor (Phase: Variants) ============ */}
+          {/*
+            Toggle: "Produk memiliki varian"
+            When ON: render stacked-card variant editor below.
+            When OFF: hidden. Parent price/stock fields above are editable.
+
+            Mobile UX: stacked cards (one card per variant), each card has
+            its own Name / Price / SalePrice / Stock / Active toggle /
+            remove / move-up / move-down buttons. This avoids the cramped
+            horizontal-table UX on small screens.
+          */}
+          <div className="border-t border-border pt-4">
+            <label className="flex min-h-10 items-center gap-3 rounded-lg border border-border/70 px-3 text-sm">
+              <Switch
+                checked={form.hasVariants}
+                onCheckedChange={toggleHasVariants}
+                disabled={saving}
+              />
+              <span>
+                Produk memiliki varian
+                <span className="ml-1 text-xs text-muted-foreground">
+                  (mis. 10 kapsul, 30 kapsul, 60 ml)
+                </span>
+              </span>
+            </label>
+
+            {form.hasVariants && (
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-semibold">Varian Produk</h4>
+                    <p className="text-xs text-muted-foreground">
+                      Setiap varian punya nama, harga, dan stok sendiri. Nama varian harus unik.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addVariantRow}
+                    disabled={saving}
+                    className="gap-1"
+                  >
+                    <Plus className="size-3.5" /> Tambah Varian
+                  </Button>
+                </div>
+
+                {variantRows.length === 0 && (
+                  <div className="rounded-md border border-dashed border-border bg-muted/30 p-4 text-center text-xs text-muted-foreground">
+                    Belum ada varian. Klik "Tambah Varian" untuk membuat varian pertama.
+                  </div>
+                )}
+
+                {variantRows.map((row, idx) => (
+                  <div
+                    key={row.id || `new-${idx}`}
+                    className="rounded-lg border border-border bg-card p-3"
+                  >
+                    {/* Row header: index + active toggle + move/remove */}
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-medium text-muted-foreground">
+                        Varian #{idx + 1}
+                        {row.id && <span className="ml-1 font-mono text-[10px]">({row.id.slice(-6)})</span>}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <Switch
+                            checked={row.isActive}
+                            onCheckedChange={(v) => updateVariantRow(idx, { isActive: v })}
+                            disabled={saving}
+                            className="scale-75"
+                          />
+                          Aktif
+                        </label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          disabled={idx === 0 || saving}
+                          onClick={() => moveVariantRow(idx, -1)}
+                          title="Naik"
+                        >
+                          <ArrowLeft className="size-3 rotate-90" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          disabled={idx === variantRows.length - 1 || saving}
+                          onClick={() => moveVariantRow(idx, 1)}
+                          title="Turun"
+                        >
+                          <ArrowRight className="size-3 rotate-90" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          disabled={saving}
+                          onClick={() => removeVariantRow(idx)}
+                          title="Hapus varian"
+                        >
+                          <Trash2 className="size-3" />
+                        </Button>
+                      </div>
+                    </div>
+                    {/* Fields: stacked on mobile, 2x2 grid on sm+ */}
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                      <div>
+                        <Label className="text-[10px]">Nama Varian <span className="text-destructive">*</span></Label>
+                        <Input
+                          value={row.name}
+                          onChange={(e) => updateVariantRow(idx, { name: e.target.value })}
+                          placeholder="Mis. 30 kapsul"
+                          disabled={saving}
+                          className="mt-1 h-8 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px]">Harga (Rp) <span className="text-destructive">*</span></Label>
+                        <Input
+                          type="number"
+                          value={row.price}
+                          onChange={(e) => updateVariantRow(idx, { price: e.target.value })}
+                          placeholder="85000"
+                          disabled={saving}
+                          className="mt-1 h-8 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px]">Harga Diskon</Label>
+                        <Input
+                          type="number"
+                          value={row.salePrice}
+                          onChange={(e) => updateVariantRow(idx, { salePrice: e.target.value })}
+                          placeholder="opsional"
+                          disabled={saving}
+                          className="mt-1 h-8 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px]">Stok</Label>
+                        <Input
+                          type="number"
+                          value={row.stock}
+                          onChange={(e) => updateVariantRow(idx, { stock: e.target.value })}
+                          placeholder="0"
+                          disabled={saving}
+                          className="mt-1 h-8 text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         </div>

@@ -37,6 +37,9 @@ interface Order {
     price: number
     quantity: number
     subtotal: number
+    // Variant snapshot (Phase: Variants)
+    variantId?: string | null
+    variantName?: string | null
   }>
 }
 
@@ -241,6 +244,11 @@ export function OrdersView() {
                       <div key={item.id} className="flex justify-between text-sm border-b border-border/60 pb-2 last:border-0">
                         <div>
                           <p className="font-medium">{item.productName}</p>
+                          {item.variantName && (
+                            <p className="text-xs text-primary font-medium">
+                              Varian: {item.variantName}
+                            </p>
+                          )}
                           <p className="text-xs text-muted-foreground">
                             {item.quantity} × {formatRupiah(item.price)}
                           </p>

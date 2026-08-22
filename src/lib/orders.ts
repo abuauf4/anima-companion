@@ -66,7 +66,13 @@ import { generateOrderNumber } from '@/lib/format'
 
 export interface CreateOrderInput {
   user: { id: string; email: string; name: string | null; phone: string | null }
-  items: Array<{ productId: string; quantity: number }>
+  // Variant support (Phase: Variants).
+  // `variantId` is optional — null/undefined for non-variant products.
+  // For variant products, the caller MUST supply a variantId; the server
+  // enforces this in `atomicStockDecrement` (throws VARIANT_REQUIRED if
+  // missing on a hasVariants=true product, or VARIANT_NOT_FOUND if the
+  // variantId doesn't match any active variant of the product).
+  items: Array<{ productId: string; quantity: number; variantId?: string | null }>
   customerName: string
   customerPhone: string
   address: string
@@ -114,6 +120,20 @@ export const ORDER_ERRORS = {
     new OrderError(400, 'PRODUCT_INACTIVE', `Produk tidak tersedia: ${productId}`),
   OUT_OF_STOCK: (productId: string) =>
     new OrderError(409, 'OUT_OF_STOCK', `Stok tidak mencukupi untuk produk: ${productId}`),
+  // ----- Variant errors (Phase: Variants) -----
+  // The server is the source of truth for variant identity. The client
+  // sends a `variantId`; the server validates it against the product's
+  // active variants. These errors cover the three failure modes:
+  //   - product has variants but no variantId sent (client bug)
+  //   - variantId doesn't match any variant of this product (client bug
+  //     or stale variant id after admin deactivated/renamed it)
+  //   - variant exists but is inactive (admin deactivated it)
+  VARIANT_REQUIRED: (productId: string) =>
+    new OrderError(400, 'VARIANT_REQUIRED', `Produk ${productId} memiliki varian — pilih varian terlebih dahulu`),
+  VARIANT_NOT_FOUND: (productId: string, variantId: string) =>
+    new OrderError(400, 'VARIANT_NOT_FOUND', `Varian tidak ditemukan: ${variantId} (produk ${productId})`),
+  VARIANT_INACTIVE: (productId: string, variantId: string) =>
+    new OrderError(400, 'VARIANT_INACTIVE', `Varian tidak tersedia: ${variantId} (produk ${productId})`),
   INVALID_TRANSITION: (from: string, to: string) =>
     new OrderError(400, 'INVALID_TRANSITION', `Tidak dapat mengubah status dari ${from} ke ${to}`),
   ORDER_NUMBER_CONFLICT: () =>
@@ -143,27 +163,45 @@ export const ORDER_ERRORS = {
 } as const
 
 // =====================================================
-// Internal: canonical product ordering (deadlock avoidance)
+// Internal: canonical (productId, variantId) ordering (deadlock avoidance)
 // =====================================================
 
 /**
- * Comparator for sorting items by productId.
+ * Composite comparator for sorting items by (productId, variantId).
  *
  * Used to ensure all transactions acquire row locks in the SAME order when
- * decrementing or restocking multiple products. Without this, two concurrent
- * multi-product orders can deadlock:
+ * decrementing or restocking multiple products/variants. Without this, two
+ * concurrent multi-product orders can deadlock:
  *
  *   Order A: lock P1 → wait for P2
  *   Order B: lock P2 → wait for P1
  *   → PostgreSQL aborts one transaction as deadlock victim.
  *
- * By always sorting by productId before the lock loop, every transaction
- * acquires locks in the same canonical order, eliminating AB-BA deadlocks.
- * Data is never corrupted (the deadlock victim rolls back cleanly), but the
- * customer gets a spurious 500 — this fix removes that failure mode.
+ * By always sorting by (productId, variantId) before the lock loop, every
+ * transaction acquires locks in the same canonical order, eliminating
+ * AB-BA deadlocks. Data is never corrupted (the deadlock victim rolls back
+ * cleanly), but the customer gets a spurious 500 — this fix removes that
+ * failure mode.
+ *
+ * variantId is treated as the empty string when null/undefined — this is
+ * safe because real cuids are never empty, so non-variant items sort
+ * before variant items of the same product (deterministic).
  */
-function byProductId<T extends { productId: string }>(a: T, b: T): number {
-  return a.productId < b.productId ? -1 : a.productId > b.productId ? 1 : 0
+function byProductAndVariantId<
+  T extends { productId: string; variantId?: string | null }
+>(a: T, b: T): number {
+  if (a.productId !== b.productId) {
+    return a.productId < b.productId ? -1 : 1
+  }
+  const av = a.variantId || ''
+  const bv = b.variantId || ''
+  return av < bv ? -1 : av > bv ? 1 : 0
+}
+
+// Backward-compat alias — old tests may import `byProductId`. Keep the
+// same signature so existing tests still compile.
+function byProductId<T extends { productId: string; variantId?: string | null }>(a: T, b: T): number {
+  return byProductAndVariantId(a, b)
 }
 
 // =====================================================
@@ -171,24 +209,36 @@ function byProductId<T extends { productId: string }>(a: T, b: T): number {
 // =====================================================
 
 /**
- * Merge items with the same productId by summing their quantities.
- * Returns items in stable insertion order (first occurrence wins).
+ * Merge items with the same (productId, variantId) by summing their
+ * quantities. Returns items in stable insertion order (first occurrence
+ * wins).
  *
- * Example: [{A,2},{B,1},{A,3}] → [{A,5},{B,1}]
+ * Variant-aware (Phase: Variants):
+ *   Two cart items with the same productId but DIFFERENT variantId are
+ *   NOT merged — they represent different variants of the same product
+ *   and must remain separate order lines.
+ *
+ * Example: [{A,null,2},{B,null,1},{A,null,3},{A,"v1",1}]
+ *        → [{A,null,5},{B,null,1},{A,"v1",1}]
  */
 export function aggregateCartItems(
-  items: Array<{ productId: string; quantity: number }>
-): Array<{ productId: string; quantity: number }> {
-  const map = new Map<string, number>()
+  items: Array<{ productId: string; quantity: number; variantId?: string | null }>
+): Array<{ productId: string; quantity: number; variantId: string | null }> {
+  // Normalize variantId: undefined → null (so the Map key is consistent).
+  const normalize = (v: string | null | undefined) => (v ?? null)
+  const map = new Map<string, { productId: string; quantity: number; variantId: string | null }>()
   const order: string[] = []
   for (const item of items) {
-    if (!map.has(item.productId)) {
-      order.push(item.productId)
-      map.set(item.productId, 0)
+    const variantId = normalize(item.variantId)
+    const key = `${item.productId}::${variantId || ''}`
+    if (!map.has(key)) {
+      order.push(key)
+      map.set(key, { productId: item.productId, quantity: 0, variantId })
     }
-    map.set(item.productId, (map.get(item.productId) || 0) + item.quantity)
+    const existing = map.get(key)!
+    existing.quantity += item.quantity
   }
-  return order.map((productId) => ({ productId, quantity: map.get(productId)! }))
+  return order.map((key) => map.get(key)!)
 }
 
 // =====================================================
@@ -197,11 +247,13 @@ export function aggregateCartItems(
 
 /**
  * Validate that every quantity is a positive integer. productId must be a
- * non-empty string.
+ * non-empty string. variantId (if present) must be a non-empty string.
  *
  * Throws OrderError(400, 'INVALID_QUANTITY', ...) on first violation.
  */
-function validateQuantities(items: Array<{ productId: string; quantity: number }>) {
+function validateQuantities(
+  items: Array<{ productId: string; quantity: number; variantId?: string | null }>
+) {
   for (const item of items) {
     if (
       !item.productId ||
@@ -210,6 +262,11 @@ function validateQuantities(items: Array<{ productId: string; quantity: number }
       item.quantity <= 0
     ) {
       throw ORDER_ERRORS.INVALID_QUANTITY(item.productId || '(unknown)')
+    }
+    // variantId, if present, must be a non-empty string. (null/undefined
+    // is fine — that means non-variant product.)
+    if (item.variantId !== null && item.variantId !== undefined && item.variantId === '') {
+      throw ORDER_ERRORS.INVALID_QUANTITY(item.productId)
     }
   }
 }
@@ -247,29 +304,53 @@ interface ResolvedProduct {
   salePrice: number | null
   stock: number
   isActive: boolean
+  // Variant fields (Phase: Variants).
+  // For non-variant products: `hasVariants=false`, `variantId=null`,
+  // `variantName=null`. The price/stock above are the authoritative
+  // Product-level values (same as before variants existed).
+  // For variant products: `hasVariants=true`, `variantId=<the chosen
+  // variant's id>`, `variantName=<its name>`. The price/stock above are
+  // the VARIANT's authoritative values, NOT the parent Product's cache.
+  hasVariants: boolean
+  variantId: string | null
+  variantName: string | null
 }
 
 /**
- * Atomically check + decrement stock for ONE product inside a transaction.
+ * Atomically check + decrement stock for ONE product (or ONE variant of a
+ * variant product) inside a transaction.
  *
- * Uses `updateMany` with a WHERE clause that requires both `isActive = true`
- * AND `stock >= requestedQuantity`. The decrement happens in the same SQL
- * UPDATE statement, so it's atomic at the row level — two concurrent
- * transactions cannot both pass the check.
+ * Variant-aware (Phase: Variants):
+ *   - If the product has `hasVariants=true`, the caller MUST supply a
+ *     `variantId`. We fetch the variant by (productId, variantId) and
+ *     decrement `ProductVariant.stock` (not `Product.stock`). The variant
+ *     must be active. The returned `ResolvedProduct` carries the variant's
+ *     price/salePrice/stock/name.
+ *   - If the product has `hasVariants=false`, behavior is unchanged —
+ *     we decrement `Product.stock` and return Product-level price/stock.
  *
- * Returns the authoritative product snapshot (post-decrement stock is NOT
- * read back; we use pre-decrement values for the OrderItem record).
+ * In BOTH cases, the decrement uses `updateMany` with a WHERE clause that
+ * requires `isActive = true AND stock >= requestedQuantity`. The decrement
+ * happens in the same SQL UPDATE statement, so it's atomic at the row level
+ * — two concurrent transactions cannot both pass the check.
  *
- * Throws OUT_OF_STOCK if the update affected 0 rows (product missing,
- * inactive, or insufficient stock).
+ * Throws:
+ *   - PRODUCT_NOT_FOUND     — product missing
+ *   - PRODUCT_INACTIVE      — product.isActive=false
+ *   - VARIANT_REQUIRED      — product has variants but no variantId supplied
+ *   - VARIANT_NOT_FOUND     — variantId doesn't match any variant of this
+ *                             product (or product has no variants at all)
+ *   - VARIANT_INACTIVE      — variant exists but isActive=false
+ *   - OUT_OF_STOCK          — atomic update affected 0 rows
  */
 async function atomicStockDecrement(
   tx: Prisma.TransactionClient,
   productId: string,
-  quantity: number
+  quantity: number,
+  variantId: string | null | undefined
 ): Promise<ResolvedProduct> {
-  // First, fetch authoritative product data for the OrderItem snapshot.
-  // We do NOT trust client-supplied name/sku/price.
+  // First, fetch authoritative product data. We need `hasVariants` to know
+  // whether to decrement Product.stock or ProductVariant.stock.
   const product = await tx.product.findUnique({
     where: { id: productId },
     select: {
@@ -280,6 +361,7 @@ async function atomicStockDecrement(
       salePrice: true,
       stock: true,
       isActive: true,
+      hasVariants: true,
     },
   })
 
@@ -290,11 +372,62 @@ async function atomicStockDecrement(
     throw ORDER_ERRORS.PRODUCT_INACTIVE(productId)
   }
 
-  // Atomic conditional decrement. This is the concurrency-critical statement.
-  // Equivalent SQL:
-  //   UPDATE "Product"
-  //   SET stock = stock - $1
-  //   WHERE id = $2 AND "isActive" = true AND stock >= $1
+  // ---- Variant branch ----
+  if (product.hasVariants) {
+    if (!variantId) {
+      throw ORDER_ERRORS.VARIANT_REQUIRED(productId)
+    }
+    const variant = await tx.productVariant.findUnique({
+      where: { id: variantId },
+      select: { id: true, productId: true, name: true, price: true, salePrice: true, stock: true, isActive: true },
+    })
+    if (!variant || variant.productId !== productId) {
+      throw ORDER_ERRORS.VARIANT_NOT_FOUND(productId, variantId)
+    }
+    if (!variant.isActive) {
+      throw ORDER_ERRORS.VARIANT_INACTIVE(productId, variantId)
+    }
+
+    // Atomic conditional decrement on the VARIANT row.
+    // Equivalent SQL:
+    //   UPDATE "ProductVariant"
+    //   SET stock = stock - $1
+    //   WHERE id = $2 AND "isActive" = true AND stock >= $1
+    const result = await tx.productVariant.updateMany({
+      where: {
+        id: variantId,
+        isActive: true,
+        stock: { gte: quantity },
+      },
+      data: {
+        stock: { decrement: quantity },
+      },
+    })
+
+    if (result.count !== 1) {
+      // Either variant stock was insufficient, or variant was deactivated
+      // between our findUnique and our updateMany. Either way, the order
+      // cannot proceed.
+      throw ORDER_ERRORS.OUT_OF_STOCK(productId)
+    }
+
+    return {
+      id: product.id,
+      name: product.name,
+      sku: product.sku,
+      // Use the VARIANT's price/salePrice, NOT the parent product cache.
+      price: variant.price,
+      salePrice: variant.salePrice,
+      stock: variant.stock, // pre-decrement stock, for snapshot
+      isActive: product.isActive,
+      hasVariants: true,
+      variantId: variant.id,
+      variantName: variant.name,
+    }
+  }
+
+  // ---- Non-variant branch (unchanged behavior) ----
+  // Atomic conditional decrement on the Product row.
   const result = await tx.product.updateMany({
     where: {
       id: productId,
@@ -312,7 +445,12 @@ async function atomicStockDecrement(
     throw ORDER_ERRORS.OUT_OF_STOCK(productId)
   }
 
-  return product
+  return {
+    ...product,
+    hasVariants: false,
+    variantId: null,
+    variantName: null,
+  }
 }
 
 // =====================================================
@@ -409,21 +547,37 @@ interface OrderItemRecord {
   price: number
   quantity: number
   subtotal: number
+  // Variant snapshot (Phase: Variants).
+  // variantId is the FK to ProductVariant (will be set to NULL by the DB
+  // if the variant is later deleted, preserving the OrderItem row).
+  // variantName is a denormalized snapshot — historical orders remain
+  // readable even if the variant is renamed or deleted later.
+  variantId: string | null
+  variantName: string | null
 }
 
 /**
  * Compute authoritative per-item price and subtotal from the resolved product
  * snapshot. The price used is salePrice if set and less than the regular price,
  * otherwise the regular price — matching `effectivePrice()` in lib/format.ts.
+ *
+ * Variant-aware: for variant products, the resolved product already carries
+ * the variant's price/salePrice (not the parent cache), so the same
+ * effective-price logic applies uniformly. The variantId + variantName
+ * snapshot is passed through to the OrderItem record.
  */
 function buildOrderItemRecords(
   resolved: ResolvedProduct[],
+  // Quantities keyed by `${productId}::${variantId||''}` — matches the
+  // composite key used in `aggregateCartItems`. This lets us look up the
+  // quantity for each resolved (product, variant) pair.
   quantities: Map<string, number>
 ): { items: OrderItemRecord[]; subtotal: number } {
   const orderItems: OrderItemRecord[] = []
   let subtotal = 0
   for (const product of resolved) {
-    const quantity = quantities.get(product.id)!
+    const key = `${product.id}::${product.variantId || ''}`
+    const quantity = quantities.get(key)!
     const price =
       product.salePrice && product.salePrice < product.price
         ? product.salePrice
@@ -437,6 +591,8 @@ function buildOrderItemRecords(
       price,
       quantity,
       subtotal: lineSubtotal,
+      variantId: product.variantId,
+      variantName: product.variantName,
     })
   }
   return { items: orderItems, subtotal }
@@ -512,26 +668,38 @@ export async function createOrder(input: CreateOrderInput): Promise<any> {
   }
 
   // ----- 2. Aggregate + validate quantities -----
-  // Aggregate duplicates first, then sort by productId so the per-product
-  // stock-decrement loop below acquires row locks in canonical order. This
-  // eliminates AB-BA deadlocks between two concurrent multi-product checkouts.
-  const aggregated = aggregateCartItems(input.items).sort(byProductId)
+  // Aggregate duplicates first (now keyed by productId+variantId), then sort
+  // by (productId, variantId) so the per-product/variant stock-decrement loop
+  // below acquires row locks in canonical order. This eliminates AB-BA
+  // deadlocks between two concurrent multi-product checkouts.
+  const aggregated = aggregateCartItems(input.items).sort(byProductAndVariantId)
   validateQuantities(aggregated)
 
-  const quantities = new Map(aggregated.map((i) => [i.productId, i.quantity]))
+  // Quantities map keyed by `${productId}::${variantId||''}` — matches the
+  // composite key used in `buildOrderItemRecords`.
+  const quantities = new Map(
+    aggregated.map((i) => [`${i.productId}::${i.variantId || ''}`, i.quantity])
+  )
+
+  // Track which products are variant products so we can recompute their
+  // parent cache after the transaction commits.
+  const variantProductIds = new Set<string>()
 
   // ----- 3. Transaction with retry on order-number conflict -----
   let lastError: unknown
   for (let attempt = 0; attempt < MAX_ORDER_NUMBER_RETRIES; attempt++) {
     try {
-      return await db.$transaction(async (tx) => {
-        // 3a. Atomic stock check + decrement for each product.
-        //     Collect authoritative product snapshots in parallel.
+      const order = await db.$transaction(async (tx) => {
+        // 3a. Atomic stock check + decrement for each product/variant.
+        //     Collect authoritative product snapshots in deterministic order.
         const resolved: ResolvedProduct[] = []
-        for (const { productId, quantity } of aggregated) {
+        for (const { productId, quantity, variantId } of aggregated) {
           // Sequential — preserves deterministic error ordering on failure.
-          const product = await atomicStockDecrement(tx, productId, quantity)
+          const product = await atomicStockDecrement(tx, productId, quantity, variantId)
           resolved.push(product)
+          if (product.hasVariants) {
+            variantProductIds.add(productId)
+          }
         }
 
         // 3b. Compute subtotal from authoritative prices.
@@ -573,8 +741,55 @@ export async function createOrder(input: CreateOrderInput): Promise<any> {
           include: { items: true },
         })
 
+        // 3f. Recompute parent Product cache for variant products.
+        // The variant stock was decremented above; the parent Product.stock
+        // cache must be updated to reflect the new sum. We do this INSIDE
+        // the transaction so the cache update is atomic with the stock
+        // decrement — no window where the cache is stale.
+        //
+        // We do this for EVERY variant product touched by this order, even
+        // if only one variant's stock changed. The derivation is cheap
+        // (single query per product) and keeps the cache consistent.
+        for (const productId of variantProductIds) {
+          const variants = await tx.productVariant.findMany({
+            where: { productId },
+            select: { price: true, salePrice: true, stock: true, isActive: true, sortOrder: true },
+          })
+          // Derive inline — same logic as `deriveParentCacheFromVariants`
+          // but we don't import it here to keep orders.ts self-contained
+          // (it already has enough imports). The logic is identical.
+          const active = variants.filter((v) => v.isActive)
+          if (active.length === 0) {
+            await tx.product.update({
+              where: { id: productId },
+              data: { price: 0, salePrice: null, stock: 0 },
+            })
+            continue
+          }
+          const stock = active.reduce((s, v) => s + (v.stock || 0), 0)
+          const sorted = [...active].sort((a, b) => {
+            const pa = a.salePrice && a.salePrice < a.price ? a.salePrice : a.price
+            const pb = b.salePrice && b.salePrice < b.price ? b.salePrice : b.price
+            if (pa !== pb) return pa - pb
+            return a.sortOrder - b.sortOrder
+          })
+          const winner = sorted[0]
+          const winnerEffective = winner.salePrice && winner.salePrice < winner.price
+            ? winner.salePrice
+            : winner.price
+          const salePrice = winner.salePrice && winner.salePrice < winner.price
+            ? winner.salePrice
+            : null
+          await tx.product.update({
+            where: { id: productId },
+            data: { price: winnerEffective, salePrice, stock },
+          })
+        }
+
         return order
       })
+
+      return order
     } catch (e: any) {
       lastError = e
       // Prisma unique-constraint violation on orderNumber → retry whole tx
@@ -586,7 +801,7 @@ export async function createOrder(input: CreateOrderInput): Promise<any> {
         continue
       }
       // Any other error (including our OrderError throws for out-of-stock,
-      // inactive product, etc.) propagates immediately.
+      // inactive product, variant errors, etc.) propagates immediately.
       throw e
     }
   }
@@ -670,15 +885,76 @@ export async function cancelOrderAndRestoreStock(orderId: string): Promise<{
       return { order, alreadyCancelled: true }
     }
 
-    // 4. Won the claim. Restore stock for each item, in canonical productId
-    //    order to avoid deadlocks with concurrent multi-product checkouts.
-    //    We use updateMany (not update) so a deleted product doesn't fail the
-    //    whole cancellation — that product simply doesn't get restocked.
-    const itemsToRestore = [...order.items].sort(byProductId)
+    // 4. Won the claim. Restore stock for each item, in canonical
+    //    (productId, variantId) order to avoid deadlocks with concurrent
+    //    multi-product checkouts. We use updateMany (not update) so a
+    //    deleted product/variant doesn't fail the whole cancellation —
+    //    that product/variant simply doesn't get restocked.
+    //
+    //    Variant-aware (Phase: Variants):
+    //    If the OrderItem has a non-null `variantId`, we restore stock on
+    //    the ProductVariant row. Otherwise (non-variant product, or variant
+    //    was deleted and variantId was set to null by SetNull), we restore
+    //    on the Product row. The `variantId` snapshot column tells us which
+    //    branch to take.
+    //
+    //    After restocking variant stock, we recompute the parent Product
+    //    cache for any variant product whose stock changed. This keeps the
+    //    parent cache in sync after cancellation.
+    const itemsToRestore = [...order.items].sort(byProductAndVariantId)
+    const variantProductsToRecompute = new Set<string>()
     for (const item of itemsToRestore) {
-      await tx.product.updateMany({
-        where: { id: item.productId },
-        data: { stock: { increment: item.quantity } },
+      if (item.variantId) {
+        // Variant stock restore
+        await tx.productVariant.updateMany({
+          where: { id: item.variantId },
+          data: { stock: { increment: item.quantity } },
+        })
+        // We need the productId to recompute the parent cache. The OrderItem
+        // has it directly.
+        variantProductsToRecompute.add(item.productId)
+      } else {
+        // Non-variant product stock restore (or variant was deleted —
+        // restore on the Product row as a fallback that won't fail).
+        await tx.product.updateMany({
+          where: { id: item.productId },
+          data: { stock: { increment: item.quantity } },
+        })
+      }
+    }
+
+    // Recompute parent cache for variant products whose variant stock changed.
+    // Same inline derivation as in createOrder.
+    for (const productId of variantProductsToRecompute) {
+      const variants = await tx.productVariant.findMany({
+        where: { productId },
+        select: { price: true, salePrice: true, stock: true, isActive: true, sortOrder: true },
+      })
+      const active = variants.filter((v) => v.isActive)
+      if (active.length === 0) {
+        await tx.product.update({
+          where: { id: productId },
+          data: { price: 0, salePrice: null, stock: 0 },
+        })
+        continue
+      }
+      const stock = active.reduce((s, v) => s + (v.stock || 0), 0)
+      const sorted = [...active].sort((a, b) => {
+        const pa = a.salePrice && a.salePrice < a.price ? a.salePrice : a.price
+        const pb = b.salePrice && b.salePrice < b.price ? b.salePrice : b.price
+        if (pa !== pb) return pa - pb
+        return a.sortOrder - b.sortOrder
+      })
+      const winner = sorted[0]
+      const winnerEffective = winner.salePrice && winner.salePrice < winner.price
+        ? winner.salePrice
+        : winner.price
+      const salePrice = winner.salePrice && winner.salePrice < winner.price
+        ? winner.salePrice
+        : null
+      await tx.product.update({
+        where: { id: productId },
+        data: { price: winnerEffective, salePrice, stock },
       })
     }
 
@@ -799,5 +1075,6 @@ export const __test__ = {
   cancelOrderAndRestoreStock,
   updateOrderStatus,
   byProductId,
+  byProductAndVariantId,
   MAX_ORDER_NUMBER_RETRIES,
 }

@@ -30,6 +30,11 @@ interface Order {
     price: number
     quantity: number
     subtotal: number
+    // Variant snapshot (Phase: Variants) — preserved at order time so
+    // historical orders remain readable even if the variant is later
+    // renamed or deleted.
+    variantId?: string | null
+    variantName?: string | null
   }>
 }
 
@@ -123,6 +128,12 @@ export function OrderHistoryView() {
                           <div key={item.id} className="flex justify-between text-sm">
                             <div>
                               <p className="font-medium">{item.productName}</p>
+                              {/* Variant name snapshot (Phase: Variants) */}
+                              {item.variantName && (
+                                <p className="text-xs text-primary font-medium">
+                                  Varian: {item.variantName}
+                                </p>
+                              )}
                               <p className="text-xs text-muted-foreground">
                                 {item.quantity} × {formatRupiah(item.price)}
                               </p>

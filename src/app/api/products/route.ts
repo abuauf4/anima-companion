@@ -34,6 +34,13 @@ export async function GET(req: NextRequest) {
           orderBy: { createdAt: 'desc' },
           take: 20,
         },
+        // Variants — public detail endpoint returns ACTIVE variants only
+        // (so the variant selector doesn't show deactivated ones). Ordered
+        // by `sortOrder` for deterministic display.
+        variants: {
+          where: { isActive: true },
+          orderBy: { sortOrder: 'asc' },
+        },
       },
     })
     if (!product) {
@@ -141,6 +148,19 @@ export async function GET(req: NextRequest) {
         problems: { include: { problem: true } },
         petTypes: { include: { petType: true } },
         seller: { select: { id: true, name: true, slug: true, isVerified: true } },
+        // Variants — list endpoint returns ONLY active variants (so the
+        // "Mulai Rp..." price on product cards reflects only currently
+        // purchasable variants). The parent Product.price/salePrice/stock
+        // are already a derived cache, so the card can use those without
+        // inspecting variants — but we include the count + lowest variant
+        // for the UI to render the "Mulai" prefix.
+        variants: {
+          where: { isActive: true },
+          orderBy: { sortOrder: 'asc' },
+          // Only need the price-relevant fields for the card display —
+          // the detail endpoint returns full variant data for the selector.
+          select: { id: true, name: true, price: true, salePrice: true, stock: true, sortOrder: true },
+        },
       },
     }),
   ])

@@ -32,6 +32,10 @@ export function ProductDetailView({ slug }: { slug: string }) {
   const [quantity, setQuantity] = useState(1)
   const [activeImage, setActiveImage] = useState(0)
   const [added, setAdded] = useState(false)
+  // Variant selection state (Phase: Variants).
+  // `selectedVariantId` is null when no variant is chosen yet. For non-variant
+  // products it stays null and the variant UI is not rendered.
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null)
 
   // Derive productId BEFORE useWishlistStore — avoids TDZ error
   // (selector runs immediately via useSyncExternalStore, so it can't
@@ -52,6 +56,12 @@ export function ProductDetailView({ slug }: { slug: string }) {
         setData(d)
         setActiveImage(0)
         setQuantity(1)
+        // Reset variant selection on each product load. For variant products,
+        // we DO NOT auto-select the first variant — the customer must
+        // explicitly pick one (per task brief: "Require a variant selection
+        // before Add to Cart"). This forces the customer to make a conscious
+        // choice, reducing wrong-variant orders.
+        setSelectedVariantId(null)
       })
       .catch(() => setData(null))
       .finally(() => setLoading(false))
@@ -86,12 +96,46 @@ export function ProductDetailView({ slug }: { slug: string }) {
   }
 
   const { product, related } = data
-  const price = effectivePrice(product.price, product.salePrice)
-  const discount = discountPercent(product.price, product.salePrice)
+  // Variant-aware display price / stock.
+  // For variant products: if a variant is selected, show the variant's
+  // price + stock. If no variant is selected yet, show the parent cache
+  // (lowest effective price + total stock) with a "Mulai" hint — but the
+  // Add to Cart button is disabled until a variant is picked.
+  // For non-variant products: show product.price / product.salePrice /
+  // product.stock as before.
+  const hasVariants = product.hasVariants === true
+  const variants = product.variants || []
+  const selectedVariant = hasVariants && selectedVariantId
+    ? variants.find((v) => v.id === selectedVariantId) || null
+    : null
+
+  // Effective display price + stock + discount
+  const displayPrice = selectedVariant
+    ? effectivePrice(selectedVariant.price, selectedVariant.salePrice)
+    : effectivePrice(product.price, product.salePrice)
+  const displayRegularPrice = selectedVariant
+    ? selectedVariant.price
+    : product.price
+  const displaySalePrice = selectedVariant
+    ? selectedVariant.salePrice
+    : product.salePrice
+  const discount = discountPercent(displayRegularPrice, displaySalePrice)
+  const displayStock = selectedVariant
+    ? selectedVariant.stock
+    : product.stock
+
   const images = product.images || []
 
   const handleAddToCart = () => {
-    if (product.stock <= 0) {
+    // For variant products, REQUIRE a variant selection before add-to-cart.
+    // The button is also disabled in the UI, but this is the authoritative
+    // server-side guard in case the button is somehow clicked (e.g. via
+    // keyboard navigation while focused).
+    if (hasVariants && !selectedVariant) {
+      toast.error('Pilih varian terlebih dahulu')
+      return
+    }
+    if (displayStock <= 0) {
       toast.error('Produk sedang habis')
       return
     }
@@ -100,12 +144,20 @@ export function ProductDetailView({ slug }: { slug: string }) {
       slug: product.slug,
       name: product.name,
       brand: product.brand,
-      price: product.price,
-      salePrice: product.salePrice,
+      // For variant products, store the VARIANT's price/salePrice (not the
+      // parent cache) so the cart shows the correct line price. The cart
+      // store carries `variantId` + `variantName` so checkout can pass them
+      // to the server, which re-validates server-side.
+      price: selectedVariant ? selectedVariant.price : product.price,
+      salePrice: selectedVariant ? selectedVariant.salePrice : product.salePrice,
       image: images[0]?.url || '',
       weight: product.weight,
+      variantId: selectedVariant?.id || null,
+      variantName: selectedVariant?.name || null,
     }, quantity)
-    toast.success(`${product.name} (${quantity}x) ditambahkan ke keranjang`)
+    toast.success(
+      `${product.name}${selectedVariant ? ` (${selectedVariant.name})` : ''} (${quantity}x) ditambahkan ke keranjang`
+    )
     setAdded(true)
     setTimeout(() => setAdded(false), 1500)
   }
@@ -138,7 +190,7 @@ export function ProductDetailView({ slug }: { slug: string }) {
     if (!data?.product) return
     const product = data.product
     const shareUrl = `${window.location.origin}/produk/${product.slug}`
-    const shareText = `${product.name} — ${formatRupiah(product.price)} di Anima Companion`
+    const shareText = `${product.name}${selectedVariant ? ` (${selectedVariant.name})` : ''} — ${formatRupiah(displayPrice)} di Anima Companion`
 
     // Try Web Share API first (mobile + desktop browsers that support it)
     if (navigator.share) {
@@ -356,23 +408,70 @@ export function ProductDetailView({ slug }: { slug: string }) {
             </div>
           )}
 
-          {/* Price card */}
+          {/* Price card — variant-aware */}
           <div className="rounded-xl md:rounded-2xl border border-border bg-accent/40 p-4 md:p-5">
-            {product.salePrice ? (
+            {hasVariants && !selectedVariant && (
+              <p className="mb-1 text-[11px] md:text-xs font-medium text-muted-foreground">
+                Mulai dari
+              </p>
+            )}
+            {displaySalePrice ? (
               <div className="flex flex-wrap items-end gap-2 md:gap-3">
-                <span className="text-2xl font-bold text-primary md:text-4xl">{formatRupiah(product.salePrice)}</span>
-                <span className="mb-1.5 text-sm md:text-base text-muted-foreground line-through">{formatRupiah(product.price)}</span>
+                <span className="text-2xl font-bold text-primary md:text-4xl">{formatRupiah(displaySalePrice)}</span>
+                <span className="mb-1.5 text-sm md:text-base text-muted-foreground line-through">{formatRupiah(displayRegularPrice)}</span>
                 <Badge className="mb-1.5 md:mb-2 bg-destructive text-destructive-foreground text-[10px] md:text-xs">Hemat {discount}%</Badge>
               </div>
             ) : (
-              <span className="text-2xl font-bold text-foreground md:text-4xl">{formatRupiah(product.price)}</span>
+              <span className="text-2xl font-bold text-foreground md:text-4xl">{formatRupiah(displayPrice)}</span>
             )}
             {product.weight && (
               <p className="mt-1.5 md:mt-2 text-[11px] md:text-xs text-muted-foreground">Berat bersih: {product.weight}</p>
             )}
           </div>
 
-          {/* Pet types + stock */}
+          {/* Variant selector (Phase: Variants) */}
+          {hasVariants && (
+            <div className="rounded-xl md:rounded-2xl border border-border bg-card p-4 md:p-5">
+              <p className="mb-2 md:mb-3 text-[10px] md:text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Pilih Varian <span className="text-destructive">*</span>
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {variants.map((v) => {
+                  const isSelected = v.id === selectedVariantId
+                  const isOutOfStock = v.stock <= 0
+                  return (
+                    <button
+                      key={v.id}
+                      onClick={() => setSelectedVariantId(v.id)}
+                      disabled={isOutOfStock}
+                      className={
+                        'relative rounded-lg border px-3 py-2 text-left transition-all ' +
+                        (isSelected
+                          ? 'border-primary bg-primary/5 ring-1 ring-primary '
+                          : 'border-border bg-background hover:border-primary/50 ') +
+                        (isOutOfStock ? 'opacity-50 cursor-not-allowed ' : 'cursor-pointer')
+                      }
+                    >
+                      <span className="block text-xs font-semibold text-foreground">{v.name}</span>
+                      <span className="block text-[10px] text-muted-foreground">
+                        {formatRupiah(v.salePrice && v.salePrice < v.price ? v.salePrice : v.price)}
+                      </span>
+                      {isOutOfStock && (
+                        <span className="block text-[9px] text-destructive font-medium">Habis</span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+              {!selectedVariant && (
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  Pilih varian untuk melihat harga dan stok spesifik.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Pet types + stock — variant-aware */}
           <div className="grid gap-3 md:gap-4 sm:grid-cols-2">
             {product.petTypes && product.petTypes.length > 0 && (
               <div>
@@ -388,19 +487,21 @@ export function ProductDetailView({ slug }: { slug: string }) {
             )}
             <div>
               <p className="mb-1.5 md:mb-2 text-[10px] md:text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ketersediaan</p>
-              {product.stock > 0 ? (
+              {displayStock > 0 ? (
                 <span className="inline-flex items-center gap-1.5 rounded-md bg-success/10 px-2 py-0.5 md:px-2.5 md:py-1 text-xs md:text-sm font-medium text-success">
-                  <Check className="h-3.5 w-3.5 md:h-4 md:w-4" /> Stok {product.stock} unit
+                  <Check className="h-3.5 w-3.5 md:h-4 md:w-4" /> Stok {displayStock} unit
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 rounded-md bg-destructive/10 px-2 py-0.5 md:px-2.5 md:py-1 text-xs md:text-sm font-medium text-destructive">
-                  Stok Habis
+                  {hasVariants && !selectedVariant ? 'Pilih varian' : 'Stok Habis'}
                 </span>
               )}
             </div>
           </div>
 
-          {/* Quantity + Add to cart — desktop: 1 row (qty + 2 buttons), mobile: stack */}
+          {/* Quantity + Add to cart — desktop: 1 row (qty + 2 buttons), mobile: stack.
+              For variant products: Add to Cart disabled until a variant is picked.
+              Quantity max = selected variant's stock (or product stock for non-variant). */}
           <div className="hidden gap-3 sm:flex-row sm:items-stretch md:flex">
             <div className="flex items-center justify-between rounded-xl border border-border-strong bg-card sm:justify-start">
               <Button
@@ -418,13 +519,13 @@ export function ProductDetailView({ slug }: { slug: string }) {
                 onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
                 className="h-12 w-14 border-0 text-center text-base font-semibold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                 min={1}
-                max={product.stock}
+                max={displayStock}
               />
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
-                disabled={quantity >= product.stock}
+                onClick={() => setQuantity(Math.min(displayStock, quantity + 1))}
+                disabled={quantity >= displayStock}
                 className="h-12 w-12 rounded-l-none"
               >
                 <Plus className="h-4 w-4" />
@@ -433,18 +534,18 @@ export function ProductDetailView({ slug }: { slug: string }) {
 
             <Button
               onClick={handleAddToCart}
-              disabled={product.stock <= 0}
+              disabled={displayStock <= 0 || (hasVariants && !selectedVariant)}
               size="lg"
               variant="outline"
               className="h-12 flex-1 gap-2 border-border-strong"
             >
               {added ? <Check className="h-4 w-4" /> : <ShoppingCart className="h-4 w-4" />}
-              {added ? 'Ditambahkan' : 'Tambah ke Keranjang'}
+              {added ? 'Ditambahkan' : hasVariants && !selectedVariant ? 'Pilih varian' : 'Tambah ke Keranjang'}
             </Button>
 
             <Button
               onClick={handleBuyNow}
-              disabled={product.stock <= 0}
+              disabled={displayStock <= 0 || (hasVariants && !selectedVariant)}
               size="lg"
               className="h-12 flex-1 gap-2 shadow-glow"
             >
@@ -453,7 +554,8 @@ export function ProductDetailView({ slug }: { slug: string }) {
           </div>
 
           {/* Mobile-only: qty selector full-width + Tambah Keranjang full-width button.
-              Beli Sekarang is in mobile sticky bottom bar. */}
+              Beli Sekarang is in mobile sticky bottom bar.
+              For variant products: Add to Cart disabled until a variant is picked. */}
           <div className="space-y-2 md:hidden">
             {/* Quantity selector — full width */}
             <div className="flex items-center justify-between rounded-xl border border-border-strong bg-card">
@@ -474,13 +576,13 @@ export function ProductDetailView({ slug }: { slug: string }) {
                   onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
                   className="h-11 w-14 border-0 text-center text-base font-semibold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                   min={1}
-                  max={product.stock}
+                  max={displayStock}
                 />
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
-                  disabled={quantity >= product.stock}
+                  onClick={() => setQuantity(Math.min(displayStock, quantity + 1))}
+                  disabled={quantity >= displayStock}
                   className="h-11 w-11 rounded-l-none"
                 >
                   <Plus className="h-4 w-4" />
@@ -490,18 +592,18 @@ export function ProductDetailView({ slug }: { slug: string }) {
             {/* Tambah Keranjang — full width */}
             <Button
               onClick={handleAddToCart}
-              disabled={product.stock <= 0}
+              disabled={displayStock <= 0 || (hasVariants && !selectedVariant)}
               variant="outline"
               className="h-11 w-full gap-2 border-border-strong text-sm"
             >
               {added ? <Check className="h-4 w-4" /> : <ShoppingCart className="h-4 w-4" />}
-              {added ? 'Ditambahkan ke Keranjang' : 'Tambah ke Keranjang'}
+              {added ? 'Ditambahkan ke Keranjang' : hasVariants && !selectedVariant ? 'Pilih varian dulu' : 'Tambah ke Keranjang'}
             </Button>
           </div>
 
           {/* Ask via WhatsApp */}
           <a
-            href={whatsappAdminUrl(`Halo Anima Companion! Saya ingin bertanya tentang produk ${product.name} (${formatRupiah(price)}) 🐾`)}
+            href={whatsappAdminUrl(`Halo Anima Companion! Saya ingin bertanya tentang produk ${product.name}${selectedVariant ? ` (${selectedVariant.name})` : ''} (${formatRupiah(displayPrice)}) 🐾`)}
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -593,13 +695,19 @@ export function ProductDetailView({ slug }: { slug: string }) {
         </div>
       )}
 
-      {/* Mobile sticky CTA bar */}
-      {product.stock > 0 && (
+      {/* Mobile sticky CTA bar
+          For variant products: only shown after a variant is selected (so
+          the displayed price is meaningful). Disabled-state buttons inside
+          would be confusing in the sticky bar — instead we just hide it
+          until a variant is picked. */}
+      {(hasVariants ? selectedVariant && displayStock > 0 : product.stock > 0) && (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 p-3 backdrop-blur md:hidden">
           <div className="container-page flex items-center gap-3">
             <div className="flex flex-col">
-              <span className="text-[10px] text-muted-foreground">Total</span>
-              <span className="text-base font-bold text-primary">{formatRupiah(price * quantity)}</span>
+              <span className="text-[10px] text-muted-foreground">
+                {selectedVariant ? selectedVariant.name : 'Total'}
+              </span>
+              <span className="text-base font-bold text-primary">{formatRupiah(displayPrice * quantity)}</span>
             </div>
             <Button
               onClick={handleAddToCart}

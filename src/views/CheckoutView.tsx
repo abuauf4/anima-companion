@@ -100,6 +100,12 @@ export function CheckoutView() {
           items: items.map((i) => ({
             productId: i.productId,
             quantity: i.quantity,
+            // Pass variantId (Phase: Variants). For non-variant products,
+            // this is null/undefined — the server treats it as a non-variant
+            // line item. For variant products, the server validates that
+            // the variant exists, is active, and belongs to this product,
+            // then decrements the variant's stock atomically.
+            variantId: i.variantId || undefined,
           })),
           customerName: form.customerName,
           customerPhone: form.customerPhone,
@@ -139,7 +145,7 @@ export function CheckoutView() {
         address: form.address,
         notes: form.notes,
         items: items.map((i) => ({
-          name: i.name,
+          name: i.name + (i.variantName ? ` (${i.variantName})` : ''),
           quantity: i.quantity,
           price: effectivePrice(i.price, i.salePrice),
           subtotal: effectivePrice(i.price, i.salePrice) * i.quantity,
@@ -280,8 +286,9 @@ export function CheckoutView() {
             <div className="mb-4 max-h-72 space-y-3 overflow-y-auto pr-1">
               {items.map((item) => {
                 const itemPrice = effectivePrice(item.price, item.salePrice)
+                const lineKey = `${item.productId}::${item.variantId || ''}`
                 return (
-                  <div key={item.productId} className="flex gap-3">
+                  <div key={lineKey} className="flex gap-3">
                     <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
                       <OptImage
                         src={item.image}
@@ -298,6 +305,12 @@ export function CheckoutView() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="line-clamp-2 text-xs font-medium">{item.name}</p>
+                      {/* Variant name (Phase: Variants) */}
+                      {item.variantName && (
+                        <p className="mt-0.5 inline-flex items-center gap-0.5 rounded bg-primary/5 px-1 py-0.5 text-[10px] font-medium text-primary">
+                          {item.variantName}
+                        </p>
+                      )}
                       <p className="mt-0.5 text-xs text-muted-foreground">
                         {formatRupiah(itemPrice)} × {item.quantity}
                       </p>

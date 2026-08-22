@@ -32,9 +32,24 @@ export function ProductCard({ product }: { product: Product }) {
 
   const price = effectivePrice(product.price, product.salePrice)
   const discount = discountPercent(product.price, product.salePrice)
+  // Variant-aware display: if the product has variants, the price shown on
+  // the card is the LOWEST effective price across active variants (already
+  // derived server-side into Product.price/salePrice cache). We prefix with
+  // "Mulai" so the customer knows the actual price depends on variant
+  // selection. The quick add-to-cart button is also disabled for variant
+  // products — the customer must pick a variant on the detail page first.
+  const hasVariants = product.hasVariants === true
 
   const handleAdd = (e: React.MouseEvent) => {
     e.stopPropagation()
+    // For variant products, the card's quick add-to-cart is disabled —
+    // the customer must select a variant on the detail page first.
+    if (hasVariants) {
+      toast.info('Pilih varian terlebih dahulu di halaman produk', {
+        description: 'Klik kartu untuk membuka detail produk',
+      })
+      return
+    }
     if (product.stock <= 0) {
       toast.error('Produk sedang habis')
       return
@@ -164,7 +179,12 @@ export function ProductCard({ product }: { product: Product }) {
         {/* Floating add-to-cart (bottom-right) */}
         <button
           onClick={handleAdd}
-          disabled={product.stock <= 0}
+          // For variant products, the button is visually present (so the UI
+          // is consistent) but it's NOT disabled — clicking it triggers a
+          // toast telling the customer to pick a variant on the detail
+          // page. This is friendlier than a greyed-out button the customer
+          // can't explain. Out-of-stock products ARE disabled.
+          disabled={!hasVariants && product.stock <= 0}
           aria-label={`Tambah ${product.name} ke keranjang`}
           className="absolute bottom-1.5 right-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md ring-2 ring-white/80 transition-all hover:scale-110 active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
         >
@@ -179,6 +199,9 @@ export function ProductCard({ product }: { product: Product }) {
         </button>
 
         {/* Out of stock overlay */}
+        {/* For variant products, the overlay only shows if ALL active
+            variants are out of stock (i.e. parent `stock` cache = 0).
+            Individual variant stock-out is handled on the detail page. */}
         {product.stock <= 0 && (
           <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-[1px]">
             <span className="rounded-md bg-foreground px-2.5 py-1 text-[11px] font-semibold text-background">
@@ -229,8 +252,11 @@ export function ProductCard({ product }: { product: Product }) {
           </span>
         </div>
 
-        {/* Price block */}
+        {/* Price block — variant-aware */}
         <div className="mt-0.5 flex items-baseline gap-1">
+          {hasVariants && (
+            <span className="text-[9px] font-medium text-muted-foreground">Mulai</span>
+          )}
           <span className="text-sm font-bold leading-none text-primary">
             {formatRupiah(price)}
           </span>
@@ -240,6 +266,13 @@ export function ProductCard({ product }: { product: Product }) {
             </span>
           )}
         </div>
+
+        {/* Variant count hint */}
+        {hasVariants && product.variants && product.variants.length > 0 && (
+          <span className="mt-0.5 inline-flex items-center gap-0.5 text-[9px] font-medium text-muted-foreground">
+            {product.variants.length} varian tersedia
+          </span>
+        )}
 
         {/* Subscribe price hint */}
         {product.isSubscribeEligible && product.subscribePrice && (

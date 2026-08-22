@@ -17,6 +17,17 @@ export interface Seller {
   _count?: { products: number }
 }
 
+export interface ProductVariant {
+  id: string
+  productId: string
+  name: string
+  price: number
+  salePrice: number | null
+  stock: number
+  isActive: boolean
+  sortOrder: number
+}
+
 export interface Product {
   id: string
   name: string
@@ -38,6 +49,11 @@ export interface Product {
   isBestSeller: boolean
   isNew: boolean
   isActive: boolean
+  // Variant support (Phase: Variants).
+  // When false (default for all legacy products), price/salePrice/stock on
+  // the Product are authoritative. When true, `variants[]` is the source of
+  // truth and Product price/salePrice/stock are derived caches.
+  hasVariants: boolean
   rating: number
   reviewCount: number
   categoryId: string
@@ -48,6 +64,12 @@ export interface Product {
   petTypes?: Array<{ petType: { id: string; name: string; slug: string } }>
   problems?: Array<{ problem: { id: string; name: string; slug: string; color: string | null } }>
   reviews?: Array<{ id: string; userName: string; rating: number; comment: string; petType: string | null; createdAt: string }>
+  // Variants — present when fetched from /api/products (list or detail)
+  // or /api/home. List endpoints return only the price-relevant fields
+  // (id, name, price, salePrice, stock, sortOrder). Detail endpoints
+  // return the full variant row. Inactive variants are filtered out by
+  // the public APIs.
+  variants?: ProductVariant[]
   avgRating?: number
 }
 

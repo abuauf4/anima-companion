@@ -68,6 +68,12 @@ export async function DELETE(
             images: true,
             petTypes: true,
             problems: true,
+            // Variants — counted for reporting. Variant rows themselves are
+            // safe to hard-delete (they have onDelete: Cascade on the Product
+            // relation, AND any OrderItem referencing a variant has
+            // onDelete: SetNull which preserves the order row). We delete
+            // them explicitly below for visibility.
+            variants: true,
           },
         },
       },
@@ -130,6 +136,17 @@ export async function DELETE(
     // Junction tables — pure relation rows, no business meaning.
     await db.productPetType.deleteMany({ where: { productId: id } })
     await db.productProblem.deleteMany({ where: { productId: id } })
+
+    // ProductVariant rows. These are safe to hard-delete because:
+    //   - CartItem.variant has onDelete: Cascade (cart items already deleted above).
+    //   - OrderItem.variant has onDelete: SetNull — the OrderItem row is
+    //     preserved, just loses the live FK link. The `variantName` snapshot
+    //     column on OrderItem keeps the historical record readable even
+    //     after the variant row is gone.
+    // Note: we ONLY reach this point if the product has zero OrderItems
+    // (checked above), so in practice no OrderItem references the variants
+    // of this product. The SetNull behavior is defense-in-depth.
+    await db.productVariant.deleteMany({ where: { productId: id } })
 
     // ProductImage DB rows. Physical image files are left alone on
     // purpose — see comment above.

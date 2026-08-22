@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requirePermission, handleAuthError } from '@/lib/admin-auth'
+import {
+  validateAdminVariants,
+  deriveParentCacheFromVariants,
+} from '@/lib/product-variants'
 
 export async function GET(req: NextRequest) {
   try {
@@ -35,6 +39,10 @@ export async function GET(req: NextRequest) {
           // hid the rest from the admin edit dialog — that was the bug
           // behind "existing static product images are missing when editing".
           images: { orderBy: { order: 'asc' } },
+          // Variants — include ALL variants (active + inactive) so the admin
+          // edit dialog can show inactive variants and let the admin
+          // re-activate them. Public APIs filter to active only.
+          variants: { orderBy: { sortOrder: 'asc' } },
           _count: { select: { orderItems: true } },
         },
         orderBy: { createdAt: 'desc' },
@@ -63,10 +71,44 @@ export async function POST(req: NextRequest) {
       description, benefit, usage, ingredients, bpomNumber,
       isBestSeller, isNew, isActive, categoryId,
       petTypeIds, problemIds, images,
+      // Variant fields (Phase: Variants)
+      hasVariants, variants,
     } = body
 
-    if (!name || !sku || !price || !categoryId) {
+    if (!name || !sku || !categoryId) {
       return NextResponse.json({ error: 'Field wajib tidak lengkap' }, { status: 400 })
+    }
+
+    // ---- Variant validation / normalization (BEFORE creating Product) ----
+    // If hasVariants=true, validate the variants array and derive the parent
+    // price/salePrice/stock from the active variants. The admin form does
+    // NOT send parent price/stock when variants are enabled — we compute them.
+    //
+    // If hasVariants=false (or omitted), the parent price/salePrice/stock
+    // come from the body as before. This is the backward-compatible path.
+    let normalizedVariants: import('@/lib/product-variants').NormalizedVariantInput[] | null = null
+    let parentPrice: number
+    let parentSalePrice: number | null
+    let parentStock: number
+
+    if (hasVariants === true) {
+      const result = validateAdminVariants(variants)
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: 400 })
+      }
+      normalizedVariants = result.variants
+      const derived = deriveParentCacheFromVariants(normalizedVariants)
+      parentPrice = derived.price
+      parentSalePrice = derived.salePrice
+      parentStock = derived.stock
+    } else {
+      // Backward-compatible: parent fields from body
+      if (!price) {
+        return NextResponse.json({ error: 'Field wajib tidak lengkap' }, { status: 400 })
+      }
+      parentPrice = parseInt(price)
+      parentSalePrice = salePrice ? parseInt(salePrice) : null
+      parentStock = parseInt(stock) || 0
     }
 
     const slug = name.toLowerCase()
@@ -90,15 +132,16 @@ export async function POST(req: NextRequest) {
     const product = await db.product.create({
       data: {
         name, slug, sku, brand: brand || 'Anima',
-        price: parseInt(price),
-        salePrice: salePrice ? parseInt(salePrice) : null,
-        stock: parseInt(stock) || 0,
+        price: parentPrice,
+        salePrice: parentSalePrice,
+        stock: parentStock,
         weight: weight || null,
         description, benefit, usage, ingredients,
         bpomNumber: bpomNumber || null,
         isBestSeller: !!isBestSeller,
         isNew: !!isNew,
         isActive: isActive !== false,
+        hasVariants: hasVariants === true,
         categoryId,
         images: {
           create: imageUrls.map((url: string, i: number) => ({ url, alt: name, order: i })),
@@ -109,8 +152,27 @@ export async function POST(req: NextRequest) {
         problems: problemIds?.length
           ? { create: problemIds.map((id: string) => ({ problemId: id })) }
           : undefined,
+        // Variants — only create if hasVariants=true and we have validated variants
+        variants: normalizedVariants
+          ? {
+              create: normalizedVariants.map((v, i) => ({
+                name: v.name,
+                price: v.price,
+                salePrice: v.salePrice,
+                stock: v.stock,
+                isActive: v.isActive,
+                sortOrder: v.sortOrder ?? i,
+              })),
+            }
+          : undefined,
       },
-      include: { category: true, images: true, petTypes: true, problems: true },
+      include: {
+        category: true,
+        images: true,
+        petTypes: true,
+        problems: true,
+        variants: { orderBy: { sortOrder: 'asc' } },
+      },
     })
 
     return NextResponse.json({ product })

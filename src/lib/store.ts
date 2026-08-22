@@ -13,14 +13,23 @@ export interface CartItemData {
   image: string
   weight?: string | null
   quantity: number
+  // Variant support (Phase: Variants).
+  // `variantId` is null/undefined for non-variant products (the default and
+  // only case for all existing products). For variant products, this is the
+  // chosen variant's id — different variants of the same product are
+  // separate cart lines.
+  // `variantName` is the snapshot of the variant name at add-to-cart time,
+  // so the cart UI can display it even if the variant is later renamed.
+  variantId?: string | null
+  variantName?: string | null
 }
 
 interface CartState {
   items: CartItemData[]
   voucherCode: string | null
   addItem: (item: Omit<CartItemData, 'quantity'>, quantity?: number) => void
-  removeItem: (productId: string) => void
-  updateQuantity: (productId: string, quantity: number) => void
+  removeItem: (productId: string, variantId?: string | null) => void
+  updateQuantity: (productId: string, quantity: number, variantId?: string | null) => void
   clear: () => void
   setVoucher: (code: string | null) => void
   totalItems: () => number
@@ -33,11 +42,18 @@ export const useCartStore = create<CartState>()(
       voucherCode: null,
       addItem: (item, quantity = 1) => {
         set((state) => {
-          const existing = state.items.find((i) => i.productId === item.productId)
+          // Merge key is (productId, variantId). Two cart items with the
+          // same productId but DIFFERENT variantId are NOT merged — they
+          // represent different variants of the same product and must
+          // remain separate cart lines (per task brief).
+          const variantId = item.variantId ?? null
+          const existing = state.items.find(
+            (i) => i.productId === item.productId && (i.variantId ?? null) === variantId
+          )
           if (existing) {
             return {
               items: state.items.map((i) =>
-                i.productId === item.productId
+                i.productId === item.productId && (i.variantId ?? null) === variantId
                   ? { ...i, quantity: i.quantity + quantity }
                   : i
               ),
@@ -46,24 +62,54 @@ export const useCartStore = create<CartState>()(
           return { items: [...state.items, { ...item, quantity }] }
         })
       },
-      removeItem: (productId) =>
+      removeItem: (productId, variantId = null) =>
         set((state) => ({
-          items: state.items.filter((i) => i.productId !== productId),
+          items: state.items.filter(
+            (i) => !(i.productId === productId && (i.variantId ?? null) === (variantId ?? null))
+          ),
         })),
-      updateQuantity: (productId, quantity) =>
+      updateQuantity: (productId, quantity, variantId = null) =>
         set((state) => ({
           items:
             quantity <= 0
-              ? state.items.filter((i) => i.productId !== productId)
+              ? state.items.filter(
+                  (i) => !(i.productId === productId && (i.variantId ?? null) === (variantId ?? null))
+                )
               : state.items.map((i) =>
-                  i.productId === productId ? { ...i, quantity } : i
+                  i.productId === productId && (i.variantId ?? null) === (variantId ?? null)
+                    ? { ...i, quantity }
+                    : i
                 ),
         })),
       clear: () => set({ items: [], voucherCode: null }),
       setVoucher: (code) => set({ voucherCode: code }),
       totalItems: () => get().items.reduce((sum, i) => sum + i.quantity, 0),
     }),
-    { name: 'anima-cart' }
+    {
+      name: 'anima-cart',
+      // Version bump (Phase: Variants) — when a customer with an old cart
+      // (pre-variants, items have no `variantId` field) loads the new code,
+      // zustand persist will migrate the stored state. The migration adds
+      // `variantId: null` to each item so the new merge logic works
+      // uniformly. No items are dropped — existing carts are preserved.
+      version: 2,
+      migrate: (persistedState: any, version: number) => {
+        if (!persistedState || !Array.isArray(persistedState.items)) {
+          return persistedState
+        }
+        // If the persisted cart is from version 1 (pre-variants), add
+        // `variantId: null` and `variantName: null` to each item so the
+        // new code can treat them uniformly as "non-variant cart items".
+        if (version < 2) {
+          persistedState.items = persistedState.items.map((item: any) => ({
+            ...item,
+            variantId: item.variantId ?? null,
+            variantName: item.variantName ?? null,
+          }))
+        }
+        return persistedState
+      },
+    }
   )
 )
 

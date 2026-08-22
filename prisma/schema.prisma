@@ -249,9 +249,45 @@ model EmailVerificationToken {
   consumedAt  DateTime?
   createdAt   DateTime  @default(now())
 
+  // ---------------------------------------------------------------------
+  // SCHEMA DRIFT RECONCILIATION (2026-08-22, Variants V1 db-apply prep).
+  //
+  // The production DB has had these 3 columns since the V2 account-recovery
+  // rollout, but they were never added to `schema.prisma` — they were
+  // applied directly to the DB (likely via an early V2 SQL script that
+  // has since been lost / superseded). The current application code in
+  // `src/lib/identity.ts` does NOT read or write these columns — they
+  // are dead columns from the app's perspective, but they MUST be declared
+  // here so that `prisma db push` does not try to DROP them (which would
+  // be a destructive data-loss operation on the 1 existing row).
+  //
+  // Exact DB definitions (verified via information_schema.columns on
+  // ep-gentle-star-aza63vyg, 2026-08-22):
+  //   attemptCount  integer NOT NULL DEFAULT 0
+  //   lastSentAt    timestamp(3) NULL
+  //   purpose       text NOT NULL DEFAULT 'EMAIL_VERIFY'
+  //
+  // Index (verified via pg_indexes):
+  //   EmailVerificationToken_userId_purpose_consumedAt_idx
+  //     btree (userId, purpose, consumedAt)
+  //
+  // These are kept AS-IS — no rename, no type change, no default change.
+  // If a future cleanup phase wants to drop them, that must be a separate,
+  // deliberate decision (with `--accept-data-loss` and a migration of
+  // any historical data).
+  // ---------------------------------------------------------------------
+  attemptCount Int       @default(0)
+  lastSentAt   DateTime?
+  purpose      String    @default("EMAIL_VERIFY")
+
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  // Composite index for the V2 lookup pattern: find the most recent
+  // unconsumed token for a (userId, purpose) pair. Mirrors the
+  // OtpCode_userId_purpose pattern but includes consumedAt so the
+  // partial scan can short-circuit on consumedAt IS NULL.
+  @@index([userId, purpose, consumedAt])
 }
 
 // ==================== OTP CODES (Account Recovery & Verification V2) ====================
@@ -498,6 +534,14 @@ model Product {
   rating          Float     @default(5.0)
   reviewCount     Int       @default(0)
   isActive        Boolean   @default(true)
+  // Product variant support (Phase: Variants).
+  // When false (default for ALL existing products), the product behaves
+  // exactly as before — `price`/`salePrice`/`stock` on the Product row are
+  // the authoritative values.
+  // When true, `variants[]` are the authoritative source for price/stock,
+  // and the parent `price`/`salePrice`/`stock` are derived compatibility
+  // caches (kept in sync by admin/order code so legacy readers don't break).
+  hasVariants     Boolean   @default(false)
   categoryId      String
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -511,10 +555,50 @@ model Product {
   cartItems       CartItem[]
   orderItems      OrderItem[]
   wishlist        Wishlist[]
+  variants        ProductVariant[]
 
   @@index([categoryId])
   @@index([slug])
   @@index([sellerId])
+}
+
+// ==================== PRODUCT VARIANT ====================
+// One product can have zero or more variants (e.g. "10 kapsul", "30 kapsul",
+// "60 ml"). Each variant has its own name, price, optional salePrice, and
+// stock. Variants are independently added to cart and independently
+// decremented at checkout.
+//
+// When `Product.hasVariants = true`:
+//   - The parent Product's `price`/`salePrice`/`stock` become a derived
+//     compatibility cache: `price` = lowest effective selling price across
+//     active variants; `stock` = sum of active variant stocks. This cache is
+//     recomputed by admin save and by checkout, so legacy homepage/list
+//     readers that only read Product fields continue to work.
+//   - Variant `stock` is the authoritative inventory for checkout.
+//   - Variant `isActive=false` hides the variant from public APIs but
+//     preserves the row (for historical OrderItem references via FK).
+//
+// When `Product.hasVariants = false` (default for all existing products):
+//   - No ProductVariant rows exist for this product.
+//   - Product.price/salePrice/stock are authoritative, as before.
+model ProductVariant {
+  id          String    @id @default(cuid())
+  productId   String
+  name        String
+  price       Int
+  salePrice   Int?
+  stock       Int       @default(0)
+  isActive    Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+
+  @@index([productId])
+  @@index([productId, isActive])
 }
 
 model ProductImage {
@@ -577,17 +661,29 @@ model Cart {
 }
 
 model CartItem {
-  id        String   @id @default(cuid())
-  cartId    String
-  productId String
-  quantity  Int      @default(1)
-  isSubscribe Boolean @default(false) // apakah item ini pakai subscribe & save
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  cartId      String
+  productId   String
+  // Variant reference (Phase: Variants).
+  // NULL for non-variant products (the default and only case for all
+  // existing products). Non-NULL for variant products — different variants
+  // of the same product are separate cart lines.
+  variantId   String?
+  quantity    Int      @default(1)
+  isSubscribe Boolean  @default(false) // apakah item ini pakai subscribe & save
+  createdAt   DateTime @default(now())
 
-  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  cart        Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
-  @@unique([cartId, productId])
+  // Unique constraint change: previously `@@unique([cartId, productId])`
+  // enforced one cart line per product. With variants, the same product can
+  // appear multiple times with different `variantId`. NULLs are distinct in
+  // Postgres unique indexes, so two non-variant rows for the same product
+  // would NOT collide at the DB level — we additionally rely on app-level
+  // merge in `addItem` to keep non-variant cart items as a single line.
+  @@unique([cartId, productId, variantId])
 }
 
 model Wishlist {
@@ -648,9 +744,18 @@ model OrderItem {
   price       Int
   quantity    Int
   subtotal    Int
+  // Variant snapshot (Phase: Variants).
+  // NULL for non-variant products. For variant products, this captures the
+  // variant identity AT ORDER TIME — `variantName` is a denormalized
+  // snapshot so historical orders remain readable even if the variant is
+  // later renamed or deleted. `variantId` is the FK to ProductVariant (SetNull
+  // on variant deletion — preserves the order row, just loses the live link).
+  variantId   String?
+  variantName String?
 
   order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product     Product  @relation(fields: [productId], references: [id])
+  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
 
   @@index([orderId])
 }
