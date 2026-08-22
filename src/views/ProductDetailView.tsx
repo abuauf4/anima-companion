@@ -424,9 +424,25 @@ export function ProductDetailView({ slug }: { slug: string }) {
             ) : (
               <span className="text-2xl font-bold text-foreground md:text-4xl">{formatRupiah(displayPrice)}</span>
             )}
-            {product.weight && (
-              <p className="mt-1.5 md:mt-2 text-[11px] md:text-xs text-muted-foreground">Berat bersih: {product.weight}</p>
-            )}
+            {/* "Berat bersih" line — variant-aware.
+                For variant products with a selected variant: show the variant
+                name (e.g. "Berat bersih: 30 kapsul"). This is more meaningful
+                than the parent product.weight because the actual package size
+                IS the variant the customer selected.
+                For non-variant products (or variant products with no selection
+                yet): fall back to the existing product.weight behavior. */}
+            {(() => {
+              const weightLabel =
+                hasVariants && selectedVariant
+                  ? selectedVariant.name
+                  : product.weight
+              if (!weightLabel) return null
+              return (
+                <p className="mt-1.5 md:mt-2 text-[11px] md:text-xs text-muted-foreground">
+                  Berat bersih: {weightLabel}
+                </p>
+              )
+            })()}
           </div>
 
           {/* Variant selector (Phase: Variants) */}
