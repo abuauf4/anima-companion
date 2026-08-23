@@ -830,7 +830,7 @@ model SiteSetting {
   instagramUrl        String   @default("https://instagram.com/anima.companion")
   shopeeUrl           String   @default("https://shopee.co.id/anima.companion")
   tokopediaUrl        String   @default("https://www.tokopedia.com/find/felcover")
-  tiktokUrl           String   @default("")
+  tiktokUrl           String   @default("https://www.tiktok.com/@anima.companion")
   // Announcement bar
   announcement1       String   @default("🚚 Gratis ongkir min Rp 150.000")
   announcement2       String   @default("⏰ Flash Sale 20% — berakhir segera!")

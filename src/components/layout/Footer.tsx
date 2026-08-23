@@ -96,12 +96,12 @@ export function Footer() {
                 <ShoppingBag className="h-4 w-4" />
               </a>
               <a
-                href="#"
+                href="https://www.tiktok.com/@anima.companion"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground transition-colors"
-                aria-label="TikTok Shop (segera)"
-                title="TikTok Shop (segera)"
+                aria-label="TikTok @anima.companion"
+                title="TikTok @anima.companion"
               >
                 <Music2 className="h-4 w-4" />
               </a>
@@ -167,7 +167,7 @@ export function Footer() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Beli Resmi di Marketplace</p>
-              <p className="mt-0.5 text-sm text-foreground">Tersedia di Shopee, Tokopedia, dan TikTok Shop (segera)</p>
+              <p className="mt-0.5 text-sm text-foreground">Tersedia di Shopee, Tokopedia, dan TikTok</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <a
@@ -186,12 +186,14 @@ export function Footer() {
               >
                 <ShoppingBag className="h-3.5 w-3.5" /> Tokopedia
               </a>
-              <span
-                className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground"
-                title="TikTok Shop — segera hadir"
+              <a
+                href="https://www.tiktok.com/@anima.companion"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium hover:border-primary hover:text-primary transition-colors"
               >
-                <Music2 className="h-3.5 w-3.5" /> TikTok Shop (segera)
-              </span>
+                <Music2 className="h-3.5 w-3.5" /> TikTok
+              </a>
               <a
                 href="https://instagram.com/anima.companion"
                 target="_blank"

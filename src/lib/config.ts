@@ -14,7 +14,7 @@ export const SITE_CONFIG = {
   instagramUrl: 'https://instagram.com/anima.companion',
   shopeeUrl: 'https://shopee.co.id/anima.companion',
   tiktok: '@anima.companion',
-  // TODO: verify TikTok Shop URL with PT Sutan Vet Medika
+  tiktokUrl: 'https://www.tiktok.com/@anima.companion',
   // Real company location — PT Sutan Vet Medika is based at Gedung STP - IPB,
   // Bogor, Jawa Barat.
   address: 'Gedung STP - IPB lt 1, Bogor, Jawa Barat',
