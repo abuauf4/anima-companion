@@ -412,69 +412,6 @@ function HeroMedia({
             className="hidden h-auto w-full md:block"
           />
         )}
-
-        {/* ==================== CTA OVERLAY — "Gabung Anima Club" ====================
-            A real HTML pill button overlaid INSIDE the hero banner frame,
-            below the banner image's baked-in "untuk Produk Anima!" text.
-
-            Implementation notes:
-            - The outer <button> already navigates to /login on click. The CTA
-              is a <span role="button"> (NOT a nested <button>, which would be
-              invalid HTML). Clicking the CTA bubbles up to the outer button →
-              same /login navigation. No separate handler needed.
-            - Two separate overlays: mobile (md:hidden) + desktop (hidden md:block).
-              Each has its OWN positioning tuned per breakpoint.
-            - Percentage-based positioning so the CTA scales with the banner.
-            - The outer button has overflow-hidden + rounded-[20px] md:rounded-[24px]
-              → both image AND overlay are clipped to the same rounded radius.
-            - z-10 ensures the CTA renders on top of the image.
-            - group-hover / group-active hooks into the outer button's group →
-              hover brightens the CTA, press scales it slightly.
-        */}
-
-        {/* Mobile CTA — visible below md.
-            Tuned values (mobile-only, NOT shared with desktop):
-              left:    9%   — aligned under "untuk Produk Anima!" left edge
-              bottom:  16%  — below the ribbon, above the footer strip
-              width:   intrinsic (no w-full, no w-[N%]) — pill shrinks to fit text
-              max-w:   48% of banner via max-w-[48%] — prevents overflow on narrow screens
-              height:  ~38-42px via py-1.5 + text-[14px]
-              font:    text-[14px] font-semibold
-              whitespace-nowrap: prevents text from wrapping to 2 lines
-              Visual hierarchy: DISKON 50% → [untuk Produk Anima!] → [CTA] → [footer]
-        */}
-        <div className="pointer-events-none absolute bottom-[16%] left-[9%] z-10 max-w-[48%] md:hidden">
-          <span
-            role="button"
-            tabIndex={-1}
-            className="inline-flex whitespace-nowrap items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-[14px] font-semibold text-white shadow-lg ring-1 ring-white/25 transition-colors duration-200 group-hover:bg-primary/90 active:scale-95"
-          >
-            Gabung Anima Club
-            <ArrowRight className="h-3.5 w-3.5" />
-          </span>
-        </div>
-
-        {/* Desktop CTA — visible at md+.
-            Tuned values (desktop-only, NOT shared with mobile):
-              left:    10%  — aligned with left promo block
-              bottom:  16%  — below the ribbon, above the footer strip
-              width:   intrinsic (no min-w, no w-[N%]) — pill shrinks to fit text
-              max-w:   30% of image via max-w-[30%] — prevents overflow
-              height:  ~32-36px via py-1.5 + text-[13px]
-              font:    text-[13px] font-semibold — slightly smaller than mobile
-              whitespace-nowrap: prevents text from wrapping
-              Visual hierarchy: DISKON 50% → [untuk Produk Anima!] → [CTA] → [footer]
-        */}
-        <div className="pointer-events-none absolute bottom-[16%] left-[10%] z-10 hidden max-w-[30%] md:block">
-          <span
-            role="button"
-            tabIndex={-1}
-            className="inline-flex whitespace-nowrap items-center gap-1.5 rounded-full bg-primary px-4 py-1.5 text-[13px] font-semibold text-white shadow-lg ring-1 ring-white/25 transition-colors duration-200 group-hover:bg-primary/90 active:scale-95"
-          >
-            Gabung Anima Club
-            <ArrowRight className="h-3 w-3" />
-          </span>
-        </div>
       </button>
     </motion.div>
   )
