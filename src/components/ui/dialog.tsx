@@ -59,26 +59,35 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
-        // Mobile-first responsive positioning:
-        //   Mobile (< sm): top-pinned near-full-screen.
-        //     - top: 1rem (16px) from top, accounting for safe-area-inset-top
-        //     - left: 1rem (16px) — NOT translate-x, so it doesn't shift
-        //       off-center on devices with weird viewport widths
-        //     - max-width: 100vw - 2rem (16px margin each side)
-        //     - max-height: 100dvh - 2rem (16px top + bottom margin)
-        //     - overflow-y: auto (content scrolls, not the page)
-        //   Desktop (sm+): centered modal.
-        //     - top: 50%, left: 50%, translate -50%/-50% → centered in viewport
-        //     - max-width: lg (32rem) by default; callers override per use-case
-        //     - max-height: 90dvh
-        //   Why NO raw CSS `transform` override: Tailwind v4 composes transforms
+        // Three-layer scroll architecture:
+        //   1. Outer shell: overflow-hidden, flex-col, max-h on ALL breakpoints
+        //      (not just sm+). The outer shell NEVER scrolls itself — it clips.
+        //   2. Caller puts header (shrink-0) + scrollable body (flex-1
+        //      min-h-0 overflow-y-auto) + optional footer (shrink-0) inside.
+        //   3. The scrollable body handles all vertical scrolling.
+        //
+        // Why overflow-hidden (not overflow-y-auto) on the outer shell:
+        //   Previously the outer shell had overflow-y-auto + NO max-h on mobile.
+        //   This meant the modal could grow taller than the viewport, pushing
+        //   bottom actions (Cetak Struk, Download PDF) off-screen with no way
+        //   to scroll to them. By using overflow-hidden + flex-col + max-h
+        //   on the outer shell, the shell stays within the viewport, and
+        //   the inner scrollable body handles content that exceeds the
+        //   available height.
+        //
+        // Mobile positioning: top-4, left-1/2, -translate-x-1/2.
+        //   max-h: calc(100dvh - 2rem) — 16px top margin + 16px bottom margin.
+        // Desktop (sm+): top-1/2, -translate-y-1/2 (centered).
+        //   max-h: 90dvh.
+        //
+        // Why NO raw CSS `transform` override: Tailwind v4 composes transforms
         //   via CSS variables (--tw-translate-x/y) into a single `transform`
         //   property. A raw `transform: translateX(-50%)` rule (like the old
         //   .admin-mobile-dialog CSS) silently overrides the composed transform,
         //   dropping the Y translation and causing the modal to appear
         //   off-center. Using only Tailwind utilities keeps the composition intact.
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed left-1/2 top-4 z-50 grid w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] -translate-x-1/2 gap-4 overflow-y-auto rounded-lg border p-4 shadow-lg duration-200 sm:left-1/2 sm:top-1/2 sm:max-h-[90dvh] sm:max-w-lg sm:-translate-y-1/2 sm:p-6",
+          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed left-1/2 top-4 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col gap-4 overflow-hidden rounded-lg border p-4 shadow-lg duration-200 sm:left-1/2 sm:top-1/2 sm:max-h-[90dvh] sm:max-w-lg sm:-translate-y-1/2 sm:p-6",
           className
         )}
         {...props}

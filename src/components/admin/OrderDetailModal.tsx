@@ -141,12 +141,19 @@ export function OrderDetailModal({ order, onClose, onStatusChange }: OrderDetail
   return (
     <Dialog open={!!order} onOpenChange={(v) => !v && onClose()}>
       <DialogContent
-        // Override the default max-width — order details need more room.
-        // Mobile behavior is inherited from the Dialog primitive (top-pinned
-        // near-full-screen with internal scroll). Desktop: centered, max-w-3xl.
+        // Three-layer scroll architecture:
+        //   1. Outer shell (DialogContent): flex flex-col overflow-hidden max-h
+        //   2. Header (shrink-0): always visible — order number, date, status
+        //   3. Scrollable body (flex-1 min-h-0 overflow-y-auto): all order detail
+        //   4. Sticky footer (shrink-0): WhatsApp, Cetak Struk, Download PDF
+        //
+        // This ensures bottom actions are ALWAYS reachable regardless of content
+        // height or viewport size. The scrollable body handles overflow; the
+        // footer stays pinned at the bottom of the modal.
         className="sm:max-w-3xl"
       >
-        <DialogHeader>
+        {/* === LAYER 1: Fixed header === */}
+        <DialogHeader className="shrink-0">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <DialogTitle className="font-mono text-base sm:text-lg">
@@ -169,7 +176,8 @@ export function OrderDetailModal({ order, onClose, onStatusChange }: OrderDetail
           </div>
         </DialogHeader>
 
-        <div className="space-y-4">
+        {/* === LAYER 2: Scrollable content body === */}
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pb-4">
           {/* Status management */}
           <div>
             <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">
@@ -254,8 +262,10 @@ export function OrderDetailModal({ order, onClose, onStatusChange }: OrderDetail
               <span className="text-primary">{formatRupiah(order.total)}</span>
             </div>
           </div>
+        </div>
 
-          {/* Actions — mobile: full-width stacked, desktop: row */}
+        {/* === LAYER 3: Sticky action footer === */}
+        <div className="shrink-0 border-t border-border bg-background p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
           <div className="grid gap-2 sm:grid-cols-3">
             <a
               href={whatsappAdminUrl(
