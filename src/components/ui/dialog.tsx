@@ -60,34 +60,38 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         // Three-layer scroll architecture:
-        //   1. Outer shell: overflow-hidden, flex-col, max-h on ALL breakpoints
-        //      (not just sm+). The outer shell NEVER scrolls itself — it clips.
+        //   1. Outer shell: overflow-hidden, flex-col, max-h on ALL breakpoints.
         //   2. Caller puts header (shrink-0) + scrollable body (flex-1
         //      min-h-0 overflow-y-auto) + optional footer (shrink-0) inside.
         //   3. The scrollable body handles all vertical scrolling.
         //
-        // Why overflow-hidden (not overflow-y-auto) on the outer shell:
-        //   Previously the outer shell had overflow-y-auto + NO max-h on mobile.
-        //   This meant the modal could grow taller than the viewport, pushing
-        //   bottom actions (Cetak Struk, Download PDF) off-screen with no way
-        //   to scroll to them. By using overflow-hidden + flex-col + max-h
-        //   on the outer shell, the shell stays within the viewport, and
-        //   the inner scrollable body handles content that exceeds the
-        //   available height.
+        // POSITIONING — two completely different strategies per breakpoint:
         //
-        // Mobile positioning: top-4, left-1/2, -translate-x-1/2.
-        //   max-h: calc(100dvh - 2rem) — 16px top margin + 16px bottom margin.
-        // Desktop (sm+): top-1/2, -translate-y-1/2 (centered).
-        //   max-h: 90dvh.
+        // Mobile (< sm): INSET-BASED — no transforms.
+        //   left-3 right-3 top-3 bottom-3 → equal 12px margins on all sides.
+        //   width: auto (derived from left+right inset).
+        //   NO translate-x, NO left-50%, NO w-[calc(100vw-...)].
+        //   Why: Tailwind v4 composes transforms via CSS variables
+        //   (--tw-translate-x/y), but the zoom-in-95/zoom-out-95 animation
+        //   classes set their OWN @keyframes transform which OVERRIDES the
+        //   composed variable. When the animation fires, translateX(-50%)
+        //   gets dropped → modal sits at left:50% without the negative
+        //   translate → starts at viewport center, extends right off-screen.
+        //   Using inset (left+right) instead of left+translate avoids the
+        //   transform dependency entirely.
         //
-        // Why NO raw CSS `transform` override: Tailwind v4 composes transforms
-        //   via CSS variables (--tw-translate-x/y) into a single `transform`
-        //   property. A raw `transform: translateX(-50%)` rule (like the old
-        //   .admin-mobile-dialog CSS) silently overrides the composed transform,
-        //   dropping the Y translation and causing the modal to appear
-        //   off-center. Using only Tailwind utilities keeps the composition intact.
+        // Desktop (sm+): CENTERED via translate.
+        //   sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2
+        //   sm:max-w-lg (callers override per use-case)
+        //   sm:max-h-[90dvh]
+        //   At this breakpoint the animation has finished (duration-200), so
+        //   the composed transform is active and centering works correctly.
+        //   We also explicitly reset sm:right-auto and sm:bottom-auto so the
+        //   mobile inset doesn't conflict with the desktop centered positioning.
+        //
+        // max-h on ALL breakpoints: calc(100dvh - 1.5rem) mobile, 90dvh desktop.
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed left-1/2 top-4 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col gap-4 overflow-hidden rounded-lg border p-4 shadow-lg duration-200 sm:left-1/2 sm:top-1/2 sm:max-h-[90dvh] sm:max-w-lg sm:-translate-y-1/2 sm:p-6",
+          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed left-3 right-3 top-3 bottom-3 z-50 flex max-h-[calc(100dvh-1.5rem)] flex-col gap-4 overflow-hidden rounded-lg border p-4 shadow-lg duration-200 sm:left-1/2 sm:right-auto sm:top-1/2 sm:bottom-auto sm:max-h-[90dvh] sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:p-6",
           className
         )}
         {...props}
