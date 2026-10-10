@@ -8,7 +8,7 @@ export const metadata: Metadata = buildMetadata({
   path: "/",
   title: "Anima Companion | Suplemen & Vitamin Hewan Peliharaan",
   description:
-    "Anima Companion dari PT Sutan Vet Medika menyediakan suplemen & vitamin premium untuk kucing dan anjing, termasuk Felcover+, Sioren, dan Forevet. Tersedia di 400+ klinik hewan seluruh Indonesia.",
+    "Anima Companion menyediakan suplemen & vitamin premium untuk kucing dan anjing: Felcover+, Sioren, dan Forevet. Tersedia di 400+ klinik hewan Indonesia.",
   keywords: [
     "suplemen hewan peliharaan",
     "vitamin kucing",
