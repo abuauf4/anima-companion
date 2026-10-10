@@ -1,22 +1,15 @@
 /**
  * SEO helpers for Anima Companion — central place for canonical URLs,
- * metadata builders, and JSON-LD structured data (Product / Organization / WebSite).
+ * metadata builders, and JSON-LD structured data.
  *
- * Two independent env vars control SEO behavior (Phase 1.1):
+ * Two independent env vars control SEO behavior:
  *
- * - `NEXT_PUBLIC_SITE_URL`  — official canonical production domain.
- *   MUST always be `https://animacompanion.id`, on every deployment
- *   (production, staging, preview, local). Never set this to a staging /
- *   preview / Vercel / Coolify / VPS-IP URL.
+ * - `NEXT_PUBLIC_SITE_URL` — official canonical production domain.
+ *   MUST always be `https://animacompanion.id`, on every deployment.
  *
  * - `NEXT_PUBLIC_ALLOW_INDEXING` — whether THIS deployment may be indexed.
  *   "true" → production only. Anything else (or unset) → staging/preview/local,
  *   forces noindex,nofollow sitewide and disallows all crawling in robots.txt.
- *
- * The two are intentionally DECOUPLED: canonical always points to the production
- * domain (so staging pages tell Google "the canonical is the production URL"),
- * but the staging deployment itself is never indexed or crawled. This is the
- * correct pattern per Google's documentation on canonical + noindex.
  */
 
 import type { Metadata } from 'next'
@@ -25,21 +18,11 @@ import type { Metadata } from 'next'
 const PRODUCTION_SITE_URL = 'https://animacompanion.id'
 const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '')
 
-// Never let a preview, localhost, or accidentally stale domain become the
-// canonical origin. Non-production deployments are controlled separately by
-// NEXT_PUBLIC_ALLOW_INDEXING and still use the production canonical URL.
 export const SITE_URL = configuredSiteUrl === PRODUCTION_SITE_URL
   ? configuredSiteUrl
   : PRODUCTION_SITE_URL
 
-/**
- * Whether this deployment may be indexed by search engines.
- * Decoupled from SITE_URL so canonical stays the production domain even on
- * staging, but staging is never crawled.
- *
- * Default: `false` (safe default — any deployment that forgets to set the
- * env var is treated as non-indexable, never the other way around).
- */
+/** Safe default: only an explicitly-enabled production build may be indexed. */
 export const ALLOW_INDEXING = process.env.NEXT_PUBLIC_ALLOW_INDEXING === 'true'
 
 /** Brand defaults pulled from existing site config so copy stays in sync. */
@@ -48,7 +31,7 @@ export const BRAND = {
   legalName: 'PT Sutan Vet Medika',
   tagline: 'Elevating Animal Health',
   description:
-    'Anima Companion (PT Sutan Vet Medika) — suplemen & vitamin hewan peliharaan premium. Produk Felcover+, Sioren, dan Forevet. Tersedia di 400+ klinik hewan seluruh Indonesia.',
+    'Anima Companion (PT Sutan Vet Medika) — suplemen & vitamin hewan peliharaan premium untuk kucing dan anjing. Produk Felcover+, Sioren, dan Forevet. Tersedia di 400+ klinik hewan seluruh Indonesia.',
   logoUrl: '/anima-logo.svg',
   ogImage: '/og-image.png',
   email: 'sutanvetmedika@gmail.com',
@@ -61,15 +44,23 @@ export const BRAND = {
   },
   social: {
     instagram: 'https://instagram.com/anima.companion',
+    tiktok: 'https://www.tiktok.com/@anima.companion',
     shopee: 'https://shopee.co.id/anima.companion',
     tokopedia: 'https://www.tokopedia.com/find/felcover',
   },
   hours: 'Senin–Sabtu, 09.00–18.00 WIB',
 }
 
+export const ENTITY_IDS = {
+  organization: `${SITE_URL}/#organization`,
+  brand: `${SITE_URL}/#brand`,
+  website: `${SITE_URL}/#website`,
+  homepage: `${SITE_URL}/#webpage`,
+} as const
+
 /**
  * Build canonical URL for a path. Always absolute with SITE_URL origin.
- * @example canonicalFor('/produk')  → 'https://animacompanion.id/produk'
+ * @example canonicalFor('/produk') → 'https://animacompanion.id/produk'
  */
 export function canonicalFor(path: string = '/'): string {
   const p = path.startsWith('/') ? path : '/' + path
@@ -83,27 +74,13 @@ interface BuildMetadataOpts {
   path?: string
   /** OG image path (defaults to brand OG image). */
   image?: string
-  /** Override the title template's `default` */
+  /** Prevent indexing for account / transactional pages. */
   noIndex?: boolean
   /** Optional keywords */
   keywords?: string[]
 }
 
-/**
- * Build Next.js Metadata object for a page.
- *
- * Always sets:
- * - canonical URL (always points to production origin via SITE_URL)
- * - OpenGraph (title, description, url, siteName, locale, type, images)
- * - Twitter card (summary_large_image)
- *
- * Indexing is controlled by the global ALLOW_INDEXING flag (env-driven):
- * - When `NEXT_PUBLIC_ALLOW_INDEXING !== "true"` (staging/preview/local),
- *   `noIndex` is FORCED to `true` regardless of caller input, so every page
- *   on a non-production deployment emits `<meta name="robots" content="noindex, nofollow">`.
- * - When `ALLOW_INDEXING === true` (production), the caller's `noIndex`
- *   argument decides per-page (cart/checkout/login/etc. opt out).
- */
+/** Build a complete, canonical metadata object for a page. */
 export function buildMetadata({
   title,
   description = BRAND.description,
@@ -114,15 +91,15 @@ export function buildMetadata({
 }: BuildMetadataOpts): Metadata {
   const url = canonicalFor(path)
   const ogImageUrl = image.startsWith('http') ? image : canonicalFor(image)
-  // Use absolute title to avoid the layout's `template` wrapping it twice.
-  // When no title is provided, fall back to the brand default.
+
+  // Avoid titles like "Anima Companion ... — Anima Companion" when a page
+  // already carries the brand name explicitly.
   const fullTitle = title
-    ? `${title} — ${BRAND.name}`
+    ? title.toLowerCase().includes(BRAND.name.toLowerCase())
+      ? title
+      : `${title} — ${BRAND.name}`
     : `${BRAND.name} — ${BRAND.tagline}`
 
-  // Force noindex on non-production deployments, regardless of caller input.
-  // This is the core Phase 1.1 safety guarantee: even if a page forgets to
-  // pass noIndex, staging can never be indexed.
   const effectiveNoIndex = noIndex || !ALLOW_INDEXING
 
   return {
@@ -156,7 +133,7 @@ export function buildMetadata({
           url: ogImageUrl,
           width: 1200,
           height: 630,
-          alt: BRAND.name,
+          alt: `${BRAND.name} — ${BRAND.tagline}`,
         },
       ],
     },
@@ -171,19 +148,26 @@ export function buildMetadata({
 }
 
 // =====================================================
-// JSON-LD Structured Data
+// JSON-LD structured data
 // =====================================================
 
-/** Organization schema — sits in root layout, applies to whole site. */
+/** Legal/company entity that publishes the website and owns Anima Companion. */
 export function organizationJsonLd() {
   return {
     '@context': 'https://schema.org',
     '@type': 'Organization',
-    name: BRAND.name,
-    legalName: BRAND.legalName,
+    '@id': ENTITY_IDS.organization,
+    name: BRAND.legalName,
+    alternateName: BRAND.name,
     description: BRAND.description,
     url: SITE_URL,
-    logo: canonicalFor(BRAND.logoUrl),
+    logo: {
+      '@type': 'ImageObject',
+      url: canonicalFor(BRAND.logoUrl),
+    },
+    brand: {
+      '@id': ENTITY_IDS.brand,
+    },
     email: BRAND.email,
     telephone: BRAND.phone,
     address: {
@@ -197,21 +181,68 @@ export function organizationJsonLd() {
   }
 }
 
-/** WebSite schema — enables sitelinks search box in Google results. */
+/** Consumer-facing Anima Companion brand entity. */
+export function brandJsonLd() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Brand',
+    '@id': ENTITY_IDS.brand,
+    name: BRAND.name,
+    slogan: BRAND.tagline,
+    description: BRAND.description,
+    url: SITE_URL,
+    logo: canonicalFor(BRAND.logoUrl),
+    sameAs: Object.values(BRAND.social).filter(Boolean),
+  }
+}
+
+/** Website entity, explicitly published by PT Sutan Vet Medika. */
 export function websiteJsonLd() {
   return {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
+    '@id': ENTITY_IDS.website,
     name: BRAND.name,
+    alternateName: `${BRAND.name} Official Website`,
     url: SITE_URL,
+    description: BRAND.description,
     inLanguage: 'id-ID',
-    potentialAction: {
-      '@type': 'SearchAction',
-      target: {
-        '@type': 'EntryPoint',
-        urlTemplate: `${SITE_URL}/produk?search={search_term_string}`,
-      },
-      'query-input': 'required name=search_term_string',
+    publisher: {
+      '@id': ENTITY_IDS.organization,
+    },
+    about: {
+      '@id': ENTITY_IDS.brand,
+    },
+  }
+}
+
+/** Homepage entity that connects the page, website, brand and publisher. */
+export function homepageJsonLd() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    '@id': ENTITY_IDS.homepage,
+    url: SITE_URL,
+    name: `${BRAND.name} | Suplemen & Vitamin Hewan Peliharaan`,
+    description: BRAND.description,
+    inLanguage: 'id-ID',
+    isPartOf: {
+      '@id': ENTITY_IDS.website,
+    },
+    about: {
+      '@id': ENTITY_IDS.brand,
+    },
+    mainEntity: {
+      '@id': ENTITY_IDS.brand,
+    },
+    publisher: {
+      '@id': ENTITY_IDS.organization,
+    },
+    primaryImageOfPage: {
+      '@type': 'ImageObject',
+      url: canonicalFor(BRAND.ogImage),
+      width: 1200,
+      height: 630,
     },
   }
 }
@@ -251,6 +282,17 @@ export function productJsonLd(p: ProductJsonLdInput) {
           ? 'https://schema.org/InStock'
           : 'https://schema.org/OutOfStock'
 
+  const productBrand = p.brand.toLowerCase() === BRAND.name.toLowerCase()
+    ? {
+        '@type': 'Brand',
+        '@id': ENTITY_IDS.brand,
+        name: BRAND.name,
+      }
+    : {
+        '@type': 'Brand',
+        name: p.brand,
+      }
+
   return {
     '@context': 'https://schema.org',
     '@type': 'Product',
@@ -259,10 +301,7 @@ export function productJsonLd(p: ProductJsonLdInput) {
     url,
     image,
     sku: p.sku,
-    brand: {
-      '@type': 'Brand',
-      name: p.brand,
-    },
+    brand: productBrand,
     offers: {
       '@type': 'Offer',
       url,
@@ -270,6 +309,9 @@ export function productJsonLd(p: ProductJsonLdInput) {
       price: effectivePrice,
       availability,
       itemCondition: 'https://schema.org/NewCondition',
+      seller: {
+        '@id': ENTITY_IDS.organization,
+      },
     },
     aggregateRating:
       p.rating && p.reviewCount
