@@ -8,6 +8,7 @@ import {
   BRAND,
   ALLOW_INDEXING,
   organizationJsonLd,
+  brandJsonLd,
   websiteJsonLd,
 } from "@/lib/seo";
 
@@ -20,8 +21,7 @@ const jakarta = Plus_Jakarta_Sans({
 
 // Default site-wide metadata — individual pages override via `buildMetadata()`.
 // Note: `title.template` is intentionally NOT set, because `buildMetadata()`
-// returns the absolute (fully-formed) title for each page. This avoids the
-// Next.js "template wraps absolute title twice" gotcha.
+// returns the absolute (fully-formed) title for each page.
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: `${BRAND.name} — ${BRAND.tagline}`,
@@ -87,10 +87,6 @@ export const metadata: Metadata = {
         },
       }
     : {
-        // Non-production deployment (staging/preview/local): noindex,nofollow
-        // sitewide. Canonical URLs still point to https://animacompanion.id
-        // via alternates.canonical above, so Google will consolidate signals
-        // to the production URL without indexing the staging clone.
         index: false,
         follow: false,
         googleBot: {
@@ -115,11 +111,18 @@ export default function RootLayout({
           as="image"
           href="/_next/image?url=%2Fhero-pets.webp&w=640&q=75"
         />
-        {/* JSON-LD structured data — Organization + WebSite sitewide */}
+
+        {/* Sitewide entity graph: legal publisher + consumer brand + website. */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify(organizationJsonLd()),
+          }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(brandJsonLd()),
           }}
         />
         <script
