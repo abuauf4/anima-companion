@@ -5,30 +5,11 @@ import { whatsappAdminUrl, whatsappDisplayNumber, whatsappTelUrl } from "@/lib/c
 import { Building2, MapPin, Mail, Phone, Clock, Shield, Heart, PawPrint, MessageCircle, ShoppingBag } from "lucide-react";
 
 // /tentang — About page.
-//
-// IMPORTANT (Phase 1.1):
-// - This page is `noindex` and excluded from sitemap.ts. The route returns 200
-//   so internal links do not break, but it must not appear in Google's index.
-// - Marketing prose invented during the Phase 1 refactor has been REMOVED.
-//   Only fact-style contact/identity information already present elsewhere in
-//   the codebase (Footer / SITE_CONFIG) remains.
-// - The remaining contact/identity values (PT Sutan Vet Medika, Gedung STP - IPB
-//   address, sutanvetmedika@gmail.com, 0822 1084 6408, Senin–Sabtu 09.00–18.00 WIB,
-//   400+ klinik, BPOM Terdaftar, #PawrentHebatAnabulSehat) are NOT verified —
-//   they are inherited from existing repo content pending a separate content
-//   audit. Do not treat them as authoritative until that audit is complete.
-// - No new marketing copy has been added. When official Anima "Tentang Kami"
-//   content becomes available, re-enable indexing by removing `noIndex: true`
-//   below and re-adding the `/tentang` entry to src/app/sitemap.ts.
 export const metadata: Metadata = buildMetadata({
   title: "Tentang Kami",
   description:
     "Anima Companion — PT Sutan Vet Medika. Brand suplemen & vitamin hewan peliharaan. Tersedia di 400+ klinik seluruh Indonesia. Misi: Elevating Animal Health.",
   path: "/tentang",
-  // Always noindex regardless of deployment env, until official Anima content
-  // is provided. buildMetadata() also force-noindexes on staging, but this
-  // explicit flag keeps /tentang out of production indexing too.
-  noIndex: true,
   keywords: [
     "tentang anima companion",
     "PT Sutan Vet Medika",
